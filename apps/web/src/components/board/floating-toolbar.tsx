@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 
-export type ToolMode = 'select' | 'text' | 'sticky' | 'rect' | 'circle' | 'diamond' | 'triangle' | 'draw' | 'link'
+export type ToolMode = 'select' | 'text' | 'sticky' | 'rect' | 'circle' | 'diamond' | 'triangle' | 'draw' | 'link' | 'link-cards'
 export type StrokeSize = 'thin' | 'medium' | 'thick'
 
 interface Props {
@@ -130,6 +130,13 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
           </svg>
         </Btn>
+        <Btn mode="link-cards" current={toolMode} label="Relier des cartes" onClick={() => onToolChange('link-cards')}>
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="5"  cy="12" r="2.5" />
+            <circle cx="19" cy="12" r="2.5" />
+            <path strokeLinecap="round" d="M7.5 12h9" />
+          </svg>
+        </Btn>
 
         {toolMode !== 'select' && (
           <>
@@ -229,8 +236,8 @@ function Btn({
   return (
     <button
       title={label}
-      onClick={onClick}
-      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+      onClick={(e) => { onClick(); e.currentTarget.blur() }}
+      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all focus:outline-none ${
         mode === current
           ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'

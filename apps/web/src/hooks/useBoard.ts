@@ -179,18 +179,28 @@ export function useBoard(boardId: string) {
     const dx = posX - card.posX
     const dy = posY - card.posY
 
+    // Cards that should follow the dragged one: its group + the multi-selection (if it includes the dragged card)
+    const selected = selectedIdsRef.current
+    const useSelection = selected.size > 1 && selected.has(id)
+    const followIds = new Set<string>()
+    if (card.groupId) {
+      cardsRef.current.forEach((c) => { if (c.groupId === card.groupId && c.id !== id) followIds.add(c.id) })
+    }
+    if (useSelection) {
+      selected.forEach((sid) => { if (sid !== id) followIds.add(sid) })
+    }
+
     setCards((prev) => prev.map((c) => {
       if (c.id === id) return { ...c, posX, posY }
-      if (card.groupId && c.groupId === card.groupId) return { ...c, posX: c.posX + dx, posY: c.posY + dy }
+      if (followIds.has(c.id)) return { ...c, posX: c.posX + dx, posY: c.posY + dy }
       return c
     }))
 
     socketRef.current.emit('card:move', { id, boardId, posX, posY })
-    if (card.groupId) {
-      cardsRef.current
-        .filter((c) => c.groupId === card.groupId && c.id !== id)
-        .forEach((c) => socketRef.current.emit('card:move', { id: c.id, boardId, posX: c.posX + dx, posY: c.posY + dy }))
-    }
+    followIds.forEach((fid) => {
+      const c = cardsRef.current.find((cc) => cc.id === fid)
+      if (c) socketRef.current.emit('card:move', { id: fid, boardId, posX: c.posX + dx, posY: c.posY + dy })
+    })
   }
 
   function resizeCard(id: string, width: number, height: number) {

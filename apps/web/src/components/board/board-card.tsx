@@ -16,6 +16,62 @@ interface Props {
   onResize: (id: string, w: number, h: number) => void
   onSelect?: (id: string, addToSelection: boolean) => void
   onOpenDetail: (id: string) => void
+  onStartConnect?: (cardId: string, e: React.MouseEvent) => void
+  linkCardsMode?: boolean
+  isLinkSource?: boolean
+  onLinkCardsClick?: (cardId: string) => void
+}
+
+// Handles placed INSIDE the card edges. Outer is 24x24 (hit area), inner is 12x12 (visible dot).
+// data-connect-handle lets the card-level mousedown check and bail out as a safety net.
+function ConnectHandles({ cardId, onStart }: { cardId: string; onStart?: (cardId: string, e: React.MouseEvent) => void }) {
+  if (!onStart) return null
+  const positions: Array<React.CSSProperties> = [
+    { top: -2, left: '50%', transform: 'translateX(-50%)' },
+    { top: '50%', right: -2, transform: 'translateY(-50%)' },
+    { bottom: -2, left: '50%', transform: 'translateX(-50%)' },
+    { top: '50%', left: -2, transform: 'translateY(-50%)' },
+  ]
+  return (
+    <>
+      {positions.map((style, i) => (
+        <div
+          key={i}
+          data-connect-handle="true"
+          className="absolute w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ ...style, zIndex: 40, cursor: 'crosshair' }}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            e.nativeEvent.stopImmediatePropagation()
+            onStart(cardId, e)
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+          title="Tirer pour relier à une autre carte"
+        >
+          <div className="w-3 h-3 rounded-full bg-white border-2 border-indigo-500 shadow-md hover:scale-150 hover:bg-indigo-100 transition-all pointer-events-none" />
+        </div>
+      ))}
+    </>
+  )
+}
+
+// Per-card overlay shown in link-cards toolbar mode. Catches clicks directly so
+// there's no need for elementFromPoint and no risk of the click hitting the wrong target.
+function LinkCardsOverlay({ cardId, isSource, onClick }: { cardId: string; isSource?: boolean; onClick: (cardId: string) => void }) {
+  return (
+    <div
+      className="absolute inset-0 rounded-xl"
+      style={{
+        zIndex: 50,
+        cursor: 'crosshair',
+        background: isSource ? 'rgba(99,102,241,0.15)' : 'transparent',
+        boxShadow: isSource ? 'inset 0 0 0 3px #6366f1' : undefined,
+      }}
+      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(cardId) }}
+    />
+  )
 }
 
 const SHAPE_PALETTE = ['#6366f1', '#ef4444', '#f97316', '#eab308', '#22c55e', '#0ea5e9', '#8b5cf6', '#ec4899', '#475569']
@@ -57,7 +113,8 @@ function formatFieldValue(type: string, value: string): string {
 
 export function BoardCard({
   card, fields, zoom = 1, isSelected, groupColor,
-  onMove, onUpdate, onRecolor, onDelete, onResize, onSelect, onOpenDetail,
+  onMove, onUpdate, onRecolor, onDelete, onResize, onSelect, onOpenDetail, onStartConnect,
+  linkCardsMode, isLinkSource, onLinkCardsClick,
 }: Props) {
   const isLabel = card.type === 'LABEL'
 
@@ -88,6 +145,8 @@ export function BoardCard({
 
   function handleMouseDown(e: React.MouseEvent) {
     if (isEditing) return
+    // Safety net: if the mousedown bubbled up from a connect handle, ignore it
+    if ((e.target as HTMLElement).closest('[data-connect-handle]')) return
     e.preventDefault()
     e.stopPropagation()
     isDragging.current = false
@@ -306,6 +365,10 @@ export function BoardCard({
             <path d="M9 5L5 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
           </svg>
         </div>
+        <ConnectHandles cardId={card.id} onStart={onStartConnect} />
+        {linkCardsMode && onLinkCardsClick && (
+          <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
+        )}
       </div>
     )
   }
@@ -344,6 +407,10 @@ export function BoardCard({
             <path d="M9 5L5 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
           </svg>
         </div>
+        <ConnectHandles cardId={card.id} onStart={onStartConnect} />
+        {linkCardsMode && onLinkCardsClick && (
+          <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
+        )}
       </div>
     )
   }
@@ -474,6 +541,10 @@ export function BoardCard({
             <path d="M9 5L5 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
           </svg>
         </div>
+        <ConnectHandles cardId={card.id} onStart={onStartConnect} />
+        {linkCardsMode && onLinkCardsClick && (
+          <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
+        )}
       </div>
     )
   }
@@ -596,6 +667,11 @@ export function BoardCard({
           <path d="M9 5L5 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
         </svg>
       </div>
+
+      <ConnectHandles cardId={card.id} onStart={onStartConnect} />
+        {linkCardsMode && onLinkCardsClick && (
+          <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
+        )}
     </div>
   )
 }

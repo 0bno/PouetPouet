@@ -13,9 +13,10 @@ import type { ToolMode, StrokeSize } from '@/components/board/floating-toolbar'
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const {
-    board, cards, frames, fields, selectedIds, isLoading,
+    board, cards, connections, frames, fields, selectedIds, isLoading,
     addCard, moveCard, resizeCard, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     groupSelected,
+    addConnection, deleteConnection,
     addFrame, moveFrame, resizeFrame, updateFrame, deleteFrame,
     createField, updateField, deleteField,
     setFieldValue, clearFieldValue,
@@ -179,6 +180,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
         <BoardCanvas
           cards={cards}
+          connections={connections}
           frames={frames}
           fields={fields}
           selectedIds={selectedIds}
@@ -194,12 +196,15 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onRecolorCard={recolorCard}
           onDeleteCard={deleteCard}
           onSelectCards={selectCards}
+          onAddConnection={addConnection}
+          onDeleteConnection={deleteConnection}
           onMoveFrame={moveFrame}
           onResizeFrame={resizeFrame}
           onUpdateFrame={updateFrame}
           onDeleteFrame={deleteFrame}
           onSetFieldValue={setFieldValue}
           onClearFieldValue={clearFieldValue}
+          onExitLinkCardsMode={() => setToolMode('select')}
         />
 
         <FloatingToolbar

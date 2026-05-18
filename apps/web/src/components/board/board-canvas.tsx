@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import type { Card, Frame, BoardField } from '@/hooks/useBoard'
+import type { Card, Frame, BoardField, Connection } from '@/hooks/useBoard'
 import { groupColor } from '@/hooks/useBoard'
 import { BoardCard } from './board-card'
 import { FrameItem } from './frame-item'
@@ -10,6 +10,7 @@ import type { ToolMode, StrokeSize } from './floating-toolbar'
 
 interface Props {
   cards: Card[]
+  connections: Connection[]
   frames: Frame[]
   fields: BoardField[]
   selectedIds: Set<string>
@@ -25,12 +26,15 @@ interface Props {
   onRecolorCard: (id: string, color: string) => void
   onDeleteCard: (id: string) => void
   onSelectCards: (ids: Set<string>) => void
+  onAddConnection: (fromId: string, toId: string) => void
+  onDeleteConnection: (id: string) => void
   onMoveFrame: (id: string, posX: number, posY: number, capturedCards: { id: string; startX: number; startY: number; frameStartX: number; frameStartY: number }[]) => void
   onResizeFrame: (id: string, w: number, h: number) => void
   onUpdateFrame: (id: string, title: string) => void
   onDeleteFrame: (id: string) => void
   onSetFieldValue: (cardId: string, fieldId: string, value: string) => void
   onClearFieldValue: (cardId: string, fieldId: string) => void
+  onExitLinkCardsMode?: () => void
 }
 
 const MIN_ZOOM = 0.1
@@ -38,17 +42,18 @@ const MAX_ZOOM = 3
 const DOT_SPACING = 24
 
 export function BoardCanvas({
-  cards, frames, fields, selectedIds, toolMode, toolColor, toolStroke, toolFill, toolOpacity,
+  cards, connections, frames, fields, selectedIds, toolMode, toolColor, toolStroke, toolFill, toolOpacity,
   onAddCard, onMoveCard, onResizeCard, onUpdateCard, onRecolorCard, onDeleteCard,
-  onSelectCards,
+  onSelectCards, onAddConnection, onDeleteConnection,
   onMoveFrame, onResizeFrame, onUpdateFrame, onDeleteFrame,
-  onSetFieldValue, onClearFieldValue,
+  onSetFieldValue, onClearFieldValue, onExitLinkCardsMode,
 }: Props) {
   // ── Refs ────────────────────────────────────────────────────────────────────
-  const containerRef   = useRef<HTMLDivElement>(null)
-  const canvasRef      = useRef<HTMLDivElement>(null)
-  const rbDomRef       = useRef<HTMLDivElement>(null)
-  const drawingPathRef = useRef<SVGPathElement>(null)
+  const containerRef    = useRef<HTMLDivElement>(null)
+  const canvasRef       = useRef<HTMLDivElement>(null)
+  const rbDomRef        = useRef<HTMLDivElement>(null)
+  const drawingPathRef  = useRef<SVGPathElement>(null)
+  const connectGhostRef = useRef<SVGLineElement>(null)
 
   // Live viewport — updated every frame via direct DOM manipulation (no React re-render)
   const vpRef = useRef({ x: 0, y: 0, zoom: 1 })
@@ -57,9 +62,32 @@ export function BoardCanvas({
 
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
 
-  // Link popover
+  // Link popover (URL link)
   const [linkPopover, setLinkPopover] = useState<{ screenX: number; screenY: number; canvasX: number; canvasY: number } | null>(null)
   const [linkUrl, setLinkUrl] = useState('')
+
+  // Click-click card linking
+  const [linkSourceId, setLinkSourceId] = useState<string | null>(null)
+
+  // Reset linkSourceId whenever we leave link-cards mode
+  useEffect(() => {
+    if (toolMode !== 'link-cards' && linkSourceId !== null) setLinkSourceId(null)
+  }, [toolMode, linkSourceId])
+
+  // ESC: cancel link-cards source / exit mode
+  useEffect(() => {
+    if (toolMode !== 'link-cards') return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (linkSourceId !== null) {
+        setLinkSourceId(null)
+      } else {
+        onExitLinkCardsMode?.()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toolMode, linkSourceId, onExitLinkCardsMode])
 
   // ── DOM helpers ──────────────────────────────────────────────────────────────
   function applyTransform(vp: { x: number; y: number; zoom: number }) {
@@ -242,7 +270,7 @@ export function BoardCanvas({
   // ── Canvas click (for tool placement) ───────────────────────────────────────
   function handleCanvasClick(e: React.MouseEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement) !== e.currentTarget) return
-    if (toolMode === 'select' || toolMode === 'draw') return
+    if (toolMode === 'select' || toolMode === 'draw' || toolMode === 'link-cards') return
 
     const p = toCanvas(e.clientX, e.clientY)
 
@@ -274,6 +302,61 @@ export function BoardCanvas({
     setLinkUrl('')
   }
 
+  // ── Connection drag (from card handle) ───────────────────────────────────────
+  function handleStartConnect(cardId: string, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const card = cards.find((c) => c.id === cardId)
+    if (!card) return
+    const startX = card.posX + card.width / 2
+    const startY = card.posY + card.height / 2
+
+    const ghost = connectGhostRef.current
+    if (ghost) {
+      ghost.setAttribute('x1', String(startX))
+      ghost.setAttribute('y1', String(startY))
+      ghost.setAttribute('x2', String(startX))
+      ghost.setAttribute('y2', String(startY))
+      ghost.style.display = ''
+    }
+
+    function onMove(ev: MouseEvent) {
+      const p = toCanvas(ev.clientX, ev.clientY)
+      if (ghost) {
+        ghost.setAttribute('x2', String(p.x))
+        ghost.setAttribute('y2', String(p.y))
+      }
+    }
+
+    function onUp(ev: MouseEvent) {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      if (ghost) ghost.style.display = 'none'
+
+      const target = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
+      const targetCardEl = target?.closest('[data-card-id]') as HTMLElement | null
+      const targetId = targetCardEl?.dataset.cardId
+      if (targetId && targetId !== cardId) {
+        onAddConnection(cardId, targetId)
+      }
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  // ── Link-cards: per-card click (called by the per-card overlay) ──────────────
+  function handleLinkCardClick(cardId: string) {
+    if (linkSourceId === null) {
+      setLinkSourceId(cardId)
+    } else if (linkSourceId === cardId) {
+      setLinkSourceId(null)
+    } else {
+      onAddConnection(linkSourceId, cardId)
+      setLinkSourceId(null)
+    }
+  }
+
   function handleSelect(id: string, add: boolean) {
     if (add) {
       const next = new Set(selectedIds)
@@ -287,7 +370,13 @@ export function BoardCanvas({
   const detailCard = detailCardId ? cards.find((c) => c.id === detailCardId) ?? null : null
   const zoom = viewport.zoom
 
-  const canvasCursor = toolMode === 'draw' ? 'crosshair' : toolMode !== 'select' ? 'cell' : 'default'
+  const canvasCursor =
+    toolMode === 'draw' ? 'crosshair' :
+    toolMode === 'link-cards' ? 'crosshair' :
+    toolMode !== 'select' ? 'cell' :
+    'default'
+
+  const sourceCard = linkSourceId ? cards.find((c) => c.id === linkSourceId) : null
 
   return (
     <>
@@ -321,9 +410,50 @@ export function BoardCanvas({
             />
           ))}
 
-          {/* SVG: drawing path only */}
-          <svg style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none' }}>
-            <path ref={drawingPathRef} fill="none" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'none' }} />
+          {/* SVG: card connections + drawing path + connect ghost + source highlight.
+              Large explicit viewBox so all drawn content renders even far from origin.
+              pointer-events: none on the SVG ensures empty areas don't intercept canvas clicks;
+              children that need hover (ConnectionLine hit areas) opt back in via their own pointer-events. */}
+          <svg
+            style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none' }}
+            viewBox="-100000 -100000 200000 200000"
+          >
+            {connections.map((conn) => {
+              const from = cards.find((c) => c.id === conn.fromId)
+              const to = cards.find((c) => c.id === conn.toId)
+              if (!from || !to) return null
+              return (
+                <ConnectionLine
+                  key={conn.id}
+                  id={conn.id}
+                  x1={from.posX + from.width / 2}
+                  y1={from.posY + from.height / 2}
+                  x2={to.posX + to.width / 2}
+                  y2={to.posY + to.height / 2}
+                  onDelete={onDeleteConnection}
+                />
+              )
+            })}
+            <path ref={drawingPathRef} fill="none" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'none', pointerEvents: 'none' }} />
+            <line ref={connectGhostRef} stroke="#6366f1" strokeWidth={2} strokeDasharray="6 4" strokeLinecap="round" style={{ display: 'none', pointerEvents: 'none' }} />
+
+            {/* Source card highlight (click-click mode) */}
+            {sourceCard && (
+              <rect
+                x={sourceCard.posX - 4}
+                y={sourceCard.posY - 4}
+                width={sourceCard.width + 8}
+                height={sourceCard.height + 8}
+                rx={14}
+                fill="none"
+                stroke="#6366f1"
+                strokeWidth={2.5}
+                strokeDasharray="6 4"
+                style={{ pointerEvents: 'none' }}
+              >
+                <animate attributeName="stroke-dashoffset" from="0" to="20" dur="0.6s" repeatCount="indefinite" />
+              </rect>
+            )}
           </svg>
 
           {/* Rubber band */}
@@ -347,9 +477,28 @@ export function BoardCanvas({
               onResize={onResizeCard}
               onSelect={handleSelect}
               onOpenDetail={setDetailCardId}
+              onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}
+              linkCardsMode={toolMode === 'link-cards'}
+              isLinkSource={linkSourceId === card.id}
+              onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
             />
           ))}
         </div>
+
+        {/* Link-cards mode banner */}
+        {toolMode === 'link-cards' && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-3 pointer-events-none z-[60]">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx="5" cy="12" r="2.5" />
+              <circle cx="19" cy="12" r="2.5" />
+              <path strokeLinecap="round" d="M7.5 12h9" />
+            </svg>
+            <span className="font-medium">
+              {linkSourceId === null ? 'Cliquez la première carte' : 'Cliquez la deuxième carte'}
+            </span>
+            <span className="text-xs text-indigo-200">Échap pour quitter</span>
+          </div>
+        )}
 
         {/* Zoom indicator */}
         {Math.abs(zoom - 1) > 0.05 && (
@@ -408,5 +557,39 @@ export function BoardCanvas({
         />
       )}
     </>
+  )
+}
+
+// ── Connection line with hover-delete ─────────────────────────────────────────
+function ConnectionLine({ id, x1, y1, x2, y2, onDelete }: {
+  id: string; x1: number; y1: number; x2: number; y2: number; onDelete: (id: string) => void
+}) {
+  const [hover, setHover] = useState(false)
+  const mx = (x1 + x2) / 2
+  const my = (y1 + y2) / 2
+  return (
+    <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {/* Wide invisible hit-area */}
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={16} style={{ pointerEvents: 'stroke', cursor: 'pointer' }} />
+      {/* Visible line */}
+      <line
+        x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke={hover ? '#6366f1' : '#9ca3af'}
+        strokeWidth={hover ? 2.5 : 2}
+        strokeLinecap="round"
+        style={{ pointerEvents: 'none' }}
+      />
+      {hover && (
+        <g style={{ pointerEvents: 'all', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onDelete(id) }}>
+          <circle cx={mx} cy={my} r={10} fill="white" stroke="#ef4444" strokeWidth={1.5} />
+          <path
+            d={`M${mx - 3.5},${my - 3.5} L${mx + 3.5},${my + 3.5} M${mx + 3.5},${my - 3.5} L${mx - 3.5},${my + 3.5}`}
+            stroke="#ef4444"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
+        </g>
+      )}
+    </g>
   )
 }
