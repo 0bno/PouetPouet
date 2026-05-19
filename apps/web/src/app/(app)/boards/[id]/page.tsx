@@ -1,8 +1,9 @@
 'use client'
 
-import { use, useState, useEffect } from 'react'
+import { use, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useBoard } from '@/hooks/useBoard'
+import type { Card } from '@/hooks/useBoard'
 import { useSession } from '@/hooks/useSession'
 import { BoardCanvas } from '@/components/board/board-canvas'
 import { BoardFieldsPanel } from '@/components/board/board-fields-panel'
@@ -27,6 +28,9 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     startSession, closeSession, launchActivity, closeActivity,
   } = useSession(id)
 
+  const clipboardRef = useRef<Pick<Card, 'type' | 'content' | 'color' | 'posX' | 'posY' | 'width' | 'height'>[]>([])
+  const pasteOffsetRef = useRef(0)
+
   const [showFieldsPanel, setShowFieldsPanel] = useState(false)
   const [toolMode, setToolMode] = useState<ToolMode>('select')
   const [toolColor, setToolColor] = useState('#6366f1')
@@ -49,11 +53,31 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         if (selectedIds.size > 0) deleteSelected()
       }
       if (e.key === 'Escape') { setToolMode('select'); selectCards(new Set()) }
-      if (e.key === 'v' || e.key === 'V') setToolMode('select')
+      if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) setToolMode('select')
+
+      // Copy selected cards
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const sel = cards.filter((c) => selectedIds.has(c.id))
+        if (sel.length === 0) return
+        clipboardRef.current = sel.map(({ type, content, color, posX, posY, width, height }) => ({ type, content, color, posX, posY, width, height }))
+        pasteOffsetRef.current = 0
+      }
+
+      // Paste copied cards
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        const cb = clipboardRef.current
+        if (cb.length === 0) return
+        e.preventDefault()
+        pasteOffsetRef.current += 20
+        const offset = pasteOffsetRef.current
+        cb.forEach(({ type, content, color, posX, posY, width, height }) => {
+          addCard(posX + offset, posY + offset, type, content, color, width, height)
+        })
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, deleteSelected, selectCards])
+  }, [selectedIds, deleteSelected, selectCards, cards, addCard])
 
   const selectedCards = cards.filter((c) => selectedIds.has(c.id))
   const selectedGroupIds = new Set(selectedCards.map((c) => c.groupId).filter(Boolean))
