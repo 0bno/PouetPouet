@@ -32,9 +32,17 @@ interface Props {
   onAddConnection: (fromId: string, toId: string) => void
   onDeleteConnection: (id: string) => void
   onMoveFrame: (id: string, posX: number, posY: number, capturedCards: { id: string; startX: number; startY: number; frameStartX: number; frameStartY: number }[]) => void
+  onStartDragFrame: (id: string, capturedCardIds: string[]) => void
+  onCommitDragFrame: (id: string) => void
   onResizeFrame: (id: string, w: number, h: number) => void
+  onStartResizeFrame: (id: string) => void
+  onCommitResizeFrame: (id: string) => void
   onUpdateFrame: (id: string, title: string) => void
   onDeleteFrame: (id: string) => void
+  onStartDragCard: (id: string) => void
+  onCommitDragCard: (id: string) => void
+  onStartResizeCard: (id: string) => void
+  onCommitResizeCard: (id: string) => void
   onSetFieldValue: (cardId: string, fieldId: string, value: string) => void
   onClearFieldValue: (cardId: string, fieldId: string) => void
   onExitLinkCardsMode?: () => void
@@ -49,8 +57,11 @@ export function BoardCanvas({
   cards, connections, frames, fields, selectedIds, toolMode, toolColor, toolStroke, toolFill, toolOpacity,
   clipboard,
   onAddCard, onMoveCard, onResizeCard, onUpdateCard, onRecolorCard, onDeleteCard,
+  onStartDragCard, onCommitDragCard, onStartResizeCard, onCommitResizeCard,
   onSelectCards, onAddConnection, onDeleteConnection,
-  onMoveFrame, onResizeFrame, onUpdateFrame, onDeleteFrame,
+  onMoveFrame, onStartDragFrame, onCommitDragFrame,
+  onResizeFrame, onStartResizeFrame, onCommitResizeFrame,
+  onUpdateFrame, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
 }: Props) {
   // ── Refs ────────────────────────────────────────────────────────────────────
@@ -474,7 +485,11 @@ export function BoardCanvas({
               cards={cards}
               zoom={zoom}
               onMove={onMoveFrame}
+              onStartDrag={onStartDragFrame}
+              onCommitDrag={onCommitDragFrame}
               onResize={onResizeFrame}
+              onStartResize={onStartResizeFrame}
+              onCommitResize={onCommitResizeFrame}
               onUpdate={onUpdateFrame}
               onDelete={onDeleteFrame}
             />
@@ -537,10 +552,14 @@ export function BoardCanvas({
               groupColor={card.groupId ? groupColor(card.groupId) : undefined}
               drawMode={toolMode === 'draw'}
               onMove={onMoveCard}
+              onStartDrag={onStartDragCard}
+              onCommitDrag={onCommitDragCard}
               onUpdate={onUpdateCard}
               onRecolor={onRecolorCard}
               onDelete={onDeleteCard}
               onResize={onResizeCard}
+              onStartResize={onStartResizeCard}
+              onCommitResize={onCommitResizeCard}
               onSelect={handleSelect}
               onOpenDetail={setDetailCardId}
               onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}

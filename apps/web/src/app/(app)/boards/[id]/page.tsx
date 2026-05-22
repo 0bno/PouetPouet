@@ -16,12 +16,15 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const {
     board, cards, connections, frames, fields, selectedIds, isLoading,
     addCard, moveCard, resizeCard, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
+    startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected,
     addConnection, deleteConnection,
     addFrame, moveFrame, resizeFrame, updateFrame, deleteFrame,
+    startDragFrame, commitDragFrame, startResizeFrame, commitResizeFrame,
     createField, updateField, deleteField,
     setFieldValue, clearFieldValue,
     selectCards,
+    undo, redo, canUndo, canRedo,
   } = useBoard(id)
   const {
     session, participantCount, currentActivity, activityResponses, isLoading: sessionLoading,
@@ -48,6 +51,17 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+Z / Ctrl+Y: undo / redo (before focus check so they work even in inputs)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        redo()
+        return
+      }
       // Ctrl+C: copy regardless of what is focused
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         const sel = cards.filter((c) => selectedIds.has(c.id))
@@ -64,7 +78,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, deleteSelected, selectCards, cards])
+  }, [selectedIds, deleteSelected, selectCards, cards, undo, redo])
 
   function handlePasteCards(cb: ClipCard[], canvasX: number, canvasY: number) {
     if (cb.length === 0) return
@@ -103,6 +117,30 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         </Link>
 
         <h1 className="font-semibold text-gray-900 flex-1 truncate min-w-0">{board?.name}</h1>
+
+        {/* Undo / Redo */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            title="Annuler (Ctrl+Z)"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6-6M3 10l6 6" />
+            </svg>
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            title="Rétablir (Ctrl+Y)"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a8 8 0 00-8 8v2M21 10l-6-6M21 10l-6 6" />
+            </svg>
+          </button>
+        </div>
 
         {/* Selection badge */}
         {selectedIds.size > 0 && (
@@ -220,11 +258,19 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onUpdateCard={updateCard}
           onRecolorCard={recolorCard}
           onDeleteCard={deleteCard}
+          onStartDragCard={startDragCard}
+          onCommitDragCard={commitDragCard}
+          onStartResizeCard={startResizeCard}
+          onCommitResizeCard={commitResizeCard}
           onSelectCards={selectCards}
           onAddConnection={addConnection}
           onDeleteConnection={deleteConnection}
           onMoveFrame={moveFrame}
+          onStartDragFrame={startDragFrame}
+          onCommitDragFrame={commitDragFrame}
           onResizeFrame={resizeFrame}
+          onStartResizeFrame={startResizeFrame}
+          onCommitResizeFrame={commitResizeFrame}
           onUpdateFrame={updateFrame}
           onDeleteFrame={deleteFrame}
           onSetFieldValue={setFieldValue}
