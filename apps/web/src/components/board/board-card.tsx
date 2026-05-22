@@ -207,7 +207,7 @@ export function BoardCard({
     if (isDragging.current) return
     if (e.shiftKey || e.metaKey || e.ctrlKey) { onSelect?.(card.id, true); return }
     if (!isEditing && card.type === 'TEXT') setIsEditing(true)
-    if (!isEditing && isLabel) onSelect?.(card.id, false)
+    if (!isEditing) onSelect?.(card.id, false)
   }
 
   function updateLabelFmt(changes: Partial<Omit<LabelFmt, 'text'>>) {
