@@ -216,54 +216,58 @@ export function BoardCanvas({
     return () => window.removeEventListener('paste', onPaste)
   }, [onAddCard])
 
+  // ── Freehand draw (called from canvas or card bubble) ────────────────────────
+  function startFreehandDraw(clientX: number, clientY: number) {
+    const startP = toCanvas(clientX, clientY)
+    const points: Array<{ x: number; y: number }> = [startP]
+
+    const dp = drawingPathRef.current
+    if (dp) {
+      dp.setAttribute('d', `M${startP.x.toFixed(1)},${startP.y.toFixed(1)}`)
+      dp.setAttribute('stroke', toolColor)
+      dp.style.display = ''
+    }
+
+    function onMove(ev: MouseEvent) {
+      const p = toCanvas(ev.clientX, ev.clientY)
+      const last = points[points.length - 1]
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 2 / vpRef.current.zoom) return
+      points.push(p)
+      if (dp) dp.setAttribute('d', 'M' + points.map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' L'))
+    }
+
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      if (dp) dp.style.display = 'none'
+      if (points.length < 3) return
+      const xs = points.map((p) => p.x), ys = points.map((p) => p.y)
+      const minX = Math.min(...xs), minY = Math.min(...ys)
+      const maxX = Math.max(...xs), maxY = Math.max(...ys)
+      const pad = 8
+      const w = Math.max(60, maxX - minX + pad * 2)
+      const h = Math.max(60, maxY - minY + pad * 2)
+      const d = 'M' + points.map((pt) => `${(pt.x - minX + pad).toFixed(1)},${(pt.y - minY + pad).toFixed(1)}`).join(' L')
+      onAddCard(minX - pad, minY - pad, 'DRAW', d, toolColor, w, h)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // ── Canvas mouse down ────────────────────────────────────────────────────────
   function handleCanvasMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.button !== 0 || (e.target as HTMLElement) !== e.currentTarget) return
+    if (e.button !== 0) return
 
-    // ── Freehand draw mode ──
+    // Draw mode: work anywhere — cards let the event bubble when drawMode=true
     if (toolMode === 'draw') {
       e.preventDefault()
-      const startP = toCanvas(e.clientX, e.clientY)
-      const points: Array<{ x: number; y: number }> = [startP]
-
-      const dp = drawingPathRef.current
-      if (dp) {
-        dp.setAttribute('d', `M${startP.x.toFixed(1)},${startP.y.toFixed(1)}`)
-        dp.setAttribute('stroke', toolColor)
-        dp.style.display = ''
-      }
-
-      function onMove(ev: MouseEvent) {
-        const p = toCanvas(ev.clientX, ev.clientY)
-        const last = points[points.length - 1]
-        if (Math.hypot(p.x - last.x, p.y - last.y) < 2 / vpRef.current.zoom) return
-        points.push(p)
-        if (dp) {
-          dp.setAttribute('d', 'M' + points.map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' L'))
-        }
-      }
-
-      function onUp() {
-        window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
-        if (dp) dp.style.display = 'none'
-        if (points.length < 3) return
-
-        const xs = points.map((p) => p.x)
-        const ys = points.map((p) => p.y)
-        const minX = Math.min(...xs), minY = Math.min(...ys)
-        const maxX = Math.max(...xs), maxY = Math.max(...ys)
-        const pad = 8
-        const w = Math.max(60, maxX - minX + pad * 2)
-        const h = Math.max(60, maxY - minY + pad * 2)
-        const d = 'M' + points.map((pt) => `${(pt.x - minX + pad).toFixed(1)},${(pt.y - minY + pad).toFixed(1)}`).join(' L')
-        onAddCard(minX - pad, minY - pad, 'DRAW', d, toolColor, w, h)
-      }
-
-      window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
+      startFreehandDraw(e.clientX, e.clientY)
       return
     }
+
+    // Other modes: only handle direct clicks on canvas background
+    if ((e.target as HTMLElement) !== e.currentTarget) return
 
     // Non-select modes: single-click handled by onClick, skip rubber band
     if (toolMode !== 'select') return
@@ -444,10 +448,7 @@ export function BoardCanvas({
             />
           ))}
 
-          {/* SVG: card connections + drawing path + connect ghost + source highlight.
-              Large explicit viewBox so all drawn content renders even far from origin.
-              pointer-events: none on the SVG ensures empty areas don't intercept canvas clicks;
-              children that need hover (ConnectionLine hit areas) opt back in via their own pointer-events. */}
+          {/* SVG: connections + connect ghost + source highlight (below cards) */}
           <svg
             style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none' }}
             viewBox="-100000 -100000 200000 200000"
@@ -468,10 +469,7 @@ export function BoardCanvas({
                 />
               )
             })}
-            <path ref={drawingPathRef} fill="none" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'none', pointerEvents: 'none' }} />
             <line ref={connectGhostRef} stroke="#6366f1" strokeWidth={2} strokeDasharray="6 4" strokeLinecap="round" style={{ display: 'none', pointerEvents: 'none' }} />
-
-            {/* Source card highlight (click-click mode) */}
             {sourceCard && (
               <rect
                 x={sourceCard.posX - 4}
@@ -496,7 +494,8 @@ export function BoardCanvas({
             style={{ position: 'absolute', display: 'none', border: '1px solid #818cf8', background: 'rgba(99,102,241,0.08)', borderRadius: 3, pointerEvents: 'none' }}
           />
 
-          {cards.map((card) => (
+          {/* Non-DRAW cards first, then DRAW cards on top */}
+          {[...cards.filter((c) => c.type !== 'DRAW'), ...cards.filter((c) => c.type === 'DRAW')].map((card) => (
             <BoardCard
               key={card.id}
               card={card}
@@ -504,6 +503,7 @@ export function BoardCanvas({
               zoom={zoom}
               isSelected={selectedIds.has(card.id)}
               groupColor={card.groupId ? groupColor(card.groupId) : undefined}
+              drawMode={toolMode === 'draw'}
               onMove={onMoveCard}
               onUpdate={onUpdateCard}
               onRecolor={onRecolorCard}
@@ -517,6 +517,14 @@ export function BoardCanvas({
               onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
             />
           ))}
+
+          {/* Drawing preview SVG — rendered above all cards */}
+          <svg
+            style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none', zIndex: 200 }}
+            viewBox="-100000 -100000 200000 200000"
+          >
+            <path ref={drawingPathRef} fill="none" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'none', pointerEvents: 'none' }} />
+          </svg>
         </div>
 
         {/* Link-cards mode banner */}
