@@ -55,6 +55,18 @@ const io = new Server(app.server, {
   },
 })
 
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token
+  if (!token || typeof token !== 'string') return next(new Error('Unauthorized'))
+  try {
+    const payload = app.jwt.verify<{ id: string; email: string }>(token)
+    socket.data.userId = payload.id
+    next()
+  } catch {
+    next(new Error('Unauthorized'))
+  }
+})
+
 registerSocketHandlers(io)
 
 await app.listen({ port: PORT, host: '0.0.0.0' })

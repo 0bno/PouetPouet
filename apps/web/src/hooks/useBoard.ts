@@ -83,6 +83,8 @@ export function useBoard(boardId: string) {
   const [fields, setFields] = useState<BoardField[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
+  const [userRole, setUserRole] = useState<'OWNER' | 'EDITOR' | 'VIEWER' | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
   const socketRef = useRef(connectSocket())
   const cardsRef = useRef<Card[]>([])
   cardsRef.current = cards
@@ -141,20 +143,31 @@ export function useBoard(boardId: string) {
   const canRedo = redoStackRef.current.length > 0
 
   useEffect(() => {
-    api.get<BoardDetail>(`/api/boards/${boardId}`).then((data) => {
-      setBoard(data)
-      setCards(data.cards.map((c) => ({ ...c, fieldValues: (c as Card).fieldValues ?? [] })))
-      setIsLoading(false)
-    })
+    api.get<BoardDetail & { role: 'OWNER' | 'EDITOR' | 'VIEWER' }>(`/api/boards/${boardId}`)
+      .then((data) => {
+        setBoard(data)
+        setCards(data.cards.map((c) => ({ ...c, fieldValues: (c as Card).fieldValues ?? [] })))
+        setUserRole(data.role)
+        setIsLoading(false)
+      })
+      .catch((err: Error) => {
+        if (err.message === 'Accès refusé') setAccessDenied(true)
+        setIsLoading(false)
+      })
 
     const socket = socketRef.current
     socket.emit('board:join', boardId)
 
-    socket.on('board:state', ({ cards: sc, connections: sconn, frames: sf, fields: sfields }) => {
+    socket.on('board:state', ({ cards: sc, connections: sconn, frames: sf, fields: sfields, role }) => {
       setCards(sc as Card[])
       setConnections(sconn as Connection[])
       setFrames(sf as Frame[])
       setFields((sfields as BoardField[]).map((f) => ({ ...f, options: f.options as string[] | null })))
+      if (role) setUserRole(role as 'OWNER' | 'EDITOR' | 'VIEWER')
+    })
+
+    socket.on('board:error', (msg: string) => {
+      if (msg === 'Accès refusé') setAccessDenied(true)
     })
 
     // Cards — process pending history callback before updating state
@@ -220,7 +233,7 @@ export function useBoard(boardId: string) {
 
     return () => {
       socket.emit('board:leave', boardId)
-      ;['board:state',
+      ;['board:state', 'board:error',
         'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored',
         'cards:grouped', 'cards:ungrouped',
         'connection:created', 'connection:deleted',
@@ -658,8 +671,10 @@ export function useBoard(boardId: string) {
 
   const selectCards = useCallback((ids: Set<string>) => setSelectedIds(ids), [])
 
+  const isReadonly = userRole === 'VIEWER'
+
   return {
-    board, cards, connections, frames, fields, selectedIds, isLoading,
+    board, cards, connections, frames, fields, selectedIds, isLoading, userRole, isReadonly, accessDenied,
     addCard, moveCard, resizeCard, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected,

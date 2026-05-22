@@ -111,24 +111,32 @@ export default function DashboardPage() {
                       <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{board.description}</p>
                     )}
                   </div>
-                  <button
-                    onClick={(e) => handleDelete(e, board.id)}
-                    disabled={deletingId === board.id}
-                    className="opacity-0 group-hover:opacity-100 shrink-0 rounded-lg p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  {board.role === 'OWNER' && (
+                    <button
+                      onClick={(e) => handleDelete(e, board.id)}
+                      disabled={deletingId === board.id}
+                      className="opacity-0 group-hover:opacity-100 shrink-0 rounded-lg p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-400 dark:text-gray-500">
                     Modifié {new Date(board.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                   </span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${theme.light} ${theme.text}`}>
-                    Board
-                  </span>
+                  {board.role !== 'OWNER' ? (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${board.role === 'VIEWER' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      {board.role === 'VIEWER' ? 'Lecture' : 'Éditeur'}
+                    </span>
+                  ) : (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${theme.light} ${theme.text}`}>
+                      Board
+                    </span>
+                  )}
                 </div>
               </div>
             )

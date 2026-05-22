@@ -6,6 +6,7 @@ export interface Board {
   name: string
   description: string | null
   ownerId: string
+  role: 'OWNER' | 'EDITOR' | 'VIEWER'
   createdAt: string
   updatedAt: string
 }
