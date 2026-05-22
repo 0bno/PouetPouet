@@ -8,12 +8,16 @@ interface Props {
   cards: Card[]
   zoom?: number
   onMove: (id: string, posX: number, posY: number, capturedCards: { id: string; startX: number; startY: number; frameStartX: number; frameStartY: number }[]) => void
+  onStartDrag?: (id: string, capturedCardIds: string[]) => void
+  onCommitDrag?: (id: string) => void
   onResize: (id: string, width: number, height: number) => void
+  onStartResize?: (id: string) => void
+  onCommitResize?: (id: string) => void
   onUpdate: (id: string, title: string) => void
   onDelete: (id: string) => void
 }
 
-export function FrameItem({ frame, cards, zoom = 1, onMove, onResize, onUpdate, onDelete }: Props) {
+export function FrameItem({ frame, cards, zoom = 1, onMove, onStartDrag, onCommitDrag, onResize, onStartResize, onCommitResize, onUpdate, onDelete }: Props) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [title, setTitle] = useState(frame.title)
   const capturedRef = useRef<{ id: string; startX: number; startY: number; frameStartX: number; frameStartY: number }[]>([])
@@ -37,6 +41,8 @@ export function FrameItem({ frame, cards, zoom = 1, onMove, onResize, onUpdate, 
       })
       .map((c) => ({ id: c.id, startX: c.posX, startY: c.posY, frameStartX: startFrameX, frameStartY: startFrameY }))
 
+    onStartDrag?.(frame.id, capturedRef.current.map((c) => c.id))
+
     function onMouseMove(ev: MouseEvent) {
       const dx = (ev.clientX - startMouseX) / zoom
       const dy = (ev.clientY - startMouseY) / zoom
@@ -46,6 +52,7 @@ export function FrameItem({ frame, cards, zoom = 1, onMove, onResize, onUpdate, 
     function onMouseUp() {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      onCommitDrag?.(frame.id)
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -55,6 +62,7 @@ export function FrameItem({ frame, cards, zoom = 1, onMove, onResize, onUpdate, 
   function handleResizeMouseDown(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
+    onStartResize?.(frame.id)
     const startX = e.clientX
     const startY = e.clientY
     const startW = frame.width
@@ -67,6 +75,7 @@ export function FrameItem({ frame, cards, zoom = 1, onMove, onResize, onUpdate, 
     }
 
     function onMouseUp() {
+      onCommitResize?.(frame.id)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
     }

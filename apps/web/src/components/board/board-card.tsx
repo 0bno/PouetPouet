@@ -11,10 +11,14 @@ interface Props {
   groupColor?: string
   drawMode?: boolean
   onMove: (id: string, x: number, y: number) => void
+  onStartDrag?: (id: string) => void
+  onCommitDrag?: (id: string) => void
   onUpdate: (id: string, content: string) => void
   onRecolor?: (id: string, color: string) => void
   onDelete: (id: string) => void
   onResize: (id: string, w: number, h: number) => void
+  onStartResize?: (id: string) => void
+  onCommitResize?: (id: string) => void
   onSelect?: (id: string, addToSelection: boolean) => void
   onOpenDetail: (id: string) => void
   onStartConnect?: (cardId: string, e: React.MouseEvent) => void
@@ -114,7 +118,9 @@ function formatFieldValue(type: string, value: string): string {
 
 export function BoardCard({
   card, fields, zoom = 1, isSelected, groupColor, drawMode,
-  onMove, onUpdate, onRecolor, onDelete, onResize, onSelect, onOpenDetail, onStartConnect,
+  onMove, onStartDrag, onCommitDrag, onUpdate, onRecolor, onDelete,
+  onResize, onStartResize, onCommitResize,
+  onSelect, onOpenDetail, onStartConnect,
   linkCardsMode, isLinkSource, onLinkCardsClick,
 }: Props) {
   const isLabel = card.type === 'LABEL'
@@ -152,6 +158,7 @@ export function BoardCard({
     e.preventDefault()
     e.stopPropagation()
     isDragging.current = false
+    onStartDrag?.(card.id)
     const startX = e.clientX, startY = e.clientY
     const startCardX = card.posX, startCardY = card.posY
 
@@ -163,6 +170,7 @@ export function BoardCard({
     function onMouseUp() {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      onCommitDrag?.(card.id)
     }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
@@ -173,12 +181,14 @@ export function BoardCard({
 
   function handleResizeMouseDown(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
+    onStartResize?.(card.id)
     const startX = e.clientX, startY = e.clientY
     const startW = card.width, startH = card.height
     function onMouseMove(ev: MouseEvent) {
       onResize(card.id, Math.max(minW, startW + (ev.clientX - startX) / zoom), Math.max(minH, startH + (ev.clientY - startY) / zoom))
     }
     function onMouseUp() {
+      onCommitResize?.(card.id)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
     }
