@@ -9,6 +9,7 @@ interface Props {
   zoom?: number
   isSelected?: boolean
   groupColor?: string
+  drawMode?: boolean
   onMove: (id: string, x: number, y: number) => void
   onUpdate: (id: string, content: string) => void
   onRecolor?: (id: string, color: string) => void
@@ -112,7 +113,7 @@ function formatFieldValue(type: string, value: string): string {
 }
 
 export function BoardCard({
-  card, fields, zoom = 1, isSelected, groupColor,
+  card, fields, zoom = 1, isSelected, groupColor, drawMode,
   onMove, onUpdate, onRecolor, onDelete, onResize, onSelect, onOpenDetail, onStartConnect,
   linkCardsMode, isLinkSource, onLinkCardsClick,
 }: Props) {
@@ -144,6 +145,7 @@ export function BoardCard({
   }, [card.content])
 
   function handleMouseDown(e: React.MouseEvent) {
+    if (drawMode) return  // let event bubble to canvas so drawing works over cards
     if (isEditing) return
     // Safety net: if the mousedown bubbled up from a connect handle, ignore it
     if ((e.target as HTMLElement).closest('[data-connect-handle]')) return
@@ -207,7 +209,7 @@ export function BoardCard({
     if (isDragging.current) return
     if (e.shiftKey || e.metaKey || e.ctrlKey) { onSelect?.(card.id, true); return }
     if (!isEditing && card.type === 'TEXT') setIsEditing(true)
-    if (!isEditing && isLabel) onSelect?.(card.id, false)
+    if (!isEditing) onSelect?.(card.id, false)
   }
 
   function updateLabelFmt(changes: Partial<Omit<LabelFmt, 'text'>>) {

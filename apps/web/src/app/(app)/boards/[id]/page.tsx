@@ -3,6 +3,7 @@
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useBoard } from '@/hooks/useBoard'
+import type { Card } from '@/hooks/useBoard'
 import { useSession } from '@/hooks/useSession'
 import { BoardCanvas } from '@/components/board/board-canvas'
 import { BoardFieldsPanel } from '@/components/board/board-fields-panel'
@@ -27,6 +28,9 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     startSession, closeSession, launchActivity, closeActivity,
   } = useSession(id)
 
+  type ClipCard = Pick<Card, 'type' | 'content' | 'color' | 'posX' | 'posY' | 'width' | 'height'>
+  const [clipboard, setClipboard] = useState<ClipCard[]>([])
+
   const [showFieldsPanel, setShowFieldsPanel] = useState(false)
   const [toolMode, setToolMode] = useState<ToolMode>('select')
   const [toolColor, setToolColor] = useState('#6366f1')
@@ -44,16 +48,36 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      // Ctrl+C: copy regardless of what is focused
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const sel = cards.filter((c) => selectedIds.has(c.id))
+        if (sel.length === 0) return
+        setClipboard(sel.map(({ type, content, color, posX, posY, width, height }) => ({ type, content, color, posX, posY, width, height })))
+        return
+      }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).isContentEditable) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.size > 0) deleteSelected()
       }
       if (e.key === 'Escape') { setToolMode('select'); selectCards(new Set()) }
-      if (e.key === 'v' || e.key === 'V') setToolMode('select')
+      if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) setToolMode('select')
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, deleteSelected, selectCards])
+  }, [selectedIds, deleteSelected, selectCards, cards])
+
+  function handlePasteCards(cb: ClipCard[], canvasX: number, canvasY: number) {
+    if (cb.length === 0) return
+    const minX = Math.min(...cb.map((c) => c.posX))
+    const minY = Math.min(...cb.map((c) => c.posY))
+    const maxX = Math.max(...cb.map((c) => c.posX + c.width))
+    const maxY = Math.max(...cb.map((c) => c.posY + c.height))
+    const dx = canvasX - (minX + maxX) / 2
+    const dy = canvasY - (minY + maxY) / 2
+    cb.forEach(({ type, content, color, posX, posY, width, height }) => {
+      addCard(posX + dx, posY + dy, type, content, color, width, height)
+    })
+  }
 
   const selectedCards = cards.filter((c) => selectedIds.has(c.id))
   const selectedGroupIds = new Set(selectedCards.map((c) => c.groupId).filter(Boolean))
@@ -189,6 +213,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           toolStroke={toolStroke}
           toolFill={toolFill}
           toolOpacity={toolOpacity}
+          clipboard={clipboard}
           onAddCard={addCard}
           onMoveCard={moveCard}
           onResizeCard={resizeCard}
@@ -205,6 +230,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onSetFieldValue={setFieldValue}
           onClearFieldValue={clearFieldValue}
           onExitLinkCardsMode={() => setToolMode('select')}
+          onPasteCards={handlePasteCards}
         />
 
         <FloatingToolbar

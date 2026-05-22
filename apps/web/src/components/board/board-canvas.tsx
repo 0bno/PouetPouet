@@ -8,6 +8,8 @@ import { FrameItem } from './frame-item'
 import { CardDetailModal } from './card-detail-modal'
 import type { ToolMode, StrokeSize } from './floating-toolbar'
 
+type ClipCard = Pick<Card, 'type' | 'content' | 'color' | 'posX' | 'posY' | 'width' | 'height'>
+
 interface Props {
   cards: Card[]
   connections: Connection[]
@@ -19,6 +21,7 @@ interface Props {
   toolStroke: StrokeSize
   toolFill: boolean
   toolOpacity: number
+  clipboard: ClipCard[]
   onAddCard: (x: number, y: number, type?: string, content?: string, color?: string, width?: number, height?: number) => void
   onMoveCard: (id: string, x: number, y: number) => void
   onResizeCard: (id: string, w: number, h: number) => void
@@ -35,6 +38,7 @@ interface Props {
   onSetFieldValue: (cardId: string, fieldId: string, value: string) => void
   onClearFieldValue: (cardId: string, fieldId: string) => void
   onExitLinkCardsMode?: () => void
+  onPasteCards: (clipboard: ClipCard[], canvasX: number, canvasY: number) => void
 }
 
 const MIN_ZOOM = 0.1
@@ -43,10 +47,11 @@ const DOT_SPACING = 24
 
 export function BoardCanvas({
   cards, connections, frames, fields, selectedIds, toolMode, toolColor, toolStroke, toolFill, toolOpacity,
+  clipboard,
   onAddCard, onMoveCard, onResizeCard, onUpdateCard, onRecolorCard, onDeleteCard,
   onSelectCards, onAddConnection, onDeleteConnection,
   onMoveFrame, onResizeFrame, onUpdateFrame, onDeleteFrame,
-  onSetFieldValue, onClearFieldValue, onExitLinkCardsMode,
+  onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
 }: Props) {
   // ── Refs ────────────────────────────────────────────────────────────────────
   const containerRef    = useRef<HTMLDivElement>(null)
@@ -54,6 +59,7 @@ export function BoardCanvas({
   const rbDomRef        = useRef<HTMLDivElement>(null)
   const drawingPathRef  = useRef<SVGPathElement>(null)
   const connectGhostRef = useRef<SVGLineElement>(null)
+  const mousePosRef     = useRef({ x: 0, y: 0 })
 
   // Live viewport — updated every frame via direct DOM manipulation (no React re-render)
   const vpRef = useRef({ x: 0, y: 0, zoom: 1 })
@@ -157,6 +163,34 @@ export function BoardCanvas({
     return () => { el.removeEventListener('wheel', onWheel); clearTimeout(timer) }
   }, [])
 
+  // ── Track mouse position in canvas coordinates ───────────────────────────────
+  useEffect(() => {
+    const el = containerRef.current!
+    function onMove(e: MouseEvent) {
+      const rect = el.getBoundingClientRect()
+      const { x, y, zoom } = vpRef.current
+      mousePosRef.current = {
+        x: (e.clientX - rect.left - x) / zoom,
+        y: (e.clientY - rect.top - y) / zoom,
+      }
+    }
+    el.addEventListener('mousemove', onMove)
+    return () => el.removeEventListener('mousemove', onMove)
+  }, [])
+
+  // ── Ctrl+V: paste clipboard cards at cursor ───────────────────────────────────
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return
+      if (clipboard.length === 0) return
+      e.preventDefault()
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+      onPasteCards(clipboard, mousePosRef.current.x, mousePosRef.current.y)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [clipboard, onPasteCards])
+
   // ── Paste image ──────────────────────────────────────────────────────────────
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
@@ -182,54 +216,58 @@ export function BoardCanvas({
     return () => window.removeEventListener('paste', onPaste)
   }, [onAddCard])
 
+  // ── Freehand draw (called from canvas or card bubble) ────────────────────────
+  function startFreehandDraw(clientX: number, clientY: number) {
+    const startP = toCanvas(clientX, clientY)
+    const points: Array<{ x: number; y: number }> = [startP]
+
+    const dp = drawingPathRef.current
+    if (dp) {
+      dp.setAttribute('d', `M${startP.x.toFixed(1)},${startP.y.toFixed(1)}`)
+      dp.setAttribute('stroke', toolColor)
+      dp.style.display = ''
+    }
+
+    function onMove(ev: MouseEvent) {
+      const p = toCanvas(ev.clientX, ev.clientY)
+      const last = points[points.length - 1]
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 2 / vpRef.current.zoom) return
+      points.push(p)
+      if (dp) dp.setAttribute('d', 'M' + points.map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' L'))
+    }
+
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      if (dp) dp.style.display = 'none'
+      if (points.length < 3) return
+      const xs = points.map((p) => p.x), ys = points.map((p) => p.y)
+      const minX = Math.min(...xs), minY = Math.min(...ys)
+      const maxX = Math.max(...xs), maxY = Math.max(...ys)
+      const pad = 8
+      const w = Math.max(60, maxX - minX + pad * 2)
+      const h = Math.max(60, maxY - minY + pad * 2)
+      const d = 'M' + points.map((pt) => `${(pt.x - minX + pad).toFixed(1)},${(pt.y - minY + pad).toFixed(1)}`).join(' L')
+      onAddCard(minX - pad, minY - pad, 'DRAW', d, toolColor, w, h)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // ── Canvas mouse down ────────────────────────────────────────────────────────
   function handleCanvasMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.button !== 0 || (e.target as HTMLElement) !== e.currentTarget) return
+    if (e.button !== 0) return
 
-    // ── Freehand draw mode ──
+    // Draw mode: work anywhere — cards let the event bubble when drawMode=true
     if (toolMode === 'draw') {
       e.preventDefault()
-      const startP = toCanvas(e.clientX, e.clientY)
-      const points: Array<{ x: number; y: number }> = [startP]
-
-      const dp = drawingPathRef.current
-      if (dp) {
-        dp.setAttribute('d', `M${startP.x.toFixed(1)},${startP.y.toFixed(1)}`)
-        dp.setAttribute('stroke', toolColor)
-        dp.style.display = ''
-      }
-
-      function onMove(ev: MouseEvent) {
-        const p = toCanvas(ev.clientX, ev.clientY)
-        const last = points[points.length - 1]
-        if (Math.hypot(p.x - last.x, p.y - last.y) < 2 / vpRef.current.zoom) return
-        points.push(p)
-        if (dp) {
-          dp.setAttribute('d', 'M' + points.map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' L'))
-        }
-      }
-
-      function onUp() {
-        window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
-        if (dp) dp.style.display = 'none'
-        if (points.length < 3) return
-
-        const xs = points.map((p) => p.x)
-        const ys = points.map((p) => p.y)
-        const minX = Math.min(...xs), minY = Math.min(...ys)
-        const maxX = Math.max(...xs), maxY = Math.max(...ys)
-        const pad = 8
-        const w = Math.max(60, maxX - minX + pad * 2)
-        const h = Math.max(60, maxY - minY + pad * 2)
-        const d = 'M' + points.map((pt) => `${(pt.x - minX + pad).toFixed(1)},${(pt.y - minY + pad).toFixed(1)}`).join(' L')
-        onAddCard(minX - pad, minY - pad, 'DRAW', d, toolColor, w, h)
-      }
-
-      window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
+      startFreehandDraw(e.clientX, e.clientY)
       return
     }
+
+    // Other modes: only handle direct clicks on canvas background
+    if ((e.target as HTMLElement) !== e.currentTarget) return
 
     // Non-select modes: single-click handled by onClick, skip rubber band
     if (toolMode !== 'select') return
@@ -291,6 +329,38 @@ export function BoardCanvas({
     if ((e.target as HTMLElement) !== e.currentTarget) return
     const p = toCanvas(e.clientX, e.clientY)
     onAddCard(p.x - 96, p.y - 64)
+  }
+
+  // ── Button zoom (toward canvas center) ──────────────────────────────────────
+  function handleZoomBy(factor: number) {
+    const { x, y, zoom } = vpRef.current
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const mx = rect.width / 2
+    const my = rect.height / 2
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))
+    applyTransform({
+      x: mx - (mx - x) * (newZoom / zoom),
+      y: my - (my - y) * (newZoom / zoom),
+      zoom: newZoom,
+    })
+    setViewport({ ...vpRef.current })
+  }
+
+  function handleZoomReset() {
+    const { x, y, zoom } = vpRef.current
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const mx = rect.width / 2
+    const my = rect.height / 2
+    applyTransform({
+      x: mx - (mx - x) * (1 / zoom),
+      y: my - (my - y) * (1 / zoom),
+      zoom: 1,
+    })
+    setViewport({ ...vpRef.current })
   }
 
   // ── Link confirmation ────────────────────────────────────────────────────────
@@ -410,10 +480,7 @@ export function BoardCanvas({
             />
           ))}
 
-          {/* SVG: card connections + drawing path + connect ghost + source highlight.
-              Large explicit viewBox so all drawn content renders even far from origin.
-              pointer-events: none on the SVG ensures empty areas don't intercept canvas clicks;
-              children that need hover (ConnectionLine hit areas) opt back in via their own pointer-events. */}
+          {/* SVG: connections + connect ghost + source highlight (below cards) */}
           <svg
             style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none' }}
             viewBox="-100000 -100000 200000 200000"
@@ -434,10 +501,7 @@ export function BoardCanvas({
                 />
               )
             })}
-            <path ref={drawingPathRef} fill="none" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'none', pointerEvents: 'none' }} />
             <line ref={connectGhostRef} stroke="#6366f1" strokeWidth={2} strokeDasharray="6 4" strokeLinecap="round" style={{ display: 'none', pointerEvents: 'none' }} />
-
-            {/* Source card highlight (click-click mode) */}
             {sourceCard && (
               <rect
                 x={sourceCard.posX - 4}
@@ -462,7 +526,8 @@ export function BoardCanvas({
             style={{ position: 'absolute', display: 'none', border: '1px solid #818cf8', background: 'rgba(99,102,241,0.08)', borderRadius: 3, pointerEvents: 'none' }}
           />
 
-          {cards.map((card) => (
+          {/* Non-DRAW cards first, then DRAW cards on top */}
+          {[...cards.filter((c) => c.type !== 'DRAW'), ...cards.filter((c) => c.type === 'DRAW')].map((card) => (
             <BoardCard
               key={card.id}
               card={card}
@@ -470,6 +535,7 @@ export function BoardCanvas({
               zoom={zoom}
               isSelected={selectedIds.has(card.id)}
               groupColor={card.groupId ? groupColor(card.groupId) : undefined}
+              drawMode={toolMode === 'draw'}
               onMove={onMoveCard}
               onUpdate={onUpdateCard}
               onRecolor={onRecolorCard}
@@ -483,6 +549,27 @@ export function BoardCanvas({
               onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
             />
           ))}
+
+          {/* Draw mode overlay — sits above all cards, catches mousedown anywhere */}
+          {toolMode === 'draw' && (
+            <div
+              style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, zIndex: 150, cursor: 'crosshair' }}
+              onMouseDown={(e) => {
+                if (e.button !== 0) return
+                e.preventDefault()
+                e.stopPropagation()
+                startFreehandDraw(e.clientX, e.clientY)
+              }}
+            />
+          )}
+
+          {/* Drawing preview SVG — above the overlay (zIndex 200) */}
+          <svg
+            style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none', zIndex: 200 }}
+            viewBox="-100000 -100000 200000 200000"
+          >
+            <path ref={drawingPathRef} fill="none" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'none', pointerEvents: 'none' }} />
+          </svg>
         </div>
 
         {/* Link-cards mode banner */}
@@ -500,12 +587,24 @@ export function BoardCanvas({
           </div>
         )}
 
-        {/* Zoom indicator */}
-        {Math.abs(zoom - 1) > 0.05 && (
-          <div className="absolute bottom-4 right-6 text-xs font-mono text-gray-400 bg-white/80 dark:bg-gray-900/80 px-2 py-1 rounded-lg shadow pointer-events-none select-none">
-            {Math.round(zoom * 100)}%
-          </div>
-        )}
+        {/* Zoom controls */}
+        <div className="absolute bottom-4 right-6 flex items-center bg-white/95 border border-gray-200 rounded-lg shadow select-none text-xs font-mono text-gray-600">
+          <button
+            title="Dézoomer (−)"
+            onClick={() => handleZoomBy(1 / 1.25)}
+            className="px-2 py-1.5 hover:bg-gray-100 rounded-l-lg transition-colors leading-none"
+          >−</button>
+          <button
+            title="Réinitialiser le zoom (100%)"
+            onClick={handleZoomReset}
+            className="px-2 py-1.5 hover:bg-gray-100 transition-colors leading-none min-w-[3.5rem] text-center"
+          >{Math.round(zoom * 100)}%</button>
+          <button
+            title="Zoomer (+)"
+            onClick={() => handleZoomBy(1.25)}
+            className="px-2 py-1.5 hover:bg-gray-100 rounded-r-lg transition-colors leading-none"
+          >+</button>
+        </div>
       </div>
 
       {/* ── Link URL popover ── */}
