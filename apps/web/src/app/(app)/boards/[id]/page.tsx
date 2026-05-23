@@ -14,6 +14,7 @@ import type { ToolMode, StrokeSize } from '@/components/board/floating-toolbar'
 import { TimerOverlay } from '@/components/board/timer-overlay'
 import { VoteConfigModal } from '@/components/board/vote-config-modal'
 import { VoteResultsPanel } from '@/components/board/vote-results-panel'
+import { VoteEndOverlay } from '@/components/board/vote-end-overlay'
 import { useAuthStore } from '@/store/auth'
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +22,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const {
     board, cards, connections, frames, fields, selectedIds, isLoading, userRole, isReadonly, accessDenied, presence, members,
     timerEndsAt, startTimer, stopTimer,
-    activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote,
+    activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote, extendVote,
+    lockCards, lockSelected,
     addCard, moveCard, resizeCard, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected,
@@ -50,6 +52,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [showVoteConfig, setShowVoteConfig] = useState(false)
   const [showVoteResults, setShowVoteResults] = useState(false)
   const [showLastVote, setShowLastVote] = useState(false)
+  const [showVoteEnd, setShowVoteEnd] = useState(false)
   const [showPresence, setShowPresence] = useState(false)
   const [showTimerPicker, setShowTimerPicker] = useState(false)
   const [timerCustomMin, setTimerCustomMin] = useState('5')
@@ -75,6 +78,21 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   const timerSecondsLeft = timerEndsAt !== null ? Math.max(0, Math.ceil((timerEndsAt - now) / 1000)) : null
   const timerExpired = timerEndsAt !== null && now >= timerEndsAt
+
+  const voteTimerEndsAt = activeVoteSession?.timerEndsAt ? new Date(activeVoteSession.timerEndsAt).getTime() : null
+  const voteTimerSecondsLeft = voteTimerEndsAt !== null ? Math.max(0, Math.ceil((voteTimerEndsAt - now) / 1000)) : null
+  const voteTimerExpired = voteTimerEndsAt !== null && now >= voteTimerEndsAt
+
+  const voteTimerWasExpiredRef = useRef(false)
+  useEffect(() => {
+    if (voteTimerExpired && !voteTimerWasExpiredRef.current && activeVoteSession) {
+      voteTimerWasExpiredRef.current = true
+      setShowVoteEnd(true)
+    }
+    if (!voteTimerExpired) {
+      voteTimerWasExpiredRef.current = false
+    }
+  }, [voteTimerExpired, activeVoteSession])
 
   function handleTimerPickerEnter() {
     if (timerPickerLeaveTimer.current) clearTimeout(timerPickerLeaveTimer.current)
@@ -177,6 +195,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const myVoteCount = activeVoteSession?.votes.filter((v) => v.userId === currentUserId).length ?? 0
   const voteRemaining = activeVoteSession ? activeVoteSession.votesPerPerson - myVoteCount : 0
   const isEligibleVoter = activeVoteSession?.voterIds.includes(currentUserId) ?? false
+  const voteCanVote = voteTimerEndsAt === null || !voteTimerExpired
 
   if (isLoading) {
     return (
@@ -371,6 +390,27 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   />
                 ))}
                 <div className="w-px h-4 bg-indigo-200" />
+                {(() => {
+                  const selCards = cards.filter((c) => selectedIds.has(c.id))
+                  const allLocked = selCards.length > 0 && selCards.every((c) => c.locked)
+                  const anyLocked = selCards.some((c) => c.locked)
+                  return (
+                    <button
+                      onClick={() => lockSelected(allLocked ? false : true)}
+                      className={`flex items-center gap-1 text-xs font-medium transition-colors px-1 rounded ${anyLocked ? 'text-amber-600 hover:text-amber-700' : 'text-indigo-400 hover:text-indigo-600'}`}
+                      title={allLocked ? 'Déverrouiller la sélection' : 'Verrouiller la sélection'}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {allLocked
+                          ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6-6h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2zm10-4a4 4 0 10-8 0v4h8V9z" />
+                          : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                        }
+                      </svg>
+                      {allLocked ? 'Déverr.' : 'Verr.'}
+                    </button>
+                  )
+                })()}
+                <div className="w-px h-4 bg-indigo-200" />
                 <button onClick={deleteSelected} className="text-red-400 hover:text-red-600 transition-colors" title="Supprimer (Suppr)">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -425,9 +465,14 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
         {/* Vote */}
         {activeVoteSession ? (
-          <div className="flex items-center gap-1.5 rounded-lg bg-purple-50 border border-purple-200 px-2.5 py-1.5 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0" />
-            <span className="text-xs font-semibold text-purple-700">Vote en cours</span>
+          <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 shrink-0 ${voteTimerSecondsLeft !== null && voteTimerSecondsLeft <= 10 ? 'bg-red-50 border-red-200' : voteTimerSecondsLeft !== null && voteTimerSecondsLeft <= 30 ? 'bg-orange-50 border-orange-200' : 'bg-purple-50 border-purple-200'}`}>
+            <span className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${voteTimerSecondsLeft !== null && voteTimerSecondsLeft <= 10 ? 'bg-red-400' : voteTimerSecondsLeft !== null && voteTimerSecondsLeft <= 30 ? 'bg-orange-400' : 'bg-purple-400'}`} />
+            <span className={`text-xs font-semibold ${voteTimerSecondsLeft !== null && voteTimerSecondsLeft <= 10 ? 'text-red-700' : voteTimerSecondsLeft !== null && voteTimerSecondsLeft <= 30 ? 'text-orange-700' : 'text-purple-700'}`}>Vote en cours</span>
+            {voteTimerSecondsLeft !== null && (
+              <span className={`text-xs font-mono font-bold tabular-nums ${voteTimerSecondsLeft <= 10 ? 'text-red-600' : voteTimerSecondsLeft <= 30 ? 'text-orange-600' : 'text-purple-500'}`}>
+                {String(Math.floor(voteTimerSecondsLeft / 60)).padStart(2, '0')}:{String(voteTimerSecondsLeft % 60).padStart(2, '0')}
+              </span>
+            )}
             {isEligibleVoter && (
               <span className="text-xs text-purple-500 font-medium">
                 {voteRemaining} restant{voteRemaining !== 1 ? 's' : ''}
@@ -439,6 +484,20 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             >
               Résultats
             </button>
+            {userRole === 'OWNER' && voteTimerSecondsLeft !== null && (
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 5].map((min) => (
+                  <button
+                    key={min}
+                    onClick={() => extendVote(min * 60)}
+                    className="text-[10px] font-bold text-purple-500 hover:text-purple-700 hover:bg-purple-100 rounded px-1 py-0.5 transition-colors"
+                    title={`Ajouter ${min} minute${min > 1 ? 's' : ''}`}
+                  >
+                    +{min}m
+                  </button>
+                ))}
+              </div>
+            )}
             {!isReadonly && (
               <button onClick={stopVote} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity" title="Terminer le vote">
                 <svg className="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -644,13 +703,21 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onExitLinkCardsMode={() => setToolMode('select')}
           onPasteCards={handlePasteCards}
           voteSession={activeVoteSession}
+          voteCanVote={voteCanVote}
           currentUserId={currentUserId}
           onCastVote={castVote}
           onUncastVote={uncastVote}
+          onSetCardLocked={(id, locked) => lockCards([id], locked)}
         />
 
         {timerExpired && (
           <TimerOverlay onDismiss={stopTimer} />
+        )}
+
+        {showVoteEnd && activeVoteSession && (
+          <VoteEndOverlay
+            onShowResults={() => { setShowVoteEnd(false); setShowVoteResults(true) }}
+          />
         )}
 
         {!isReadonly && (
@@ -693,6 +760,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         <VoteResultsPanel
           session={activeVoteSession}
           cards={cards}
+          isOwner={userRole === 'OWNER'}
           onClose={() => setShowVoteResults(false)}
           onStopVote={stopVote}
         />

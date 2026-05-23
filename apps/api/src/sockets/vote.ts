@@ -63,6 +63,7 @@ export function voteSocketHandlers(io: Server, socket: Socket) {
       include: { votes: { where: { userId } } },
     })
     if (!session || session.status !== 'ACTIVE') return
+    if (session.timerEndsAt && session.timerEndsAt < new Date()) return
     if (!session.voterIds.includes(userId)) return
     if (session.votes.length >= session.votesPerPerson) return
 
@@ -79,6 +80,10 @@ export function voteSocketHandlers(io: Server, socket: Socket) {
     if (!canAccess(socket, data.boardId)) return
     const userId = socket.data.userId as string
 
+    const existing = await prisma.boardVoteSession.findUnique({ where: { id: data.sessionId } })
+    if (!existing || existing.status !== 'ACTIVE') return
+    if (existing.timerEndsAt && existing.timerEndsAt < new Date()) return
+
     const vote = await prisma.boardVote.findFirst({
       where: { sessionId: data.sessionId, cardId: data.cardId, userId },
     })
@@ -88,6 +93,27 @@ export function voteSocketHandlers(io: Server, socket: Socket) {
 
     const updated = await fetchSession(data.sessionId)
     io.to(`board:${data.boardId}`).emit('vote:updated', updated)
+  })
+
+  // Extend the vote timer (OWNER only)
+  socket.on('vote:extend', async (data: { sessionId: string; boardId: string; extraSeconds: number }) => {
+    if (socket.data.boardRoles?.[data.boardId] !== 'OWNER') return
+
+    const existing = await prisma.boardVoteSession.findUnique({ where: { id: data.sessionId } })
+    if (!existing || existing.status !== 'ACTIVE' || !existing.timerEndsAt) return
+
+    const base = existing.timerEndsAt.getTime() > Date.now()
+      ? existing.timerEndsAt.getTime()
+      : Date.now()
+    const newEndsAt = new Date(base + data.extraSeconds * 1000)
+
+    const session = await prisma.boardVoteSession.update({
+      where: { id: data.sessionId },
+      data: { timerEndsAt: newEndsAt },
+      include: { votes: true },
+    })
+
+    io.to(`board:${data.boardId}`).emit('vote:updated', session)
   })
 
   // Close the vote session (OWNER / EDITOR only)

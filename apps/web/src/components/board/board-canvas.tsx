@@ -49,9 +49,11 @@ interface Props {
   onExitLinkCardsMode?: () => void
   onPasteCards: (clipboard: ClipCard[], canvasX: number, canvasY: number) => void
   voteSession?: VoteSession | null
+  voteCanVote?: boolean
   currentUserId?: string
   onCastVote?: (cardId: string) => void
   onUncastVote?: (cardId: string) => void
+  onSetCardLocked?: (id: string, locked: boolean) => void
 }
 
 const MIN_ZOOM = 0.1
@@ -68,7 +70,7 @@ export function BoardCanvas({
   onResizeFrame, onStartResizeFrame, onCommitResizeFrame,
   onUpdateFrame, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
-  voteSession, currentUserId, onCastVote, onUncastVote,
+  voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked,
 }: Props) {
   // ── Refs ────────────────────────────────────────────────────────────────────
   const containerRef    = useRef<HTMLDivElement>(null)
@@ -579,6 +581,7 @@ export function BoardCanvas({
               onSelect={handleSelect}
               onOpenDetail={setDetailCardId}
               onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}
+              onSetLocked={onSetCardLocked}
               linkCardsMode={toolMode === 'link-cards'}
               isLinkSource={linkSourceId === card.id}
               onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
@@ -604,7 +607,7 @@ export function BoardCanvas({
                 style={{ left: card.posX, top: card.posY, width: card.width, height: card.height, zIndex: 50 }}
               >
                 <div
-                  className="absolute top-1.5 right-1.5 flex items-center gap-1 pointer-events-auto"
+                  className={`absolute ${isReadonly ? 'top-1.5' : 'top-7'} right-1.5 flex items-center gap-1 pointer-events-auto`}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -617,25 +620,36 @@ export function BoardCanvas({
                     </div>
                   )}
                   {isEligible && isActive && (
-                    myVotesOnCard > 0 ? (
-                      <button
-                        onClick={() => onUncastVote?.(card.id)}
-                        className="flex items-center gap-0.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full px-1.5 py-0.5 shadow-sm transition-colors"
-                        title="Retirer un vote"
-                      >
-                        <span className="text-[10px] font-bold">−{myVotesOnCard}</span>
-                      </button>
-                    ) : canVoteMore ? (
-                      <button
-                        onClick={() => onCastVote?.(card.id)}
-                        className="flex items-center gap-0.5 bg-white hover:bg-purple-50 text-purple-500 border border-purple-200 rounded-full px-1.5 py-0.5 shadow-sm transition-colors"
-                        title="Voter pour ce post-it"
+                    voteCanVote ? (
+                      myVotesOnCard > 0 ? (
+                        <button
+                          onClick={() => onUncastVote?.(card.id)}
+                          className="flex items-center gap-0.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full px-1.5 py-0.5 shadow-sm transition-colors"
+                          title="Retirer un vote"
+                        >
+                          <span className="text-[10px] font-bold">−{myVotesOnCard}</span>
+                        </button>
+                      ) : canVoteMore ? (
+                        <button
+                          onClick={() => onCastVote?.(card.id)}
+                          className="flex items-center gap-0.5 bg-white hover:bg-purple-50 text-purple-500 border border-purple-200 rounded-full px-1.5 py-0.5 shadow-sm transition-colors"
+                          title="Voter pour ce post-it"
+                        >
+                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      ) : null
+                    ) : (
+                      <div
+                        className="flex items-center gap-0.5 bg-gray-100 text-gray-400 rounded-full px-1.5 py-0.5 shadow-sm cursor-not-allowed"
+                        title="Le temps de vote est écoulé"
                       >
                         <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m2-5V7" />
                         </svg>
-                      </button>
-                    ) : null
+                      </div>
+                    )
                   )}
                 </div>
               </div>

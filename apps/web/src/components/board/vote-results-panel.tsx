@@ -6,6 +6,7 @@ interface Props {
   session: VoteSession
   cards: Card[]
   isHistory?: boolean
+  isOwner?: boolean
   onClose: () => void
   onStopVote?: () => void
 }
@@ -26,7 +27,7 @@ function buildResults(session: VoteSession, cards: Card[]): CardResult[] {
     .sort((a, b) => b.count - a.count)
 }
 
-export function VoteResultsPanel({ session, cards, isHistory = false, onClose, onStopVote }: Props) {
+export function VoteResultsPanel({ session, cards, isHistory = false, isOwner = false, onClose, onStopVote }: Props) {
   const results = buildResults(session, cards)
   const totalVotes = session.votes.length
   const maxCount = results[0]?.count ?? 1
@@ -131,13 +132,26 @@ export function VoteResultsPanel({ session, cards, isHistory = false, onClose, o
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-          {!isHistory && onStopVote && (
-            <button
-              onClick={() => { onStopVote(); onClose() }}
-              className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors"
-            >
-              Terminer le vote
-            </button>
+          {!isHistory && (
+            <div className="relative flex-1 group">
+              <button
+                disabled={!isOwner}
+                onClick={isOwner ? () => { onStopVote?.(); onClose() } : undefined}
+                className={`w-full py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                  isOwner
+                    ? 'border-red-200 text-red-600 hover:bg-red-50 cursor-pointer'
+                    : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                }`}
+              >
+                Terminer le vote
+              </button>
+              {!isOwner && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                  Seul le propriétaire peut terminer le vote
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                </div>
+              )}
+            </div>
           )}
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-sm">
             Fermer

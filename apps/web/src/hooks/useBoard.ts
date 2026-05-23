@@ -20,6 +20,7 @@ export interface Card {
   height: number
   color: string
   groupId: string | null
+  locked: boolean
   fieldValues: FieldValue[]
 }
 
@@ -235,6 +236,10 @@ export function useBoard(boardId: string) {
       setLastVoteSession(session)
     })
 
+    socket.on('cards:locked', ({ ids, locked }: { ids: string[]; locked: boolean }) => {
+      setCards((prev) => prev.map((c) => ids.includes(c.id) ? { ...c, locked } : c))
+    })
+
     // Cards — process pending history callback before updating state
     socket.on('card:created', (card) => {
       const cb = pendingCardHistoryRef.current.shift()
@@ -300,6 +305,7 @@ export function useBoard(boardId: string) {
       socket.emit('board:leave', boardId)
       ;['board:state', 'board:error', 'board:presence', 'timer:started', 'timer:stopped',
         'vote:session:started', 'vote:updated', 'vote:session:closed',
+        'cards:locked',
         'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored',
         'cards:grouped', 'cards:ungrouped',
         'connection:created', 'connection:deleted',
@@ -765,12 +771,29 @@ export function useBoard(boardId: string) {
     socketRef.current.emit('vote:stop', { sessionId: activeVoteSession.id, boardId })
   }
 
+  function extendVote(extraSeconds: number) {
+    if (!activeVoteSession) return
+    socketRef.current.emit('vote:extend', { sessionId: activeVoteSession.id, boardId, extraSeconds })
+  }
+
+  // ── Lock ──────────────────────────────────────────────────────────────────────
+  function lockCards(ids: string[], locked: boolean) {
+    socketRef.current.emit('card:lock', { ids, boardId, locked })
+  }
+
+  function lockSelected(locked: boolean) {
+    const ids = Array.from(selectedIdsRef.current)
+    if (ids.length === 0) return
+    lockCards(ids, locked)
+  }
+
   const isReadonly = userRole === 'VIEWER'
 
   return {
     board, cards, connections, frames, fields, selectedIds, isLoading, userRole, isReadonly, accessDenied, presence, members,
     timerEndsAt, startTimer, stopTimer,
-    activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote,
+    activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote, extendVote,
+    lockCards, lockSelected,
     addCard, moveCard, resizeCard, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected,
