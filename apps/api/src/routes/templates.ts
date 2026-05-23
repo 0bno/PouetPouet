@@ -115,4 +115,132 @@ export const templateRoutes: FastifyPluginAsync = async (app) => {
     await prisma.boardTemplate.delete({ where: { id } })
     return reply.status(204).send()
   })
+
+  // ── Template content edition via draft board ───────────────────────────────
+  // Create or reuse a draft board populated with the template's content
+  app.post('/:id/edit-content', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const tpl = await prisma.boardTemplate.findUnique({ where: { id } })
+    if (!tpl) return reply.status(404).send({ error: 'Template introuvable' })
+    if (tpl.ownerId !== userId) return reply.status(403).send({ error: 'Accès refusé' })
+
+    // Reuse existing draft if any
+    const existing = await prisma.board.findFirst({ where: { ownerId: userId, templateDraftOf: id } })
+    if (existing) return reply.send({ boardId: existing.id })
+
+    const board = await prisma.board.create({
+      data: {
+        name: `[Template] ${tpl.name}`,
+        description: tpl.description,
+        coverImage: tpl.coverImage,
+        maxParticipants: tpl.maxParticipants,
+        enabledActivities: (tpl.enabledActivities ?? undefined) as never,
+        ownerId: userId,
+        templateDraftOf: id,
+      },
+    })
+
+    const cards = (tpl.cards as any[]) ?? []
+    const frames = (tpl.frames as any[]) ?? []
+    const connections = (tpl.connections as any[]) ?? []
+    const fields = (tpl.fields as any[]) ?? []
+
+    const cardIdMap = new Map<string, string>()
+    for (const c of cards) {
+      const created = await prisma.card.create({
+        data: {
+          boardId: board.id,
+          type: c.type ?? 'TEXT',
+          content: c.content ?? '',
+          posX: c.posX ?? 0,
+          posY: c.posY ?? 0,
+          width: c.width ?? 192,
+          height: c.height ?? 128,
+          color: c.color ?? '#FFEB3B',
+        },
+      })
+      cardIdMap.set(c.id as string, created.id)
+    }
+    if (frames.length > 0) {
+      await prisma.frame.createMany({
+        data: frames.map((f) => ({
+          boardId: board.id,
+          title: f.title ?? 'Cadre',
+          posX: f.posX ?? 0,
+          posY: f.posY ?? 0,
+          width: f.width ?? 400,
+          height: f.height ?? 300,
+          color: f.color ?? '#E0E7FF',
+        })),
+      })
+    }
+    if (fields.length > 0) {
+      await prisma.boardField.createMany({
+        data: fields.map((f) => ({
+          boardId: board.id,
+          name: f.name,
+          emoji: f.emoji ?? null,
+          type: f.type ?? 'TEXT',
+          options: f.options ?? undefined,
+          order: f.order ?? 0,
+        })),
+      })
+    }
+    if (connections.length > 0) {
+      const remapped = connections
+        .map((cn) => ({ fromId: cardIdMap.get(cn.fromId), toId: cardIdMap.get(cn.toId) }))
+        .filter((cn) => cn.fromId && cn.toId)
+      if (remapped.length > 0) {
+        await prisma.cardConnection.createMany({
+          data: remapped.map((cn) => ({ boardId: board.id, fromId: cn.fromId!, toId: cn.toId! })),
+        })
+      }
+    }
+
+    return reply.send({ boardId: board.id })
+  })
+
+  // Save the draft board's content back into the template, delete the draft
+  app.post('/:id/save-from-draft', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const tpl = await prisma.boardTemplate.findUnique({ where: { id } })
+    if (!tpl) return reply.status(404).send({ error: 'Template introuvable' })
+    if (tpl.ownerId !== userId) return reply.status(403).send({ error: 'Accès refusé' })
+
+    const draft = await prisma.board.findFirst({ where: { ownerId: userId, templateDraftOf: id } })
+    if (!draft) return reply.status(404).send({ error: 'Aucun brouillon trouvé' })
+
+    const [cards, frames, connections, fields] = await Promise.all([
+      prisma.card.findMany({ where: { boardId: draft.id } }),
+      prisma.frame.findMany({ where: { boardId: draft.id } }),
+      prisma.cardConnection.findMany({ where: { boardId: draft.id } }),
+      prisma.boardField.findMany({ where: { boardId: draft.id }, orderBy: { order: 'asc' } }),
+    ])
+
+    const updated = await prisma.boardTemplate.update({
+      where: { id },
+      data: {
+        cards: cards as never,
+        frames: frames as never,
+        connections: connections as never,
+        fields: fields as never,
+      },
+    })
+
+    await prisma.board.delete({ where: { id: draft.id } })
+    return reply.send(updated)
+  })
+
+  // Discard the draft board without saving
+  app.post('/:id/discard-draft', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const tpl = await prisma.boardTemplate.findUnique({ where: { id } })
+    if (!tpl) return reply.status(404).send({ error: 'Template introuvable' })
+    if (tpl.ownerId !== userId) return reply.status(403).send({ error: 'Accès refusé' })
+    await prisma.board.deleteMany({ where: { ownerId: userId, templateDraftOf: id } })
+    return reply.status(204).send()
+  })
 }

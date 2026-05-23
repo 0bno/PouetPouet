@@ -59,6 +59,7 @@ export interface BoardDetail {
   coverImage: string | null
   maxParticipants: number | null
   enabledActivities: string[] | null
+  templateDraftOf: string | null
   cards: Card[]
 }
 

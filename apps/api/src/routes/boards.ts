@@ -42,7 +42,7 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.user as { id: string }
     const [owned, shared, favorites] = await Promise.all([
       prisma.board.findMany({
-        where: { ownerId: id },
+        where: { ownerId: id, templateDraftOf: null },
         orderBy: { updatedAt: 'desc' },
         include: { _count: { select: { shares: true } } },
       }),

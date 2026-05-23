@@ -68,5 +68,31 @@ export function useTemplates() {
     setTemplates((prev) => prev.filter((t) => t.id !== id))
   }
 
-  return { templates, isLoading, error, createTemplate, updateTemplate, deleteTemplate, refetch: fetchTemplates }
+  const editTemplateContent = async (id: string) => {
+    const { boardId } = await api.post<{ boardId: string }>(`/api/templates/${id}/edit-content`, {})
+    return boardId
+  }
+
+  const saveTemplateFromDraft = async (id: string) => {
+    const tpl = await api.post<BoardTemplate>(`/api/templates/${id}/save-from-draft`, {})
+    setTemplates((prev) => prev.map((t) => (t.id === id ? tpl : t)))
+    return tpl
+  }
+
+  const discardTemplateDraft = async (id: string) => {
+    await api.post<void>(`/api/templates/${id}/discard-draft`, {})
+  }
+
+  return {
+    templates,
+    isLoading,
+    error,
+    createTemplate,
+    updateTemplate,
+    deleteTemplate,
+    editTemplateContent,
+    saveTemplateFromDraft,
+    discardTemplateDraft,
+    refetch: fetchTemplates,
+  }
 }

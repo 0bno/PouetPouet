@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { BoardTemplate, CreateTemplateInput, UpdateTemplateInput } from '@/hooks/useTemplates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,18 +12,32 @@ interface Props {
   onCreate: (input: CreateTemplateInput) => Promise<BoardTemplate>
   onUpdate: (id: string, input: UpdateTemplateInput) => Promise<BoardTemplate>
   onDelete: (id: string) => Promise<void>
+  onEditContent: (id: string) => Promise<string>
   ownedBoards: { id: string; name: string }[]
 }
 
-export function TemplatesSection({ templates, onCreate, onUpdate, onDelete, ownedBoards }: Props) {
+export function TemplatesSection({ templates, onCreate, onUpdate, onDelete, onEditContent, ownedBoards }: Props) {
+  const router = useRouter()
   const [showNew, setShowNew] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
   async function handleDelete(id: string) {
     if (!confirm('Supprimer ce template ?')) return
     setDeletingId(id)
     try { await onDelete(id) } finally { setDeletingId(null) }
+  }
+
+  async function handleEditContent(id: string) {
+    setOpeningId(id)
+    try {
+      const boardId = await onEditContent(id)
+      router.push(`/boards/${boardId}`)
+    } catch (err) {
+      alert((err as Error).message)
+      setOpeningId(null)
+    }
   }
 
   return (
@@ -78,9 +93,19 @@ export function TemplatesSection({ templates, onCreate, onUpdate, onDelete, owne
                 </span>
                 <div className="flex items-center gap-1">
                   <button
+                    onClick={() => handleEditContent(tpl.id)}
+                    disabled={openingId === tpl.id}
+                    className="rounded-lg p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                    title="Modifier le contenu"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                    </svg>
+                  </button>
+                  <button
                     onClick={() => setEditingId(tpl.id)}
                     className="rounded-lg p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                    title="Renommer"
+                    title="Modifier les infos"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />

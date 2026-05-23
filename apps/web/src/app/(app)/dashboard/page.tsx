@@ -44,7 +44,7 @@ function StarIcon({ filled }: { filled: boolean }) {
 
 export default function DashboardPage() {
   const { boards, isLoading, error, boardPresence, createBoard, deleteBoard, toggleFavorite } = useBoards()
-  const { templates, createTemplate, updateTemplate, deleteTemplate } = useTemplates()
+  const { templates, createTemplate, updateTemplate, deleteTemplate, editTemplateContent } = useTemplates()
   const [showModal, setShowModal] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -293,6 +293,7 @@ export default function DashboardPage() {
             onUpdate={updateTemplate}
             onDelete={deleteTemplate}
             onCreate={createTemplate}
+            onEditContent={editTemplateContent}
             ownedBoards={boards.filter((b) => b.role === 'OWNER').map((b) => ({ id: b.id, name: b.name }))}
           />
         </div>
