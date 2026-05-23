@@ -7,6 +7,12 @@ dist
 build
 *.log
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Claude Code local settings (per-machine, never merge)
+.claude/
+
 # Local-only docs & backups (never merge)
 *.md
 *.pdf
