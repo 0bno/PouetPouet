@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { BoardTemplate, CreateTemplateInput, UpdateTemplateInput } from '@/hooks/useTemplates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ACTIVITY_OPTIONS } from '@/components/dashboard/create-board-modal'
 
 interface Props {
   templates: BoardTemplate[]
@@ -202,8 +203,19 @@ function EditTemplateModal({
 }) {
   const [name, setName] = useState(template.name)
   const [description, setDescription] = useState(template.description ?? '')
+  const [coverImage, setCoverImage] = useState(template.coverImage ?? '')
+  const [maxParticipants, setMaxParticipants] = useState(template.maxParticipants?.toString() ?? '')
+  const [enabledActivities, setEnabledActivities] = useState<string[]>(
+    template.enabledActivities ?? ACTIVITY_OPTIONS.map((a) => a.key)
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function toggleActivity(key: string) {
+    setEnabledActivities((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    )
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -211,9 +223,13 @@ function EditTemplateModal({
     setIsLoading(true)
     setError(null)
     try {
+      const max = maxParticipants.trim()
       await onUpdate(template.id, {
         name: name.trim(),
         description: description.trim() || null,
+        coverImage: coverImage.trim() || null,
+        maxParticipants: max ? Number(max) : null,
+        enabledActivities,
       })
       onClose()
     } catch (err) {
@@ -225,21 +241,54 @@ function EditTemplateModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-5">Modifier le template</h2>
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-5">Modifier le template</h2>
 
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
-        )}
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+          )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input label="Nom" value={name} onChange={(e) => setName(e.target.value)} />
-          <Input label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <div className="flex gap-3 mt-2">
-            <Button variant="ghost" type="button" onClick={onClose} className="flex-1">Annuler</Button>
-            <Button type="submit" isLoading={isLoading} className="flex-1">Enregistrer</Button>
-          </div>
-        </form>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Input label="Nom" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input label="Description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Quelques mots…" />
+            <Input label="Image de couverture (URL)" value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://…" />
+            <Input
+              label="Nombre max de participants"
+              type="number"
+              value={maxParticipants}
+              onChange={(e) => setMaxParticipants(e.target.value)}
+              placeholder="ex : 10"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Activités disponibles</label>
+              <div className="flex flex-wrap gap-2">
+                {ACTIVITY_OPTIONS.map((opt) => {
+                  const active = enabledActivities.includes(opt.key)
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => toggleActivity(opt.key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-all ${
+                        active
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40'
+                          : 'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 text-gray-500'
+                      }`}
+                    >
+                      <span>{opt.emoji}</span>
+                      <span>{opt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex gap-3 mt-2">
+              <Button variant="ghost" type="button" onClick={onClose} className="flex-1">Annuler</Button>
+              <Button type="submit" isLoading={isLoading} className="flex-1">Enregistrer</Button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   )
