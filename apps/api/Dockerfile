@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
-COPY package.json ./
+COPY package.json tsconfig.base.json ./
 RUN npm run build --workspace=@pouetpouet/api
 
 # Run
