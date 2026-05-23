@@ -627,7 +627,7 @@ export default function WheelPage() {
                     <DrawResultPanel
                       draw={currentDraw}
                       events={events}
-                      onUpdateDraw={updateDraw}
+                      onUpdateDraw={(id, patch) => { updateDraw(id, patch) }}
                       onRedraw={handleRedraw}
                       onCreateEvent={createEvent}
                     />
