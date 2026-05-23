@@ -333,6 +333,9 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           </h1>
         )}
 
+        {/* Spacer so the rest of the toolbar items hug the right edge */}
+        <div className="flex-1" />
+
         {/* Presence indicator */}
         {members.length > 0 && (() => {
           const connectedIds = new Set(presence.map((u) => u.id))
