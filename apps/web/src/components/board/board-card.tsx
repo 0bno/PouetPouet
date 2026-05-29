@@ -3,6 +3,10 @@
 import { useState, useRef, useEffect } from 'react'
 import type { Card, BoardField } from '@/hooks/useBoard'
 import { parseLabelFmt, formatFieldValue, type LabelFmt } from '@/lib/card-format'
+import { ConnectHandles, LinkCardsOverlay, FmtBtn } from './board-card-parts'
+import { LABEL_COLORS, CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
+import { ShapeCard } from './board-card-shape'
+import { DrawCard } from './board-card-draw'
 
 interface Props {
   card: Card
@@ -29,75 +33,6 @@ interface Props {
   isLinkSource?: boolean
   onLinkCardsClick?: (cardId: string, additive: boolean) => void
 }
-
-// Handles placed INSIDE the card edges. Outer is 24x24 (hit area), inner is 12x12 (visible dot).
-// data-connect-handle lets the card-level mousedown check and bail out as a safety net.
-function ConnectHandles({ cardId, onStart }: { cardId: string; onStart?: (cardId: string, e: React.MouseEvent) => void }) {
-  if (!onStart) return null
-  const positions: Array<React.CSSProperties> = [
-    { top: -2, left: '50%', transform: 'translateX(-50%)' },
-    { top: '50%', right: -2, transform: 'translateY(-50%)' },
-    { bottom: -2, left: '50%', transform: 'translateX(-50%)' },
-    { top: '50%', left: -2, transform: 'translateY(-50%)' },
-  ]
-  return (
-    <>
-      {positions.map((style, i) => (
-        <div
-          key={i}
-          data-connect-handle="true"
-          className="absolute w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ ...style, zIndex: 40, cursor: 'crosshair' }}
-          onMouseDown={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            e.nativeEvent.stopImmediatePropagation()
-            onStart(cardId, e)
-          }}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-          title="Tirer pour relier à une autre carte"
-        >
-          <div className="w-3 h-3 rounded-full bg-white border-2 border-indigo-500 shadow-md hover:scale-150 hover:bg-indigo-100 transition-all pointer-events-none" />
-        </div>
-      ))}
-    </>
-  )
-}
-
-// Per-card overlay shown in link-cards toolbar mode. Catches clicks directly so
-// there's no need for elementFromPoint and no risk of the click hitting the wrong target.
-function LinkCardsOverlay({ cardId, isSource, onClick }: { cardId: string; isSource?: boolean; onClick: (cardId: string, additive: boolean) => void }) {
-  return (
-    <div
-      className="absolute inset-0 rounded-xl"
-      style={{
-        zIndex: 50,
-        cursor: 'crosshair',
-        background: isSource ? 'rgba(99,102,241,0.15)' : 'transparent',
-        boxShadow: isSource ? 'inset 0 0 0 3px #6366f1' : undefined,
-      }}
-      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(cardId, e.ctrlKey || e.metaKey) }}
-    />
-  )
-}
-
-const SHAPE_PALETTE = ['#6366f1', '#ef4444', '#f97316', '#eab308', '#22c55e', '#0ea5e9', '#8b5cf6', '#ec4899', '#475569']
-
-// ── Label formatting ─────────────────────────────────────────────────────────
-const LABEL_COLORS = ['#374151', '#1d4ed8', '#15803d', '#b91c1c', '#7c3aed', '#b45309', '#000000', '#ffffff']
-
-// ── Field chips ──────────────────────────────────────────────────────────────
-const CHIP_STYLE: Record<string, string> = {
-  TEXT:   'bg-blue-50   text-blue-700   border-blue-100',
-  NUMBER: 'bg-orange-50 text-orange-700 border-orange-100',
-  DATE:   'bg-green-50  text-green-700  border-green-100',
-  SELECT: 'bg-violet-50 text-violet-700 border-violet-100',
-}
-
-const MIN_W = 150
-const MIN_H = 110
-const SHAPE_MIN = 80
 
 export function BoardCard({
   card, fields, zoom = 1, isSelected, groupColor, drawMode, isReadonly,
@@ -238,189 +173,43 @@ export function BoardCard({
 
   // ── SHAPE card ──────────────────────────────────────────────────────────────
   if (card.type === 'SHAPE') {
-    const parts = card.content.split('|')
-    const shapeType = parts[0]
-    const strokeSize = parts[1] || 'medium'
-    const sw = strokeSize === 'thin' ? 1.5 : strokeSize === 'thick' ? 6 : 3
-    const hasFill = parts[2] !== 'false'
-    const fillOpacity = parts[3] !== undefined ? Math.min(1, Math.max(0.05, parseFloat(parts[3]) || 0.25)) : 0.25
-    const w = Math.max(card.width, SHAPE_MIN)
-    const h = Math.max(card.height, SHAPE_MIN)
-    const pad = Math.ceil(sw / 2) + 4
-
-    function updateShape(overrides: { stroke?: string; fill?: boolean; opacity?: number }) {
-      const s = overrides.stroke ?? strokeSize
-      const f = overrides.fill ?? hasFill
-      const o = overrides.opacity ?? fillOpacity
-      onUpdate(card.id, `${shapeType}|${s}|${f}|${o}`)
-    }
-
-    const shapeAttrs = {
-      fill: hasFill ? card.color : 'none',
-      fillOpacity: hasFill ? fillOpacity : 0,
-      stroke: card.color,
-      strokeWidth: sw,
-      vectorEffect: 'non-scaling-stroke' as const,
-    }
-
     return (
-      <div
-        data-card-id={card.id}
-        className="absolute group select-none"
-        style={{ left: card.posX, top: card.posY, width: w, height: h, cursor: isReadonly ? 'default' : 'grab', outline, outlineOffset: '2px' }}
-        onMouseDown={handleMouseDown}
-        onClick={(e) => {
-          if (isDragging.current) return
-          if (e.shiftKey || e.metaKey || e.ctrlKey) { onSelect?.(card.id, true); return }
-          onSelect?.(card.id, false)
-        }}
-      >
-        {/* ── Shape editing panel (visible when selected) ── */}
-        {isSelected && !isReadonly && (
-          <div
-            className="absolute -top-9 left-0 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-2 py-1.5 whitespace-nowrap"
-            style={{ zIndex: 10 }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Colors: single row */}
-            {SHAPE_PALETTE.map((c) => (
-              <button
-                key={c}
-                title={c}
-                className={`w-3.5 h-3.5 rounded-full border-2 transition-all hover:scale-110 ${card.color === c ? 'border-gray-700 scale-110' : 'border-white shadow-sm ring-1 ring-gray-200'}`}
-                style={{ background: c }}
-                onClick={() => onRecolor?.(card.id, c)}
-              />
-            ))}
-
-            <div className="w-px self-stretch bg-gray-200 mx-0.5" />
-
-            {/* Stroke: horizontal row */}
-            {(['thin', 'medium', 'thick'] as const).map((s) => (
-              <button
-                key={s}
-                title={s === 'thin' ? 'Trait fin' : s === 'medium' ? 'Trait moyen' : 'Trait épais'}
-                onClick={() => updateShape({ stroke: s })}
-                className={`w-8 h-6 rounded flex items-center justify-center transition-all ${strokeSize === s ? 'bg-indigo-600' : 'text-gray-500 hover:bg-gray-100'}`}
-              >
-                <div className="w-5 rounded-full" style={{ height: s === 'thin' ? 1 : s === 'medium' ? 2.5 : 5, background: strokeSize === s ? 'white' : '#6b7280' }} />
-              </button>
-            ))}
-
-            <div className="w-px self-stretch bg-gray-200 mx-0.5" />
-
-            {/* Fill toggle */}
-            <button
-              title={hasFill ? 'Sans fond' : 'Avec fond'}
-              onClick={() => updateShape({ fill: !hasFill })}
-              className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${hasFill ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="4" y="4" width="16" height="16" rx="3" fill={hasFill ? 'currentColor' : 'none'} fillOpacity={hasFill ? 0.4 : 0} />
-              </svg>
-            </button>
-
-            {/* Opacity slider — only when fill is on */}
-            {hasFill && (
-              <>
-                <div className="w-px self-stretch bg-gray-200 mx-0.5" />
-                <span className="text-[10px] font-mono text-gray-500 w-6 text-right">{Math.round(fillOpacity * 100)}%</span>
-                <input
-                  type="range"
-                  min={5}
-                  max={100}
-                  step={5}
-                  value={Math.round(fillOpacity * 100)}
-                  onChange={(e) => updateShape({ opacity: parseInt(e.target.value) / 100 })}
-                  style={{ width: 52, accentColor: '#6366f1' }}
-                />
-              </>
-            )}
-          </div>
-        )}
-
-        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
-          {shapeType === 'rect' && <rect x={pad} y={pad} width={w - 2 * pad} height={h - 2 * pad} rx={8} {...shapeAttrs} />}
-          {shapeType === 'circle' && <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) / 2 - pad} {...shapeAttrs} />}
-          {shapeType === 'diamond' && <polygon points={`${w / 2},${pad} ${w - pad},${h / 2} ${w / 2},${h - pad} ${pad},${h / 2}`} {...shapeAttrs} />}
-          {shapeType === 'triangle' && <polygon points={`${w / 2},${pad} ${w - pad},${h - pad} ${pad},${h - pad}`} {...shapeAttrs} />}
-        </svg>
-
-        {!isReadonly && (
-          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onDelete(card.id) }}
-              className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 shadow-sm"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        )}
-        {!isReadonly && (
-          <div
-            className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize opacity-0 group-hover:opacity-60 transition-opacity flex items-center justify-center"
-            onMouseDown={handleResizeMouseDown}
-          >
-            <svg className="w-3 h-3 text-gray-600" viewBox="0 0 10 10">
-              <path d="M9 5L5 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-            </svg>
-          </div>
-        )}
-        <ConnectHandles cardId={card.id} onStart={isReadonly ? undefined : onStartConnect} />
-        {linkCardsMode && onLinkCardsClick && (
-          <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
-        )}
-      </div>
+      <ShapeCard
+        card={card}
+        isSelected={isSelected}
+        isReadonly={isReadonly}
+        outline={outline}
+        onRecolor={onRecolor}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+        onSelect={onSelect}
+        onStartConnect={onStartConnect}
+        onLinkCardsClick={onLinkCardsClick}
+        linkCardsMode={linkCardsMode}
+        isLinkSource={isLinkSource}
+        handleMouseDown={handleMouseDown}
+        handleResizeMouseDown={handleResizeMouseDown}
+        isDragging={isDragging}
+      />
     )
   }
 
   // ── DRAW card ───────────────────────────────────────────────────────────────
   if (card.type === 'DRAW') {
-    const w = Math.max(card.width, MIN_W)
-    const h = Math.max(card.height, MIN_H)
     return (
-      <div
-        data-card-id={card.id}
-        className="absolute group select-none"
-        style={{ left: card.posX, top: card.posY, width: w, height: h, cursor: isReadonly ? 'default' : 'grab', outline, outlineOffset: '2px' }}
-        onMouseDown={handleMouseDown}
-        onClick={handleClick}
-      >
-        <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-          <path d={card.content} stroke={card.color} strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        {!isReadonly && (
-          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onDelete(card.id) }}
-              className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 shadow-sm"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        )}
-        {!isReadonly && (
-          <div
-            className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize opacity-0 group-hover:opacity-60 transition-opacity flex items-center justify-center"
-            onMouseDown={handleResizeMouseDown}
-          >
-            <svg className="w-3 h-3 text-gray-600" viewBox="0 0 10 10">
-              <path d="M9 5L5 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-            </svg>
-          </div>
-        )}
-        <ConnectHandles cardId={card.id} onStart={isReadonly ? undefined : onStartConnect} />
-        {linkCardsMode && onLinkCardsClick && (
-          <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
-        )}
-      </div>
+      <DrawCard
+        card={card}
+        isReadonly={isReadonly}
+        outline={outline}
+        onDelete={onDelete}
+        onStartConnect={onStartConnect}
+        onLinkCardsClick={onLinkCardsClick}
+        linkCardsMode={linkCardsMode}
+        isLinkSource={isLinkSource}
+        handleMouseDown={handleMouseDown}
+        handleClick={handleClick}
+        handleResizeMouseDown={handleResizeMouseDown}
+      />
     )
   }
 
@@ -715,16 +504,3 @@ export function BoardCard({
   )
 }
 
-function FmtBtn({ active, onClick, title, children }: {
-  active: boolean; onClick: () => void; title: string; children: React.ReactNode
-}) {
-  return (
-    <button
-      title={title}
-      onClick={onClick}
-      className={`w-5 h-5 rounded flex items-center justify-center transition-all ${active ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-    >
-      {children}
-    </button>
-  )
-}
