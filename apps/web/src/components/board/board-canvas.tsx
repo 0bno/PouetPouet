@@ -466,35 +466,30 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
 
   // ── PDF export (whole board, one page) ───────────────────────────────────────
   async function exportPdf() {
-    const container = containerRef.current
+    const canvasEl = canvasRef.current
     const svg = connectionsSvgRef.current
-    if (!container) return
+    if (!canvasEl) return
     const box = boundsOf([...cards, ...frames])
     if (!box) return
 
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-      import('html2canvas'),
+    // modern-screenshot renders the DOM via the browser (SVG foreignObject), so modern
+    // CSS like Tailwind's oklch() colors works — unlike html2canvas, which can't parse it.
+    const [{ domToCanvas }, { jsPDF }] = await Promise.all([
+      import('modern-screenshot'),
       import('jspdf'),
     ])
 
-    // Save what we're about to mutate so the live board is untouched after export.
-    const savedVp = { ...vpRef.current }
-    const savedBg = container.style.backgroundImage
-    const savedBgColor = container.style.backgroundColor
+    // Save everything we mutate so the live board is untouched after export.
+    const savedTransform = canvasEl.style.transform
+    const savedWidth = canvasEl.style.width
+    const savedHeight = canvasEl.style.height
+    const savedOverflow = canvasEl.style.overflow
     const savedSvg = svg
       ? { left: svg.style.left, top: svg.style.top, width: svg.style.width, height: svg.style.height, viewBox: svg.getAttribute('viewBox') }
       : null
 
-    const rect = container.getBoundingClientRect()
-    const pad = 32
-    const zoom = Math.min((rect.width - pad * 2) / box.w, (rect.height - pad * 2) / box.h)
-    const contentW = box.w * zoom
-    const contentH = box.h * zoom
-    const cropX = (rect.width - contentW) / 2
-    const cropY = (rect.height - contentH) / 2
-
-    // The connections layer is a 200000² plane — shrink it to the content box so
-    // html2canvas doesn't try to rasterize a gigantic surface.
+    // The connections layer is a 200000² plane — shrink it to the content box so the
+    // serializer doesn't have to process a gigantic surface.
     if (svg) {
       svg.style.left = `${box.minX}px`
       svg.style.top = `${box.minY}px`
@@ -502,23 +497,26 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
       svg.style.height = `${box.h}px`
       svg.setAttribute('viewBox', `${box.minX} ${box.minY} ${box.w} ${box.h}`)
     }
-    container.style.backgroundImage = 'none'
-    container.style.backgroundColor = '#ffffff'
-    applyTransform({ x: cropX - box.minX * zoom, y: cropY - box.minY * zoom, zoom })
 
-    // Let the browser paint the new transform before capturing.
+    // Lay the content node out at natural size, top-left at the bbox origin, and clip to it.
+    canvasEl.style.transform = `translate(${-box.minX}px, ${-box.minY}px)`
+    canvasEl.style.width = `${box.w}px`
+    canvasEl.style.height = `${box.h}px`
+    canvasEl.style.overflow = 'hidden'
+
+    // Keep the raster within browser canvas limits while staying crisp on small boards.
+    const scale = Math.min(2, Math.max(0.5, 4000 / Math.max(box.w, box.h)))
+
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))
 
     try {
-      const shot = await html2canvas(container, {
+      const shot = await domToCanvas(canvasEl, {
+        width: box.w,
+        height: box.h,
+        scale,
         backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false,
-        x: cropX,
-        y: cropY,
-        width: contentW,
-        height: contentH,
-        ignoreElements: (el) => el instanceof HTMLElement && el.dataset.exportIgnore === 'true',
+        // Drop any UI chrome that lives inside the captured node (e.g. vote badges).
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.exportIgnore === 'true'),
       })
 
       const orientation = shot.width >= shot.height ? 'landscape' : 'portrait'
@@ -534,7 +532,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
         iw = ih * aspect
       }
       pdf.addImage(shot.toDataURL('image/png'), 'PNG', (pw - iw) / 2, (ph - ih) / 2, iw, ih)
-      pdf.save(`${(boardName || 'board').replace(/[^\w\-]+/g, '_')}.pdf`)
+      pdf.save(`${(boardName || 'board').replace(/[^\w-]+/g, '_')}.pdf`)
     } finally {
       // Restore the live board exactly as it was.
       if (svg && savedSvg) {
@@ -544,10 +542,12 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
         svg.style.height = savedSvg.height
         if (savedSvg.viewBox) svg.setAttribute('viewBox', savedSvg.viewBox)
       }
-      container.style.backgroundImage = savedBg
-      container.style.backgroundColor = savedBgColor
-      applyTransform(savedVp)
-      setViewport({ ...savedVp })
+      canvasEl.style.transform = savedTransform
+      canvasEl.style.width = savedWidth
+      canvasEl.style.height = savedHeight
+      canvasEl.style.overflow = savedOverflow
+      // Re-assert the live viewport transform.
+      applyTransform({ ...vpRef.current })
     }
   }
 
