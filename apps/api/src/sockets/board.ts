@@ -7,6 +7,17 @@ function canWrite(socket: Socket, boardId: string): boolean {
   return role === 'OWNER' || role === 'EDITOR'
 }
 
+// Realtime mutations can race with a delete from another client (or the same one).
+// Swallow Prisma's "record not found" (P2025) so a stale event never crashes the handler.
+async function ignoreMissing<T>(op: Promise<T>): Promise<T | null> {
+  try {
+    return await op
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2025') return null
+    throw err
+  }
+}
+
 async function broadcastPresence(io: Server, boardId: string) {
   const sockets = await io.in(`board:${boardId}`).fetchSockets()
   const seen = new Set<string>()
@@ -85,32 +96,32 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
 
   socket.on('card:move', async (data: { id: string; boardId: string; posX: number; posY: number }) => {
     if (!canWrite(socket, data.boardId)) return
-    const card = await prisma.card.update({ where: { id: data.id }, data: { posX: data.posX, posY: data.posY } })
-    socket.to(`board:${data.boardId}`).emit('card:moved', card)
+    const card = await ignoreMissing(prisma.card.update({ where: { id: data.id }, data: { posX: data.posX, posY: data.posY } }))
+    if (card) socket.to(`board:${data.boardId}`).emit('card:moved', card)
   })
 
   socket.on('card:resize', async (data: { id: string; boardId: string; width: number; height: number }) => {
     if (!canWrite(socket, data.boardId)) return
-    const card = await prisma.card.update({ where: { id: data.id }, data: { width: data.width, height: data.height } })
-    socket.to(`board:${data.boardId}`).emit('card:resized', card)
+    const card = await ignoreMissing(prisma.card.update({ where: { id: data.id }, data: { width: data.width, height: data.height } }))
+    if (card) socket.to(`board:${data.boardId}`).emit('card:resized', card)
   })
 
   socket.on('card:update', async (data: { id: string; boardId: string; content: string }) => {
     if (!canWrite(socket, data.boardId)) return
-    const card = await prisma.card.update({ where: { id: data.id }, data: { content: data.content } })
-    io.to(`board:${data.boardId}`).emit('card:updated', card)
+    const card = await ignoreMissing(prisma.card.update({ where: { id: data.id }, data: { content: data.content } }))
+    if (card) io.to(`board:${data.boardId}`).emit('card:updated', card)
   })
 
   socket.on('card:delete', async (data: { id: string; boardId: string }) => {
     if (!canWrite(socket, data.boardId)) return
-    await prisma.card.delete({ where: { id: data.id } })
-    io.to(`board:${data.boardId}`).emit('card:deleted', data.id)
+    const deleted = await ignoreMissing(prisma.card.delete({ where: { id: data.id } }))
+    if (deleted) io.to(`board:${data.boardId}`).emit('card:deleted', data.id)
   })
 
   socket.on('card:recolor', async (data: { id: string; boardId: string; color: string }) => {
     if (!canWrite(socket, data.boardId)) return
-    const card = await prisma.card.update({ where: { id: data.id }, data: { color: data.color } })
-    io.to(`board:${data.boardId}`).emit('card:recolored', card)
+    const card = await ignoreMissing(prisma.card.update({ where: { id: data.id }, data: { color: data.color } }))
+    if (card) io.to(`board:${data.boardId}`).emit('card:recolored', card)
   })
 
   socket.on('card:lock', async (data: { ids: string[]; boardId: string; locked: boolean }) => {
@@ -144,8 +155,8 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
 
   socket.on('connection:delete', async (data: { id: string; boardId: string }) => {
     if (!canWrite(socket, data.boardId)) return
-    await prisma.cardConnection.delete({ where: { id: data.id } })
-    io.to(`board:${data.boardId}`).emit('connection:deleted', data.id)
+    const deleted = await ignoreMissing(prisma.cardConnection.delete({ where: { id: data.id } }))
+    if (deleted) io.to(`board:${data.boardId}`).emit('connection:deleted', data.id)
   })
 
   // ── Frames ────────────────────────────────────────────────────────────────────
