@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import type { Card, Frame, BoardField, Connection, VoteSession } from '@/hooks/useBoard'
 import { groupColor } from '@/hooks/useBoard'
 import { BoardCard } from './board-card'
@@ -55,13 +55,19 @@ interface Props {
   onCastVote?: (cardId: string) => void
   onUncastVote?: (cardId: string) => void
   onSetCardLocked?: (id: string, locked: boolean) => void
+  boardName?: string
+}
+
+export interface BoardCanvasHandle {
+  fitToContent: () => void
+  exportPdf: () => Promise<void>
 }
 
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 3
 const DOT_SPACING = 24
 
-export function BoardCanvas({
+export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCanvas({
   cards, connections, frames, fields, selectedIds, toolMode, toolColor, toolStroke, toolFill, toolOpacity,
   clipboard, isReadonly,
   onAddCard, onMoveCard, onResizeCard, onUpdateCard, onRecolorCard, onDeleteCard,
@@ -72,14 +78,17 @@ export function BoardCanvas({
   onUpdateFrame, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
   voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked,
-}: Props) {
+  boardName,
+}: Props, ref) {
   // ── Refs ────────────────────────────────────────────────────────────────────
-  const containerRef    = useRef<HTMLDivElement>(null)
-  const canvasRef       = useRef<HTMLDivElement>(null)
-  const rbDomRef        = useRef<HTMLDivElement>(null)
-  const drawingPathRef  = useRef<SVGPathElement>(null)
-  const connectGhostRef = useRef<SVGLineElement>(null)
-  const mousePosRef     = useRef({ x: 0, y: 0 })
+  const containerRef     = useRef<HTMLDivElement>(null)
+  const canvasRef        = useRef<HTMLDivElement>(null)
+  const rbDomRef         = useRef<HTMLDivElement>(null)
+  const drawingPathRef   = useRef<SVGPathElement>(null)
+  const connectGhostRef  = useRef<SVGLineElement>(null)
+  const connectionsSvgRef = useRef<SVGSVGElement>(null)
+  const mousePosRef      = useRef({ x: 0, y: 0 })
+  const didAutoFitRef    = useRef(false)
 
   // Live viewport — updated every frame via direct DOM manipulation (no React re-render)
   const vpRef = useRef({ x: 0, y: 0, zoom: 1 })
@@ -166,8 +175,13 @@ export function BoardCanvas({
     function onWheel(e: WheelEvent) {
       e.preventDefault()
       const { x, y, zoom } = vpRef.current
-      const factor = e.ctrlKey ? 0.01 : 0.0008
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 - e.deltaY * factor)))
+      // Trackpad pinch (and Ctrl/⌘+wheel) sends a much larger per-event delta than a
+      // mouse-wheel notch, so it gets its own base step. Exponential stepping keeps the
+      // zoom geometric and can never overshoot into negative scale on a hard pinch.
+      const base = e.ctrlKey || e.metaKey ? 0.01 : 0.0008
+      // Above 100% the same ratio feels too fast, so we damp the step the further we zoom in.
+      const damp = zoom > 1 ? 1 / Math.sqrt(zoom) : 1
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.exp(-e.deltaY * base * damp)))
       const rect = el.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
@@ -388,6 +402,157 @@ export function BoardCanvas({
     setViewport({ ...vpRef.current })
   }
 
+  // ── Fit / auto-center ─────────────────────────────────────────────────────────
+  // Bounding box (canvas coords) of a set of positioned items, or null when empty.
+  function boundsOf(items: { posX: number; posY: number; width: number; height: number }[]) {
+    if (items.length === 0) return null
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const it of items) {
+      minX = Math.min(minX, it.posX)
+      minY = Math.min(minY, it.posY)
+      maxX = Math.max(maxX, it.posX + it.width)
+      maxY = Math.max(maxY, it.posY + it.height)
+    }
+    return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY }
+  }
+
+  // Center a canvas-space box in the viewport, scaled to fit with padding.
+  function fitBox(box: { minX: number; minY: number; w: number; h: number } | null, maxZoom = 1) {
+    const el = containerRef.current
+    if (!el || !box || box.w <= 0 || box.h <= 0) return
+    const rect = el.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const pad = 64
+    const fit = Math.min((rect.width - pad * 2) / box.w, (rect.height - pad * 2) / box.h)
+    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(fit, maxZoom)))
+    const cx = box.minX + box.w / 2
+    const cy = box.minY + box.h / 2
+    applyTransform({ x: rect.width / 2 - cx * zoom, y: rect.height / 2 - cy * zoom, zoom })
+    setViewport({ ...vpRef.current })
+  }
+
+  // Frame down to all content; never zooms past 100% so a small board stays readable.
+  function fitToContent() {
+    fitBox(boundsOf([...cards, ...frames]), 1)
+  }
+
+  // Frame the current selection; may zoom in (up to 150%) to fill the viewport.
+  function fitToSelection() {
+    fitBox(boundsOf(cards.filter((c) => selectedIds.has(c.id))), 1.5)
+  }
+
+  // "Ajuster" button: zoom to the selection if there is one, otherwise to all content.
+  function handleFit() {
+    if (selectedIds.size > 0) fitToSelection()
+    else fitToContent()
+  }
+
+  // Disarm auto-fit shortly after mount: if the board is still empty by then, a card the
+  // user adds later shouldn't yank the viewport. Only an initial load fits automatically.
+  useEffect(() => {
+    const t = setTimeout(() => { didAutoFitRef.current = true }, 2000)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Auto-center on the whole board the first time content is available after opening.
+  useEffect(() => {
+    if (didAutoFitRef.current) return
+    if (cards.length === 0 && frames.length === 0) return
+    didAutoFitRef.current = true
+    const raf = requestAnimationFrame(() => fitToContent())
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards.length, frames.length])
+
+  // ── PDF export (whole board, one page) ───────────────────────────────────────
+  async function exportPdf() {
+    const container = containerRef.current
+    const svg = connectionsSvgRef.current
+    if (!container) return
+    const box = boundsOf([...cards, ...frames])
+    if (!box) return
+
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ])
+
+    // Save what we're about to mutate so the live board is untouched after export.
+    const savedVp = { ...vpRef.current }
+    const savedBg = container.style.backgroundImage
+    const savedBgColor = container.style.backgroundColor
+    const savedSvg = svg
+      ? { left: svg.style.left, top: svg.style.top, width: svg.style.width, height: svg.style.height, viewBox: svg.getAttribute('viewBox') }
+      : null
+
+    const rect = container.getBoundingClientRect()
+    const pad = 32
+    const zoom = Math.min((rect.width - pad * 2) / box.w, (rect.height - pad * 2) / box.h)
+    const contentW = box.w * zoom
+    const contentH = box.h * zoom
+    const cropX = (rect.width - contentW) / 2
+    const cropY = (rect.height - contentH) / 2
+
+    // The connections layer is a 200000² plane — shrink it to the content box so
+    // html2canvas doesn't try to rasterize a gigantic surface.
+    if (svg) {
+      svg.style.left = `${box.minX}px`
+      svg.style.top = `${box.minY}px`
+      svg.style.width = `${box.w}px`
+      svg.style.height = `${box.h}px`
+      svg.setAttribute('viewBox', `${box.minX} ${box.minY} ${box.w} ${box.h}`)
+    }
+    container.style.backgroundImage = 'none'
+    container.style.backgroundColor = '#ffffff'
+    applyTransform({ x: cropX - box.minX * zoom, y: cropY - box.minY * zoom, zoom })
+
+    // Let the browser paint the new transform before capturing.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))
+
+    try {
+      const shot = await html2canvas(container, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        x: cropX,
+        y: cropY,
+        width: contentW,
+        height: contentH,
+        ignoreElements: (el) => el instanceof HTMLElement && el.dataset.exportIgnore === 'true',
+      })
+
+      const orientation = shot.width >= shot.height ? 'landscape' : 'portrait'
+      const pdf = new jsPDF({ orientation, unit: 'pt', format: 'a4' })
+      const pw = pdf.internal.pageSize.getWidth()
+      const ph = pdf.internal.pageSize.getHeight()
+      const margin = 24
+      const aspect = shot.width / shot.height
+      let iw = pw - margin * 2
+      let ih = iw / aspect
+      if (ih > ph - margin * 2) {
+        ih = ph - margin * 2
+        iw = ih * aspect
+      }
+      pdf.addImage(shot.toDataURL('image/png'), 'PNG', (pw - iw) / 2, (ph - ih) / 2, iw, ih)
+      pdf.save(`${(boardName || 'board').replace(/[^\w\-]+/g, '_')}.pdf`)
+    } finally {
+      // Restore the live board exactly as it was.
+      if (svg && savedSvg) {
+        svg.style.left = savedSvg.left
+        svg.style.top = savedSvg.top
+        svg.style.width = savedSvg.width
+        svg.style.height = savedSvg.height
+        if (savedSvg.viewBox) svg.setAttribute('viewBox', savedSvg.viewBox)
+      }
+      container.style.backgroundImage = savedBg
+      container.style.backgroundColor = savedBgColor
+      applyTransform(savedVp)
+      setViewport({ ...savedVp })
+    }
+  }
+
+  useImperativeHandle(ref, () => ({ fitToContent, exportPdf }))
+
   // ── Link confirmation ────────────────────────────────────────────────────────
   function confirmLink() {
     if (!linkPopover || !linkUrl.trim()) { setLinkPopover(null); setLinkUrl(''); return }
@@ -517,6 +682,7 @@ export function BoardCanvas({
 
           {/* SVG: connections + connect ghost + source highlight (below cards) */}
           <svg
+            ref={connectionsSvgRef}
             style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none' }}
             viewBox="-100000 -100000 200000 200000"
           >
@@ -683,7 +849,7 @@ export function BoardCanvas({
 
         {/* Link-cards mode banner */}
         {toolMode === 'link-cards' && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-3 pointer-events-none z-[60]">
+          <div data-export-ignore="true" className="absolute top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-3 pointer-events-none z-[60]">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <circle cx="5" cy="12" r="2.5" />
               <circle cx="19" cy="12" r="2.5" />
@@ -699,11 +865,20 @@ export function BoardCanvas({
         )}
 
         {/* Zoom controls */}
-        <div className="absolute bottom-4 right-6 flex items-center bg-white/95 border border-gray-200 rounded-lg shadow select-none text-xs font-mono text-gray-600">
+        <div data-export-ignore="true" className="absolute bottom-4 right-6 flex items-center bg-white/95 border border-gray-200 rounded-lg shadow select-none text-xs font-mono text-gray-600">
+          <button
+            title={selectedIds.size > 0 ? 'Ajuster à la sélection' : 'Ajuster le board à l\'écran'}
+            onClick={handleFit}
+            className="px-2 py-1.5 hover:bg-gray-100 rounded-l-lg transition-colors leading-none border-r border-gray-200"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2m8-16h2a2 2 0 012 2v2m-4 12h2a2 2 0 002-2v-2" />
+            </svg>
+          </button>
           <button
             title="Dézoomer (−)"
             onClick={() => handleZoomBy(1 / 1.25)}
-            className="px-2 py-1.5 hover:bg-gray-100 rounded-l-lg transition-colors leading-none"
+            className="px-2 py-1.5 hover:bg-gray-100 transition-colors leading-none"
           >−</button>
           <button
             title="Réinitialiser le zoom (100%)"
@@ -768,6 +943,4 @@ export function BoardCanvas({
       )}
     </>
   )
-}
-
-// ── Connection line with hover-delete ─────────────────────────────────────────
+})

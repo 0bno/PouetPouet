@@ -6,6 +6,7 @@ import { useBoard } from '@/hooks/useBoard'
 import type { Card } from '@/hooks/useBoard'
 import { useSession } from '@/hooks/useSession'
 import { BoardCanvas } from '@/components/board/board-canvas'
+import type { BoardCanvasHandle } from '@/components/board/board-canvas'
 import { BoardFieldsPanel } from '@/components/board/board-fields-panel'
 import { ShareModal } from '@/components/board/share-modal'
 import { BoardSettingsModal } from '@/components/board/board-settings-modal'
@@ -112,6 +113,18 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [timerCustomMin, setTimerCustomMin] = useState('5')
   const [timerCustomSec, setTimerCustomSec] = useState('00')
   const [now, setNow] = useState(() => Date.now())
+  const canvasApiRef = useRef<BoardCanvasHandle>(null)
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExportPdf() {
+    if (exporting) return
+    setExporting(true)
+    try {
+      await canvasApiRef.current?.exportPdf()
+    } finally {
+      setExporting(false)
+    }
+  }
   const timerPickerRef = useRef<HTMLDivElement>(null)
   const timerPickerLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [timerPickerRect, setTimerPickerRect] = useState<DOMRect | null>(null)
@@ -310,6 +323,27 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             {isReadonly ? 'Lecture seule' : 'Éditeur'}
           </span>
         )}
+
+        {/* ── Export PDF (all roles) ───────────────────────────────────────── */}
+        <div className="w-px h-6 bg-gray-200 shrink-0" aria-hidden />
+        <button
+          onClick={handleExportPdf}
+          disabled={exporting}
+          title="Exporter le board en PDF"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-wait shrink-0"
+        >
+          {exporting ? (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 7H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          )}
+          {exporting ? 'Export…' : 'PDF'}
+        </button>
 
         {/* ── Group: share + settings (owner) ─────────────────────────────── */}
         {userRole === 'OWNER' && (
@@ -686,6 +720,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         )}
 
         <BoardCanvas
+          ref={canvasApiRef}
+          boardName={board?.name}
           cards={cards}
           connections={connections}
           frames={frames}
