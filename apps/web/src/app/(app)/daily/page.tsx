@@ -366,6 +366,7 @@ export default function DailyPage() {
   const [showCreateSession, setShowCreateSession] = useState(false)
   const [teamModal, setTeamModal] = useState<{ open: boolean; team: DailyTeam | null }>({ open: false, team: null })
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   async function handleSaveTeam(name: string, members: string[]) {
     if (teamModal.team) {
@@ -375,19 +376,25 @@ export default function DailyPage() {
     }
   }
 
+  const q = search.trim().toLowerCase()
+  const filteredSessions = q ? sessions.filter((s) => s.name.toLowerCase().includes(q)) : sessions
+
   return (
     <div className="flex flex-col gap-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Mes dailys</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">Gérez vos standups quotidiens</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Gérez vos standups quotidiens</p>
         </div>
         <button
           onClick={() => setShowCreateSession(true)}
-          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm"
+          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200"
         >
-          <span className="text-base leading-none">+</span> Nouveau daily
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+          </svg>
+          Nouveau daily
         </button>
       </div>
 
@@ -395,6 +402,31 @@ export default function DailyPage() {
         {/* Sessions list */}
         <div className="lg:col-span-2 flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Sessions récentes</h2>
+
+          {!sessionsLoading && sessions.length > 0 && (
+            <div className="relative">
+              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher un daily…"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
 
           {sessionsLoading ? (
             <div className="flex flex-col gap-3">
@@ -408,9 +440,11 @@ export default function DailyPage() {
               <p className="text-gray-500 dark:text-gray-400 font-medium">Aucune session pour le moment</p>
               <p className="text-gray-400 text-sm mt-1">Créez votre premier daily !</p>
             </div>
+          ) : filteredSessions.length === 0 ? (
+            <p className="text-gray-400 text-sm py-8 text-center">Aucun daily ne correspond à « {search} ».</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {sessions.map((session) => {
+              {filteredSessions.map((session) => {
                 const { label, cls } = statusLabel(session.status)
                 return (
                   <div
@@ -434,11 +468,11 @@ export default function DailyPage() {
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-lg ${cls}`}>{label}</span>
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmDelete(session.id) }}
-                        className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
                         title="Supprimer"
                       >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
                     </div>

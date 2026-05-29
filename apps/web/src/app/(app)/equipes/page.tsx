@@ -288,10 +288,10 @@ function TeamCard({
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="text-gray-300 hover:text-red-400 transition-colors p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"
+                className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </button>
             )}
@@ -340,6 +340,7 @@ export default function EquipesPage() {
   const { teams, isLoading, createTeam, updateTeam, deleteTeam } = useTeams()
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<DailyTeam | null>(null)
+  const [search, setSearch] = useState('')
 
   const handleSave = useCallback(async (name: string, members: string[], color: string, description: string) => {
     if (editTarget) {
@@ -367,6 +368,9 @@ export default function EquipesPage() {
     )
   }
 
+  const q = search.trim().toLowerCase()
+  const filteredTeams = q ? teams.filter((t) => t.name.toLowerCase().includes(q)) : teams
+
   return (
     <>
       {showModal && (
@@ -377,21 +381,50 @@ export default function EquipesPage() {
         />
       )}
 
-      <div className="flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Mes équipes</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">
-              {teams.length} équipe{teams.length !== 1 ? 's' : ''} · utilisées dans les dailys et la roue
-            </p>
+      <div className="flex flex-col gap-8">
+        {/* Header + barre de recherche */}
+        <div>
+          <div className="flex items-end justify-between mb-5">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Mes équipes</h1>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
+                {teams.length} équipe{teams.length !== 1 ? 's' : ''} · utilisées dans les dailys et la roue
+              </p>
+            </div>
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 shrink-0 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              Nouvelle équipe
+            </button>
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shrink-0"
-          >
-            + Nouvelle équipe
-          </button>
+
+          {/* Barre de recherche */}
+          <div className="relative">
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une équipe…"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Grid */}
@@ -411,9 +444,11 @@ export default function EquipesPage() {
               Créer une équipe
             </button>
           </div>
+        ) : filteredTeams.length === 0 ? (
+          <p className="text-center text-gray-400 text-sm py-12">Aucune équipe ne correspond à « {search} ».</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {teams.map((team) => (
+            {filteredTeams.map((team) => (
               <TeamCard
                 key={team.id}
                 team={team}

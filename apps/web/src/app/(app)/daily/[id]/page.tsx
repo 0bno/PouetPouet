@@ -2,6 +2,7 @@
 
 import { use } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useDailySession } from '@/hooks/useDaily'
 import type { DailyParticipant } from '@/hooks/useDaily'
 import { formatTime, formatSessionTime } from '@/lib/time'
@@ -109,19 +110,19 @@ export default function DailySessionPage({ params }: { params: Promise<{ id: str
   const isOverTime = speakerElapsed > session.timePerPerson
 
   return (
-    <div className="max-w-3xl mx-auto flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <button onClick={() => router.push('/daily')} className="text-xs text-gray-400 hover:text-gray-600 mb-1 flex items-center gap-1">
-            ← Mes dailys
-          </button>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{session.name}</h1>
-        </div>
+      <div className="flex items-center gap-3">
+        <Link href="/daily" className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </Link>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">{session.name}</h1>
 
         {/* Global timer */}
         {session.startedAt && (
-          <div className="text-right">
+          <div className="ml-auto text-right">
             <p className="text-xs text-gray-400 mb-0.5">Durée totale</p>
             <p className="text-2xl font-bold font-mono text-gray-700 dark:text-gray-200">
               {formatSessionTime(sessionElapsed)}

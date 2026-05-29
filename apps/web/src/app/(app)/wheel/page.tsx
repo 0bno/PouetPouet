@@ -136,7 +136,7 @@ export default function WheelPage() {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">La roue</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">Tirage aléatoire depuis vos équipes</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Tirage aléatoire depuis vos équipes</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
