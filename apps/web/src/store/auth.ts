@@ -2,7 +2,20 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api } from '@/lib/api'
+import { api, setOnUnauthorized } from '@/lib/api'
+
+// Reads the `iat`/`exp` claims (epoch ms) from a JWT without verifying the signature.
+export function tokenTimes(token: string): { iat: number; exp: number } | null {
+  try {
+    const payload = token.split('.')[1]
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    const { iat, exp } = JSON.parse(json) as { iat?: number; exp?: number }
+    if (typeof iat !== 'number' || typeof exp !== 'number') return null
+    return { iat: iat * 1000, exp: exp * 1000 }
+  } catch {
+    return null
+  }
+}
 
 export interface User {
   id: string
@@ -24,9 +37,12 @@ interface AuthState {
   token: string | null
   isLoading: boolean
   error: string | null
+  sessionExpired: boolean
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
+  expireSession: () => void
+  refreshSession: () => Promise<void>
   clearError: () => void
   updateProfile: (data: { name?: string; bio?: string | null; theme?: 'light' | 'dark' }) => Promise<void>
   updateAvatar: (avatar: string | null) => Promise<void>
@@ -40,13 +56,14 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isLoading: false,
       error: null,
+      sessionExpired: false,
 
       login: async (email, password) => {
         set({ isLoading: true, error: null })
         try {
           const data = await api.post<AuthResponse>('/api/auth/login', { email, password })
           localStorage.setItem('token', data.token)
-          set({ user: data.user, token: data.token, isLoading: false })
+          set({ user: data.user, token: data.token, isLoading: false, sessionExpired: false })
         } catch (err) {
           set({ error: (err as Error).message, isLoading: false })
           throw err
@@ -58,7 +75,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const data = await api.post<AuthResponse>('/api/auth/register', { name, email, password })
           localStorage.setItem('token', data.token)
-          set({ user: data.user, token: data.token, isLoading: false })
+          set({ user: data.user, token: data.token, isLoading: false, sessionExpired: false })
         } catch (err) {
           set({ error: (err as Error).message, isLoading: false })
           throw err
@@ -67,7 +84,20 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         localStorage.removeItem('token')
-        set({ user: null, token: null })
+        set({ user: null, token: null, sessionExpired: false })
+      },
+
+      expireSession: () => set({ sessionExpired: true }),
+
+      // Slides the session forward: swaps the stored token for a fresh one.
+      refreshSession: async () => {
+        try {
+          const { token } = await api.post<{ token: string }>('/api/auth/refresh', {})
+          localStorage.setItem('token', token)
+          set({ token })
+        } catch {
+          // A failed refresh (e.g. already expired) is handled by the 401 → expireSession path.
+        }
       },
 
       clearError: () => set({ error: null }),
@@ -92,3 +122,6 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// Server-side JWT rejection (expired/invalid) flips the session into the expired state.
+setOnUnauthorized(() => useAuthStore.getState().expireSession())

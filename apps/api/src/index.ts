@@ -25,6 +25,7 @@ await app.register(cors, {
 
 await app.register(jwt, {
   secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
+  sign: { expiresIn: '30m' },
 })
 
 await app.register(cookie)

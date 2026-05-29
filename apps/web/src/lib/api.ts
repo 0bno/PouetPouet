@@ -5,6 +5,12 @@ function getToken(): string | null {
   return localStorage.getItem('token')
 }
 
+// Fired when the server rejects the JWT (expired/invalid) — distinct from business 401s.
+let onUnauthorized: (() => void) | null = null
+export function setOnUnauthorized(fn: () => void) {
+  onUnauthorized = fn
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken()
   const hasBody = options?.body != null
@@ -18,6 +24,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Erreur réseau' }))
+    if (res.status === 401 && typeof err.code === 'string' && err.code.startsWith('FST_JWT')) {
+      onUnauthorized?.()
+    }
     throw new Error(err.error ?? 'Erreur inconnue')
   }
   if (res.status === 204) return undefined as T

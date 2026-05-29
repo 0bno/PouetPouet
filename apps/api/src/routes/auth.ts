@@ -62,6 +62,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ user: safeUser, token })
   })
 
+  app.post('/refresh', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id, email } = request.user as { id: string; email: string }
+    const token = app.jwt.sign({ id, email })
+    return reply.send({ token })
+  })
+
   app.get('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { id } = request.user as { id: string }
     const user = await prisma.user.findUnique({ where: { id }, select: USER_SELECT })

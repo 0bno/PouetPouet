@@ -3,8 +3,10 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useAuthStore } from '@/store/auth'
+import { useAuthStore, tokenTimes } from '@/store/auth'
 import { Logo } from '@/components/ui/logo'
+import { SessionExpiredModal } from '@/components/session-expired-modal'
+import { SessionCountdown } from '@/components/session-countdown'
 
 function Avatar({ name, src }: { name: string; src?: string | null }) {
   if (src) {
@@ -19,13 +21,47 @@ function Avatar({ name, src }: { name: string; src?: string | null }) {
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { token, user, logout } = useAuthStore()
+  const { token, user, logout, expireSession, refreshSession, sessionExpired } = useAuthStore()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     if (!token) router.replace('/login')
   }, [token, router])
+
+  // Fire the session-expired state exactly when the JWT's `exp` is reached.
+  // If the stored token is already dead on load, clear it so the guard bounces to /login.
+  useEffect(() => {
+    if (!token) return
+    const times = tokenTimes(token)
+    if (times == null) return
+    const delay = times.exp - Date.now()
+    if (delay <= 0) {
+      logout()
+      return
+    }
+    const id = setTimeout(() => expireSession(), delay)
+    return () => clearTimeout(id)
+  }, [token, logout, expireSession])
+
+  // Sliding session: any user activity past the token's half-life renews it,
+  // so an active user is never logged out while an idle one expires ~on schedule.
+  useEffect(() => {
+    if (!token) return
+    const times = tokenTimes(token)
+    if (times == null) return
+    const halfLife = times.iat + (times.exp - times.iat) / 2
+    let refreshing = false
+    const onActivity = () => {
+      if (refreshing || Date.now() < halfLife) return
+      if (useAuthStore.getState().sessionExpired) return
+      refreshing = true
+      void refreshSession()
+    }
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'] as const
+    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true }))
+    return () => events.forEach((e) => window.removeEventListener(e, onActivity))
+  }, [token, refreshSession])
 
   // Sync dark mode class on html element whenever theme changes
   useEffect(() => {
@@ -135,6 +171,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </footer>
       )}
+
+      {sessionExpired && <SessionExpiredModal />}
+      <SessionCountdown />
     </div>
   )
 }
