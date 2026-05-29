@@ -86,7 +86,7 @@ export function useScrum(roomId: string) {
         }
       })
     })
-    socket.on('scrum:vote:received', ({ ticketId, voteCount, voterNames }: { ticketId: string; voteCount: number; voterNames: string[] }) => {
+    socket.on('scrum:vote:received', ({ ticketId, voterNames }: { ticketId: string; voteCount: number; voterNames: string[] }) => {
       setRoom((prev) => {
         if (!prev) return prev
         return {

@@ -100,7 +100,8 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
   function toggleTicketSelect(ticketId: string) {
     setSelectedTicketIds((prev) => {
       const next = new Set(prev)
-      next.has(ticketId) ? next.delete(ticketId) : next.add(ticketId)
+      if (next.has(ticketId)) next.delete(ticketId)
+      else next.add(ticketId)
       return next
     })
   }

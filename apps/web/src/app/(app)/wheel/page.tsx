@@ -18,14 +18,6 @@ const CARD_COLORS = [
   'from-violet-500 to-fuchsia-600',
 ]
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
 
 function formatShortDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })

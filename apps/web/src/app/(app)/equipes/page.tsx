@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useTeams } from '@/hooks/useDaily'
-import type { DailyTeam, DailyTeamMember } from '@/hooks/useDaily'
+import type { DailyTeam } from '@/hooks/useDaily'
 
 // ── Color palette ─────────────────────────────────────────────────────────────
 

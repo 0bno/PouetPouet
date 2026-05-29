@@ -181,9 +181,7 @@ export function useBoard(boardId: string) {
   }
 
   // Derived from refs — stable after bumpHistory
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const canUndo = undoStackRef.current.length > 0
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const canRedo = redoStackRef.current.length > 0
 
   useEffect(() => {

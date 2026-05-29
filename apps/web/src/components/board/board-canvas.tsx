@@ -457,7 +457,8 @@ export function BoardCanvas({
   function handleSelect(id: string, add: boolean) {
     if (add) {
       const next = new Set(selectedIds)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       onSelectCards(next)
     } else {
       onSelectCards(new Set([id]))
