@@ -1,5 +1,18 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
+// Carries the HTTP status and the server's business `code` (e.g. EMAIL_NOT_VERIFIED)
+// so callers can branch on the exact failure instead of only the message.
+export class ApiError extends Error {
+  status: number
+  code?: string
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('token')
@@ -27,7 +40,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     if (res.status === 401 && typeof err.code === 'string' && err.code.startsWith('FST_JWT')) {
       onUnauthorized?.()
     }
-    throw new Error(err.error ?? 'Erreur inconnue')
+    throw new ApiError(err.error ?? 'Erreur inconnue', res.status, typeof err.code === 'string' ? err.code : undefined)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>

@@ -8,15 +8,18 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  avatar    String?
-  bio       String?
-  theme     String   @default("light")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String
+  password           String
+  avatar             String?
+  bio                String?
+  theme              String    @default("light")
+  emailVerified      Boolean   @default(false)
+  verifyToken        String?   @unique
+  verifyTokenExpires DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   boards         Board[]
   boardShares    BoardShare[]

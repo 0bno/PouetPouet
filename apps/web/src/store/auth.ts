@@ -11,6 +11,7 @@ export interface User {
   avatar: string | null
   bio: string | null
   theme: 'light' | 'dark'
+  emailVerified: boolean
   createdAt: string
 }
 
@@ -19,6 +20,11 @@ interface AuthResponse {
   token: string
 }
 
+// Register either logs the user in (test bypass) or leaves the account pending verification.
+export type RegisterResult =
+  | { status: 'logged-in' }
+  | { status: 'pending'; email: string; emailSent: boolean; devLink?: string }
+
 interface AuthState {
   user: User | null
   token: string | null
@@ -26,7 +32,9 @@ interface AuthState {
   error: string | null
   sessionExpired: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
+  register: (name: string, email: string, password: string, bypass?: boolean) => Promise<RegisterResult>
+  verifyEmail: (token: string) => Promise<void>
+  resendVerification: (email: string) => Promise<{ devLink?: string }>
   logout: () => void
   expireSession: () => void
   refreshSession: () => Promise<void>
@@ -57,16 +65,33 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (name, email, password) => {
+      register: async (name, email, password, bypass = false) => {
         set({ isLoading: true, error: null })
         try {
-          const data = await api.post<AuthResponse>('/api/auth/register', { name, email, password })
-          localStorage.setItem('token', data.token)
-          set({ user: data.user, token: data.token, isLoading: false, sessionExpired: false })
+          const data = await api.post<
+            AuthResponse | { pending: true; email: string; emailSent: boolean; devLink?: string }
+          >('/api/auth/register', { name, email, password, bypass })
+          if ('token' in data) {
+            localStorage.setItem('token', data.token)
+            set({ user: data.user, token: data.token, isLoading: false, sessionExpired: false })
+            return { status: 'logged-in' }
+          }
+          set({ isLoading: false })
+          return { status: 'pending', email: data.email, emailSent: data.emailSent, devLink: data.devLink }
         } catch (err) {
           set({ error: (err as Error).message, isLoading: false })
           throw err
         }
+      },
+
+      verifyEmail: async (token) => {
+        const data = await api.post<AuthResponse>('/api/auth/verify-email', { token })
+        localStorage.setItem('token', data.token)
+        set({ user: data.user, token: data.token, isLoading: false, sessionExpired: false })
+      },
+
+      resendVerification: async (email) => {
+        return api.post<{ ok: true; devLink?: string }>('/api/auth/resend-verification', { email })
       },
 
       logout: () => {

@@ -1,22 +1,34 @@
 import type { FastifyPluginAsync } from 'fastify'
+import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
+import { sendVerificationEmail } from '../lib/mailer.js'
 
 const USER_SELECT = {
-  id: true, email: true, name: true, avatar: true, bio: true, theme: true, createdAt: true,
+  id: true, email: true, name: true, avatar: true, bio: true, theme: true, emailVerified: true, createdAt: true,
 } as const
+
+// Test-only shortcut, controlled by env, so the email step can be skipped while building.
+// Set ALLOW_EMAIL_BYPASS=false (or leave unset) in production to disable it entirely.
+const ALLOW_BYPASS = process.env.ALLOW_EMAIL_BYPASS === 'true'
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000
 
 const registerSchema = z.object({
   email: z.string().email(),
   name: z.string().min(2),
   password: z.string().min(8),
+  bypass: z.boolean().optional(),
 })
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
 })
+
+const verifySchema = z.object({ token: z.string().min(10) })
+const resendSchema = z.object({ email: z.string().email() })
 
 const profileSchema = z.object({
   name: z.string().min(2).optional(),
@@ -33,6 +45,21 @@ const passwordSchema = z.object({
   next: z.string().min(8),
 })
 
+// Issues a fresh verification token, persists it, and emails the link.
+// Returns whether the mail was actually sent over SMTP, plus a dev link to surface
+// in the UI when there is no SMTP (only while the bypass is allowed).
+async function issueVerification(user: { id: string; email: string; name: string }) {
+  const token = crypto.randomBytes(32).toString('hex')
+  const expires = new Date(Date.now() + VERIFY_TTL_MS)
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { verifyToken: token, verifyTokenExpires: expires },
+  })
+  const link = `${FRONTEND_URL}/verify-email?token=${token}`
+  const sent = await sendVerificationEmail(user.email, user.name, link)
+  return { sent, devLink: !sent && ALLOW_BYPASS ? link : undefined }
+}
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/register', async (request, reply) => {
     const body = registerSchema.parse(request.body)
@@ -40,13 +67,23 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (existing) return reply.status(409).send({ error: 'Email déjà utilisé' })
 
     const hashed = await bcrypt.hash(body.password, 12)
+
+    // Test bypass: create an already-verified account and log in immediately.
+    if (body.bypass && ALLOW_BYPASS) {
+      const user = await prisma.user.create({
+        data: { email: body.email, name: body.name, password: hashed, emailVerified: true },
+        select: USER_SELECT,
+      })
+      const token = app.jwt.sign({ id: user.id, email: user.email })
+      return reply.send({ user, token })
+    }
+
     const user = await prisma.user.create({
       data: { email: body.email, name: body.name, password: hashed },
-      select: USER_SELECT,
+      select: { id: true, email: true, name: true },
     })
-
-    const token = app.jwt.sign({ id: user.id, email: user.email })
-    return reply.send({ user, token })
+    const { sent, devLink } = await issueVerification(user)
+    return reply.send({ pending: true, email: user.email, emailSent: sent, devLink })
   })
 
   app.post('/login', async (request, reply) => {
@@ -57,9 +94,43 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const valid = await bcrypt.compare(body.password, user.password)
     if (!valid) return reply.status(401).send({ error: 'Identifiants invalides' })
 
+    if (!user.emailVerified) {
+      return reply.status(403).send({
+        error: 'Veuillez vérifier votre adresse email avant de vous connecter.',
+        code: 'EMAIL_NOT_VERIFIED',
+      })
+    }
+
     const token = app.jwt.sign({ id: user.id, email: user.email })
-    const { password: _, ...safeUser } = user
+    const { password: _, verifyToken: __, verifyTokenExpires: ___, ...safeUser } = user
     return reply.send({ user: safeUser, token })
+  })
+
+  app.post('/verify-email', async (request, reply) => {
+    const { token } = verifySchema.parse(request.body)
+    const user = await prisma.user.findUnique({ where: { verifyToken: token } })
+    if (!user || !user.verifyTokenExpires || user.verifyTokenExpires < new Date()) {
+      return reply.status(400).send({ error: 'Lien invalide ou expiré.', code: 'INVALID_TOKEN' })
+    }
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true, verifyToken: null, verifyTokenExpires: null },
+      select: USER_SELECT,
+    })
+    // Verifying also logs the user in for a seamless first experience.
+    const jwt = app.jwt.sign({ id: updated.id, email: updated.email })
+    return reply.send({ user: updated, token: jwt })
+  })
+
+  app.post('/resend-verification', async (request, reply) => {
+    const { email } = resendSchema.parse(request.body)
+    const user = await prisma.user.findUnique({ where: { email } })
+    // Always answer ok so we never leak whether an account exists or is already verified.
+    if (user && !user.emailVerified) {
+      const { devLink } = await issueVerification(user)
+      return reply.send({ ok: true, devLink })
+    }
+    return reply.send({ ok: true })
   })
 
   app.post('/refresh', { preHandler: [app.authenticate] }, async (request, reply) => {

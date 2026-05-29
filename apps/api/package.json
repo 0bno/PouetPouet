@@ -14,22 +14,24 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@pouetpouet/shared": "*",
-    "@prisma/client": "^6.8.2",
-    "fastify": "^5.3.2",
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^10.0.2",
     "@fastify/jwt": "^10.0.0",
-    "@fastify/cookie": "^11.0.2",
-    "socket.io": "^4.8.1",
-    "ioredis": "^5.6.1",
+    "@pouetpouet/shared": "*",
+    "@prisma/client": "^6.8.2",
+    "@types/nodemailer": "^8.0.0",
     "bcryptjs": "^3.0.2",
+    "fastify": "^5.3.2",
+    "ioredis": "^5.6.1",
+    "nodemailer": "^8.0.10",
+    "socket.io": "^4.8.1",
     "zod": "^3.24.4"
   },
   "devDependencies": {
-    "@types/node": "^22.15.17",
     "@types/bcryptjs": "^2.4.6",
-    "typescript": "^5.8.3",
+    "@types/node": "^22.15.17",
+    "prisma": "^6.8.2",
     "tsx": "^4.19.4",
-    "prisma": "^6.8.2"
+    "typescript": "^5.8.3"
   }
 }
