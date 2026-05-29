@@ -430,7 +430,10 @@ export default function DailyPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 dark:text-white truncate">{session.name}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {session.participants.length} participants · {formatDuration(session.timePerPerson)}/personne · {formatDate(session.createdAt)}
+                        {session.participants.length} participants · {formatDuration(session.timePerPerson)}/personne
+                        {session.status === 'DONE' && session.startedAt && session.endedAt
+                          ? ` · ${formatDate(session.startedAt)} · ${formatDuration(Math.floor((new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 1000))}`
+                          : ` · ${formatDate(session.createdAt)}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

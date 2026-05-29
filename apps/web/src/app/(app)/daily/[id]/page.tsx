@@ -119,6 +119,7 @@ export default function DailySessionPage({ params }: { params: Promise<{ id: str
     ? session.participants.find((p) => p.order === currentSpeaker.order + 1) ?? null
     : null
   const remaining = session.participants.filter((p) => p.status === 'WAITING').length
+  const isLastSpeaker = remaining === 0 && session.status === 'RUNNING'
   const done = session.participants.filter((p) => p.status === 'DONE' || p.status === 'SKIPPED').length
   const speakerRemaining = session.timePerPerson - speakerElapsed
   const isOverTime = speakerElapsed > session.timePerPerson
@@ -210,17 +211,23 @@ export default function DailySessionPage({ params }: { params: Promise<{ id: str
 
             {/* Controls */}
             <div className="flex gap-3 mt-2">
+              {!isLastSpeaker && (
+                <button
+                  onClick={skip}
+                  className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                >
+                  Sauter →
+                </button>
+              )}
               <button
-                onClick={skip}
-                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                onClick={isLastSpeaker ? end : next}
+                className={`px-6 py-2 rounded-xl text-white text-sm font-semibold transition-colors ${
+                  isLastSpeaker
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
               >
-                Sauter →
-              </button>
-              <button
-                onClick={next}
-                className="px-6 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
-              >
-                Passer la parole →
+                {isLastSpeaker ? '✓ Terminer le daily' : 'Passer la parole →'}
               </button>
             </div>
           </div>

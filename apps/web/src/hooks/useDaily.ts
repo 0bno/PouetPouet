@@ -116,6 +116,7 @@ export function useDailySession(sessionId: string) {
   const [isLoading, setIsLoading] = useState(true)
   const [tick, setTick] = useState(0)
   const socketRef = useRef(connectSocket())
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     const socket = socketRef.current
@@ -126,8 +127,7 @@ export function useDailySession(sessionId: string) {
       setIsLoading(false)
     })
 
-    // Tick every second to refresh computed timers
-    const interval = setInterval(() => setTick((t) => t + 1), 1000)
+    intervalRef.current = setInterval(() => setTick((t) => t + 1), 1000)
 
     api.get<DailySession>(`/api/daily/sessions/${sessionId}`).then((s) => {
       setSession(s)
@@ -136,9 +136,17 @@ export function useDailySession(sessionId: string) {
 
     return () => {
       socket.off('daily:state')
-      clearInterval(interval)
+      if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [sessionId])
+
+  // Stop ticking when session is done
+  useEffect(() => {
+    if (session?.status === 'DONE' && intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [session?.status])
 
   const shuffle = useCallback(() => {
     socketRef.current.emit('daily:shuffle', sessionId)
@@ -160,11 +168,12 @@ export function useDailySession(sessionId: string) {
     socketRef.current.emit('daily:end', sessionId)
   }, [sessionId])
 
-  // Computed timer values (seconds)
+  // Computed timer values (seconds) — capped at endedAt when session is DONE
   const sessionElapsed = (() => {
     if (!session?.startedAt) return 0
     const started = new Date(session.startedAt).getTime()
-    return Math.floor((Date.now() - started) / 1000)
+    const ceiling = session.endedAt ? new Date(session.endedAt).getTime() : Date.now()
+    return Math.floor((ceiling - started) / 1000)
   })()
 
   const speakerElapsed = (() => {
