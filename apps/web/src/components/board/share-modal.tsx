@@ -25,9 +25,11 @@ interface ShareInfo {
 interface Props {
   boardId: string
   onClose: () => void
+  onExportPdf: () => void
+  exporting: boolean
 }
 
-export function ShareModal({ boardId, onClose }: Props) {
+export function ShareModal({ boardId, onClose, onExportPdf, exporting }: Props) {
   const [info, setInfo] = useState<ShareInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -130,6 +132,33 @@ export function ShareModal({ boardId, onClose }: Props) {
             </svg>
           </button>
         </div>
+
+        {/* Export PDF */}
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <span className="text-sm font-medium text-gray-700">Exporter en PDF</span>
+            <p className="text-xs text-gray-400 mt-0.5">Tout le board ajusté sur une page</p>
+          </div>
+          <button
+            onClick={onExportPdf}
+            disabled={exporting}
+            className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-wait"
+          >
+            {exporting ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 7H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            )}
+            {exporting ? 'Export…' : 'PDF'}
+          </button>
+        </div>
+
+        <hr className="border-gray-100" />
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
