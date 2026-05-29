@@ -42,6 +42,7 @@ interface AuthState {
   updateProfile: (data: { name?: string; bio?: string | null; theme?: 'light' | 'dark' }) => Promise<void>
   updateAvatar: (avatar: string | null) => Promise<void>
   changePassword: (current: string, next: string) => Promise<void>
+  deleteAccount: (password: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -126,6 +127,12 @@ export const useAuthStore = create<AuthState>()(
 
       changePassword: async (current, next) => {
         await api.patch('/api/auth/password', { current, next })
+      },
+
+      deleteAccount: async (password) => {
+        await api.post('/api/auth/delete-account', { password })
+        localStorage.removeItem('token')
+        set({ user: null, token: null, sessionExpired: false })
       },
     }),
     {

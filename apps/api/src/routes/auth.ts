@@ -45,6 +45,10 @@ const passwordSchema = z.object({
   next: z.string().min(8),
 })
 
+const deleteAccountSchema = z.object({
+  password: z.string(),
+})
+
 // Issues a fresh verification token, persists it, and emails the link.
 // Returns whether the mail was actually sent over SMTP, plus a dev link to surface
 // in the UI when there is no SMTP (only while the bypass is allowed).
@@ -173,6 +177,19 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!valid) return reply.status(401).send({ error: 'Mot de passe actuel incorrect' })
     const hashed = await bcrypt.hash(body.next, 12)
     await prisma.user.update({ where: { id }, data: { password: hashed } })
+    return reply.send({ ok: true })
+  })
+
+  // Permanent account deletion. Requires the current password as confirmation.
+  // All owned data cascades via the schema's onDelete rules.
+  app.post('/delete-account', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.user as { id: string }
+    const { password } = deleteAccountSchema.parse(request.body)
+    const user = await prisma.user.findUnique({ where: { id } })
+    if (!user) return reply.status(404).send({ error: 'Utilisateur introuvable' })
+    const valid = await bcrypt.compare(password, user.password)
+    if (!valid) return reply.status(401).send({ error: 'Mot de passe incorrect' })
+    await prisma.user.delete({ where: { id } })
     return reply.send({ ok: true })
   })
 }

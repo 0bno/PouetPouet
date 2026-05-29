@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth'
 
 function resizeImage(file: File, maxPx: number): Promise<string> {
@@ -47,7 +48,8 @@ function SuccessBadge({ show }: { show: boolean }) {
 }
 
 export default function ProfilePage() {
-  const { user, updateProfile, updateAvatar, changePassword } = useAuthStore()
+  const { user, updateProfile, updateAvatar, changePassword, deleteAccount } = useAuthStore()
+  const router = useRouter()
 
   // Sync local state when user changes
   const [name, setName] = useState(user?.name ?? '')
@@ -69,7 +71,31 @@ export default function ProfilePage() {
   const [pwdSuccess, setPwdSuccess] = useState(false)
   const [pwdSaving, setPwdSaving] = useState(false)
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletePwd, setDeletePwd] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
   if (!user) return null
+
+  function closeDeleteModal() {
+    setShowDeleteModal(false)
+    setDeletePwd('')
+    setDeleteError('')
+  }
+
+  async function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault()
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      await deleteAccount(deletePwd)
+      router.replace('/login')
+    } catch (err) {
+      setDeleteError((err as Error).message)
+      setDeleting(false)
+    }
+  }
 
   async function handleSaveInfo(e: React.FormEvent) {
     e.preventDefault()
@@ -321,6 +347,83 @@ export default function ProfilePage() {
           </div>
         </div>
       </SectionCard>
+
+      {/* ── Zone de danger ── */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-red-200 dark:border-red-900/50 shadow-sm p-6">
+        <h2 className="text-xs font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider mb-5">Zone de danger</h2>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Supprimer mon compte</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+              Efface définitivement votre compte et toutes vos données (boards, dailys, salles, équipes…). Irréversible.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="shrink-0 px-4 py-2 rounded-xl border border-red-200 dark:border-red-900/60 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+          >
+            Supprimer
+          </button>
+        </div>
+      </div>
+
+      {/* ── Modale de confirmation de suppression ── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={closeDeleteModal}>
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleDeleteAccount}
+            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-red-50 dark:bg-red-950 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Supprimer le compte ?</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Cette action est <span className="font-semibold text-red-600 dark:text-red-400">définitive</span>. Toutes vos données seront supprimées et ne pourront pas être récupérées.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Confirmez avec votre mot de passe
+              </label>
+              <input
+                autoFocus
+                type="password"
+                value={deletePwd}
+                onChange={(e) => setDeletePwd(e.target.value)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+              {deleteError && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{deleteError}</p>}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={deleting || !deletePwd}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Suppression…' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
