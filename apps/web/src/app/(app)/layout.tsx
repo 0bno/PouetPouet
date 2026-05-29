@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore, tokenTimes } from '@/store/auth'
+import { useAuthHydrated } from '@/hooks/useAuthHydrated'
 import { Logo } from '@/components/ui/logo'
 import { SessionExpiredModal } from '@/components/session-expired-modal'
 import { SessionCountdown } from '@/components/session-countdown'
@@ -22,12 +23,13 @@ function Avatar({ name, src }: { name: string; src?: string | null }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { token, user, logout, expireSession, refreshSession, sessionExpired } = useAuthStore()
+  const hydrated = useAuthHydrated()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
-    if (!token) router.replace('/login')
-  }, [token, router])
+    if (hydrated && !token) router.replace('/login')
+  }, [hydrated, token, router])
 
   // Fire the session-expired state exactly when the JWT's `exp` is reached.
   // If the stored token is already dead on load, clear it so the guard bounces to /login.
@@ -72,6 +74,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       document.documentElement.classList.remove('dark')
     }
   }, [user?.theme])
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   if (!token || !user) return null
 

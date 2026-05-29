@@ -3,14 +3,16 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth'
+import { useAuthHydrated } from '@/hooks/useAuthHydrated'
 
 export default function RootPage() {
   const { token } = useAuthStore()
+  const hydrated = useAuthHydrated()
   const router = useRouter()
 
   useEffect(() => {
-    router.replace(token ? '/dashboard' : '/login')
-  }, [token, router])
+    if (hydrated) router.replace(token ? '/dashboard' : '/login')
+  }, [hydrated, token, router])
 
   return null
 }

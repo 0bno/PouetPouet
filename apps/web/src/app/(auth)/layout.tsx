@@ -3,14 +3,16 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth'
+import { useAuthHydrated } from '@/hooks/useAuthHydrated'
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
+  const hydrated = useAuthHydrated()
   const router = useRouter()
 
   useEffect(() => {
-    if (token) router.replace('/dashboard')
-  }, [token, router])
+    if (hydrated && token) router.replace('/dashboard')
+  }, [hydrated, token, router])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 flex items-center justify-center p-4">
