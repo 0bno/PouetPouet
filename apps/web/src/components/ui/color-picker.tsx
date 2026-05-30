@@ -23,59 +23,66 @@ export function ColorPicker({ value, onChange, columns = 7 }: ColorPickerProps) 
     setRecents(pushRecentColor(value))
   }
 
+  const gridStyle = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }
+
+  function swatch(c: string, h: string) {
+    const selected = norm === c.toLowerCase()
+    return (
+      <button
+        key={c}
+        title={c}
+        onClick={() => onChange(c)}
+        className={`relative w-full ${h} rounded-lg transition-transform hover:scale-105`}
+        style={{ background: c, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)' }}
+      >
+        {selected && <span className="absolute -inset-0.5 rounded-[10px] ring-2 ring-indigo-500" />}
+      </button>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-1.5" onMouseDown={(e) => e.stopPropagation()}>
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {BASE_COLORS.map((c) => (
-          <button
-            key={c}
-            title={c}
-            onClick={() => onChange(c)}
-            className={`w-5 h-5 rounded-full transition-transform hover:scale-110 ${
-              norm === c.toLowerCase() ? 'ring-2 ring-offset-1 ring-gray-700' : 'ring-1 ring-black/10 shadow-sm'
-            }`}
-            style={{ background: c }}
-          />
-        ))}
-        <button
-          title="Couleur personnalisée"
-          onClick={() => setShowCustom((v) => !v)}
-          className={`w-5 h-5 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${
-            showCustom ? 'ring-2 ring-gray-700' : 'ring-1 ring-black/10 shadow-sm'
-          }`}
-          style={{ background: 'conic-gradient(red, orange, yellow, lime, cyan, blue, magenta, red)' }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-white/90" />
-        </button>
+    <div className="flex flex-col gap-2.5 w-44" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="grid gap-1.5" style={gridStyle}>
+        {BASE_COLORS.map((c) => swatch(c, 'h-6'))}
       </div>
 
       {recents.length > 0 && (
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-[9px] text-gray-400 mr-0.5">Récentes</span>
-          {recents.map((c) => (
-            <button
-              key={c}
-              title={c}
-              onClick={() => onChange(c)}
-              className={`w-4 h-4 rounded-full transition-transform hover:scale-110 ${
-                norm === c.toLowerCase() ? 'ring-2 ring-gray-700' : 'ring-1 ring-black/10 shadow-sm'
-              }`}
-              style={{ background: c }}
-            />
-          ))}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Récentes</span>
+          <div className="grid gap-1.5" style={gridStyle}>
+            {recents.map((c) => swatch(c, 'h-5'))}
+          </div>
         </div>
       )}
 
+      <button
+        type="button"
+        onClick={() => setShowCustom((v) => !v)}
+        className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+      >
+        <span
+          className="w-4 h-4 rounded-full shrink-0"
+          style={{ background: 'conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #0ea5e9, #6366f1, #ec4899, #ef4444)' }}
+        />
+        Personnalisée
+        <svg className={`w-3.5 h-3.5 ml-auto text-gray-400 transition-transform ${showCustom ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
       {showCustom && (
-        <div className="pp-colorful flex flex-col gap-2 pt-0.5">
+        <div className="pp-colorful flex flex-col gap-2">
           <HexColorPicker color={value} onChange={onChange} onMouseUp={commitRecent} onTouchEnd={commitRecent} />
-          <HexColorInput
-            color={value}
-            onChange={onChange}
-            onBlur={commitRecent}
-            prefixed
-            className="w-24 rounded-md border border-gray-200 px-2 py-1 text-xs uppercase text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-          />
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-md shrink-0" style={{ background: value, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.1)' }} />
+            <HexColorInput
+              color={value}
+              onChange={onChange}
+              onBlur={commitRecent}
+              prefixed
+              className="flex-1 min-w-0 rounded-md border border-gray-200 px-2 py-1 text-xs uppercase text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
+          </div>
         </div>
       )}
     </div>
@@ -89,35 +96,54 @@ interface ColorPopoverProps {
   align?: 'left' | 'right'
 }
 
-// A single current-color swatch that opens the ColorPicker in a popover — for tight
-// rows (e.g. the selection bar) where the full inline picker doesn't fit.
+// A single current-color swatch that opens the ColorPicker in a fixed-position popover
+// (measured off the trigger, like the presence dropdown) so it never breaks tight rows.
 export function ColorPopover({ value, onChange, title = 'Couleur', align = 'right' }: ColorPopoverProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  function toggle() {
+    if (open) { setOpen(false); return }
+    if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect())
+    setOpen(true)
+  }
 
   useEffect(() => {
     if (!open) return
     function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return
+      setOpen(false)
     }
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [open])
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         title={title}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className="w-5 h-5 rounded-full ring-1 ring-black/15 shadow-sm hover:scale-110 transition-transform"
         style={{ background: value }}
       />
-      {open && (
-        <div className={`absolute z-[60] mt-2 ${align === 'right' ? 'right-0' : 'left-0'} bg-white rounded-xl shadow-xl border border-gray-200 p-2.5`}>
+      {open && rect && (
+        <div
+          ref={panelRef}
+          style={{
+            position: 'fixed',
+            top: rect.bottom + 8,
+            ...(align === 'right' ? { right: window.innerWidth - rect.right } : { left: rect.left }),
+          }}
+          className="z-[200] bg-white rounded-2xl shadow-xl border border-gray-100 p-3"
+        >
           <ColorPicker value={value} onChange={onChange} />
         </div>
       )}
-    </div>
+    </>
   )
 }
