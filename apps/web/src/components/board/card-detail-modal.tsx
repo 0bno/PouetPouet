@@ -2,15 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import type { Card, BoardField } from '@/hooks/useBoard'
+import { ColorPicker } from '@/components/ui/color-picker'
 
 const FIELD_TYPE_ICONS: Record<string, string> = {
   TEXT: '✏️', NUMBER: '#', DATE: '📅', SELECT: '▾',
 }
-
-const CARD_COLORS = [
-  '#FEF08A', '#86EFAC', '#93C5FD', '#F9A8D4', '#FCA5A5', '#C4B5FD', '#FED7AA',
-  '#A7F3D0', '#BAE6FD', '#F5D0FE', '#FECDD3', '#E0E7FF', '#FFFFFF', '#F3F4F6',
-]
 
 function fieldIcon(field: { emoji: string | null; type: string }): string {
   return field.emoji || FIELD_TYPE_ICONS[field.type] || '•'
@@ -65,19 +61,7 @@ export function CardDetailModal({ card, fields, onUpdateCard, onRecolorCard, onS
           {/* Color picker */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Couleur</label>
-            <div className="flex flex-wrap gap-2">
-              {CARD_COLORS.map((c) => (
-                <button
-                  key={c}
-                  title={c}
-                  onClick={() => onRecolorCard(card.id, c)}
-                  className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${
-                    card.color === c ? 'border-gray-700 scale-110 shadow-md' : 'border-white shadow-sm ring-1 ring-gray-200'
-                  }`}
-                  style={{ background: c }}
-                />
-              ))}
-            </div>
+            <ColorPicker value={card.color} onChange={(c) => onRecolorCard(card.id, c)} columns={7} />
           </div>
 
           {/* Content */}

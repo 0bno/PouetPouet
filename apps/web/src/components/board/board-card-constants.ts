@@ -1,7 +1,3 @@
-export const SHAPE_PALETTE = ['#6366f1', '#ef4444', '#f97316', '#eab308', '#22c55e', '#0ea5e9', '#8b5cf6', '#ec4899', '#475569']
-
-export const LABEL_COLORS = ['#374151', '#1d4ed8', '#15803d', '#b91c1c', '#7c3aed', '#b45309', '#000000', '#ffffff']
-
 export const CHIP_STYLE: Record<string, string> = {
   TEXT:   'bg-blue-50   text-blue-700   border-blue-100',
   NUMBER: 'bg-orange-50 text-orange-700 border-orange-100',

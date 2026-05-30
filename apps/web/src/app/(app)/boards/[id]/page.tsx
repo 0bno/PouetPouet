@@ -22,6 +22,7 @@ import { VoteEndOverlay } from '@/components/board/vote-end-overlay'
 import { PresenceIndicator } from '@/components/board/presence-indicator'
 import { TemplateDraftBanner } from '@/components/board/template-draft-banner'
 import { useAuthStore } from '@/store/auth'
+import { ColorPopover } from '@/components/ui/color-picker'
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -437,15 +438,12 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             {!isReadonly && (
               <>
                 <div className="w-px h-4 bg-indigo-200" />
-                {['#FEF08A', '#86EFAC', '#93C5FD', '#F9A8D4', '#FCA5A5', '#C4B5FD', '#FED7AA'].map((c) => (
-                  <button
-                    key={c}
-                    title={`Colorier en ${c}`}
-                    onClick={() => recolorSelected(c)}
-                    className="w-4 h-4 rounded-full border border-white shadow-sm hover:scale-125 transition-transform"
-                    style={{ background: c }}
-                  />
-                ))}
+                <ColorPopover
+                  value={selectedCards[0]?.color ?? '#eab308'}
+                  onChange={(c) => recolorSelected(c)}
+                  title="Colorier la sélection"
+                  align="left"
+                />
                 <div className="w-px h-4 bg-indigo-200" />
                 {(() => {
                   const selCards = cards.filter((c) => selectedIds.has(c.id))

@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import type { Card, BoardField } from '@/hooks/useBoard'
 import { parseLabelFmt, formatFieldValue, type LabelFmt } from '@/lib/card-format'
 import { ConnectHandles, LinkCardsOverlay, FmtBtn } from './board-card-parts'
-import { LABEL_COLORS, CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
+import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
+import { ColorPicker } from '@/components/ui/color-picker'
 import { ShapeCard } from './board-card-shape'
 import { DrawCard } from './board-card-draw'
 
@@ -280,16 +281,8 @@ export function BoardCard({
 
             <div className="w-px h-4 bg-gray-200 mx-0.5" />
 
-            {/* Text colors */}
-            {LABEL_COLORS.map((c) => (
-              <button
-                key={c}
-                title={c}
-                className={`w-4 h-4 rounded-full border-2 transition-all hover:scale-110 ${labelFmt.color === c ? 'border-gray-700 scale-110' : 'border-gray-200 shadow-sm'}`}
-                style={{ background: c }}
-                onClick={() => updateLabelFmt({ color: c })}
-              />
-            ))}
+            {/* Text colors — shared picker */}
+            <ColorPicker value={labelFmt.color} onChange={(c) => updateLabelFmt({ color: c })} columns={8} />
           </div>
         )}
 

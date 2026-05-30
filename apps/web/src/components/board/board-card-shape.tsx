@@ -2,7 +2,8 @@
 
 import type { Card } from '@/hooks/useBoard'
 import { ConnectHandles, LinkCardsOverlay } from './board-card-parts'
-import { SHAPE_PALETTE, SHAPE_MIN } from './board-card-constants'
+import { SHAPE_MIN } from './board-card-constants'
+import { ColorPicker } from '@/components/ui/color-picker'
 
 interface ShapeCardProps {
   card: Card
@@ -74,16 +75,8 @@ export function ShapeCard({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Colors: single row */}
-          {SHAPE_PALETTE.map((c) => (
-            <button
-              key={c}
-              title={c}
-              className={`w-3.5 h-3.5 rounded-full border-2 transition-all hover:scale-110 ${card.color === c ? 'border-gray-700 scale-110' : 'border-white shadow-sm ring-1 ring-gray-200'}`}
-              style={{ background: c }}
-              onClick={() => onRecolor?.(card.id, c)}
-            />
-          ))}
+          {/* Shared color picker */}
+          <ColorPicker value={card.color} onChange={(c) => onRecolor?.(card.id, c)} />
 
           <div className="w-px self-stretch bg-gray-200 mx-0.5" />
 

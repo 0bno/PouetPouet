@@ -3,21 +3,8 @@
 import { useState, useCallback } from 'react'
 import { useTeams } from '@/hooks/useDaily'
 import type { DailyTeam } from '@/hooks/useDaily'
-
-// ── Color palette ─────────────────────────────────────────────────────────────
-
-const COLORS = [
-  { label: 'Indigo',   value: '#6366f1' },
-  { label: 'Violet',   value: '#8b5cf6' },
-  { label: 'Rose',     value: '#f43f5e' },
-  { label: 'Orange',   value: '#f97316' },
-  { label: 'Amber',    value: '#f59e0b' },
-  { label: 'Emerald',  value: '#10b981' },
-  { label: 'Teal',     value: '#14b8a6' },
-  { label: 'Sky',      value: '#0ea5e9' },
-  { label: 'Pink',     value: '#ec4899' },
-  { label: 'Slate',    value: '#64748b' },
-]
+import { ColorPicker } from '@/components/ui/color-picker'
+import { DEFAULT_SHAPE_COLOR } from '@/lib/colors'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,7 +83,7 @@ function TeamModal({
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [color, setColor] = useState(initial?.color ?? COLORS[0].value)
+  const [color, setColor] = useState(initial?.color ?? DEFAULT_SHAPE_COLOR)
   const [members, setMembers] = useState<string[]>(
     initial?.members.map((m) => m.name) ?? ['']
   )
@@ -165,18 +152,7 @@ function TeamModal({
           {/* Color */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Couleur</label>
-            <div className="flex flex-wrap gap-2">
-              {COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => setColor(c.value)}
-                  title={c.label}
-                  className={`w-8 h-8 rounded-full transition-transform ${color === c.value ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'}`}
-                  style={{ background: c.value }}
-                />
-              ))}
-            </div>
+            <ColorPicker value={color} onChange={setColor} columns={7} />
           </div>
 
           {/* Members */}

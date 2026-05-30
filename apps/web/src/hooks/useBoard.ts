@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { connectSocket } from '@/lib/socket'
 
-import { CARD_COLORS } from './board-types'
+import { DEFAULT_CARD_COLOR } from '@/lib/colors'
 import type {
   FieldValue, Card, Connection, Frame, BoardField, BoardDetail,
   PresenceUser, BoardMember, VoteSession,
@@ -229,7 +229,7 @@ export function useBoard(boardId: string) {
 
   // ── Cards ─────────────────────────────────────────────────────────────────────
   function addCard(posX: number, posY: number, type?: string, content?: string, color?: string, width?: number, height?: number) {
-    const cardColor = color ?? CARD_COLORS[Math.floor(Math.random() * CARD_COLORS.length)]
+    const cardColor = color ?? DEFAULT_CARD_COLOR
     const extra: Record<string, number> = {}
     if (width !== undefined) extra.width = width
     if (height !== undefined) extra.height = height

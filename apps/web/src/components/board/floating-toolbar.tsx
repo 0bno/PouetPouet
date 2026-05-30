@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useLayoutEffect, forwardRef } from 'react'
+import { ColorPicker } from '@/components/ui/color-picker'
+import { DEFAULT_CARD_COLOR, DEFAULT_SHAPE_COLOR } from '@/lib/colors'
 
 export type ToolMode = 'select' | 'pan' | 'text' | 'sticky' | 'rect' | 'circle' | 'diamond' | 'triangle' | 'draw' | 'link' | 'link-cards'
 export type StrokeSize = 'thin' | 'medium' | 'thick'
@@ -14,9 +16,6 @@ interface Props {
   minTop?: number
   onToolChange: (tool: ToolMode, color?: string, stroke?: StrokeSize, fill?: boolean, opacity?: number) => void
 }
-
-const STICKY_COLORS = ['#FEF08A', '#86EFAC', '#93C5FD', '#F9A8D4', '#FCA5A5', '#C4B5FD', '#FED7AA']
-const SHAPE_COLORS  = ['#6366f1', '#ef4444', '#f97316', '#eab308', '#22c55e', '#0ea5e9', '#8b5cf6', '#ec4899', '#475569']
 
 const TOOLBAR_W = 48
 const GAP = 8
@@ -79,7 +78,6 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
   const isDraw     = toolMode === 'draw'
   const isSticky   = toolMode === 'sticky'
   const showFlyout = !collapsed && (isShape || isDraw || isSticky)
-  const colorSet   = isSticky ? STICKY_COLORS : SHAPE_COLORS
 
   // Measure the active tool button's viewport top so the flyout lines up with it.
   useLayoutEffect(() => {
@@ -145,7 +143,7 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
                 <path strokeLinecap="round" d="M4 6h16M12 6v13M8 19h8" />
               </svg>
             </Btn>
-            <Btn ref={isSticky ? flyoutAnchorRef : undefined} mode="sticky" current={toolMode} label="Note adhésive" onClick={() => onToolChange('sticky', toolMode === 'sticky' ? toolColor : STICKY_COLORS[0])}>
+            <Btn ref={isSticky ? flyoutAnchorRef : undefined} mode="sticky" current={toolMode} label="Note adhésive" onClick={() => onToolChange('sticky', toolMode === 'sticky' ? toolColor : DEFAULT_CARD_COLOR)}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
@@ -157,7 +155,7 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
             <button
               ref={isShape ? flyoutAnchorRef : undefined}
               title="Formes"
-              onClick={(e) => { onToolChange(lastShape, isShape ? toolColor : SHAPE_COLORS[0]); e.currentTarget.blur() }}
+              onClick={(e) => { onToolChange(lastShape, isShape ? toolColor : DEFAULT_SHAPE_COLOR); e.currentTarget.blur() }}
               className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all focus:outline-none ${
                 isShape ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
               }`}
@@ -173,7 +171,7 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
 
             <Sep />
 
-            <Btn ref={isDraw ? flyoutAnchorRef : undefined} mode="draw" current={toolMode} label="Dessin libre" onClick={() => onToolChange('draw', toolMode === 'draw' ? toolColor : SHAPE_COLORS[0])}>
+            <Btn ref={isDraw ? flyoutAnchorRef : undefined} mode="draw" current={toolMode} label="Dessin libre" onClick={() => onToolChange('draw', toolMode === 'draw' ? toolColor : DEFAULT_SHAPE_COLOR)}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
@@ -230,18 +228,8 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
             </>
           )}
 
-          {/* Color grid: 3 cols for shapes/draw (9 colors), 4 cols for sticky (7 colors) */}
-          <div className={`grid gap-1.5 ${isSticky ? 'grid-cols-4' : 'grid-cols-3'}`}>
-            {colorSet.map((c) => (
-              <button
-                key={c}
-                title={c}
-                className={`w-5 h-5 rounded-full border-2 transition-all hover:scale-110 ${toolColor === c ? 'border-gray-800 scale-110 shadow-md' : 'border-white shadow-sm'}`}
-                style={{ background: c }}
-                onClick={() => onToolChange(toolMode, c)}
-              />
-            ))}
-          </div>
+          {/* Shared color picker (base palette + custom + recents) */}
+          <ColorPicker value={toolColor} onChange={(c) => onToolChange(toolMode, c)} />
 
           {/* Stroke thickness + fill: shapes only */}
           {isShape && (
