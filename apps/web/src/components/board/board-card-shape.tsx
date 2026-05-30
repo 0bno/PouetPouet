@@ -55,6 +55,25 @@ export function ShapeCard({
     vectorEffect: 'non-scaling-stroke' as const,
   }
 
+  // Flat-top hexagon that fills the box.
+  const hexPoints = [
+    [pad + (w - 2 * pad) * 0.25, pad],
+    [pad + (w - 2 * pad) * 0.75, pad],
+    [w - pad, h / 2],
+    [pad + (w - 2 * pad) * 0.75, h - pad],
+    [pad + (w - 2 * pad) * 0.25, h - pad],
+    [pad, h / 2],
+  ].map((p) => p.map((n) => n.toFixed(1)).join(',')).join(' ')
+
+  // 5-point star centred in the box.
+  const starCx = w / 2, starCy = h / 2
+  const starR = Math.min(w, h) / 2 - pad
+  const starPoints = Array.from({ length: 10 }, (_, i) => {
+    const ang = (-90 + i * 36) * (Math.PI / 180)
+    const rad = i % 2 === 0 ? starR : starR * 0.42
+    return `${(starCx + rad * Math.cos(ang)).toFixed(1)},${(starCy + rad * Math.sin(ang)).toFixed(1)}`
+  }).join(' ')
+
   return (
     <div
       data-card-id={card.id}
@@ -129,6 +148,8 @@ export function ShapeCard({
         {shapeType === 'circle' && <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) / 2 - pad} {...shapeAttrs} />}
         {shapeType === 'diamond' && <polygon points={`${w / 2},${pad} ${w - pad},${h / 2} ${w / 2},${h - pad} ${pad},${h / 2}`} {...shapeAttrs} />}
         {shapeType === 'triangle' && <polygon points={`${w / 2},${pad} ${w - pad},${h - pad} ${pad},${h - pad}`} {...shapeAttrs} />}
+        {shapeType === 'hexagon' && <polygon points={hexPoints} strokeLinejoin="round" {...shapeAttrs} />}
+        {shapeType === 'star' && <polygon points={starPoints} strokeLinejoin="round" {...shapeAttrs} />}
       </svg>
 
       {!isReadonly && (
