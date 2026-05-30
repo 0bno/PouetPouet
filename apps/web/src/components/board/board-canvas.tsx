@@ -735,6 +735,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
               fields={fields}
               zoom={zoom}
               isSelected={selectedIds.has(card.id)}
+              isMultiSelect={selectedIds.size > 1}
               groupColor={card.groupId ? groupColor(card.groupId) : undefined}
               drawMode={toolMode === 'draw'}
               isReadonly={isReadonly}

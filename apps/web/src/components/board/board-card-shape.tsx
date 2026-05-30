@@ -7,6 +7,7 @@ import { SHAPE_PALETTE, SHAPE_MIN } from './board-card-constants'
 interface ShapeCardProps {
   card: Card
   isSelected?: boolean
+  isMultiSelect?: boolean
   isReadonly?: boolean
   outline: string
   onRecolor?: (id: string, color: string) => void
@@ -23,7 +24,7 @@ interface ShapeCardProps {
 }
 
 export function ShapeCard({
-  card, isSelected, isReadonly, outline,
+  card, isSelected, isMultiSelect, isReadonly, outline,
   onRecolor, onDelete, onUpdate, onSelect, onStartConnect,
   onLinkCardsClick, linkCardsMode, isLinkSource,
   handleMouseDown, handleResizeMouseDown, isDragging,
@@ -65,8 +66,8 @@ export function ShapeCard({
         onSelect?.(card.id, false)
       }}
     >
-      {/* ── Shape editing panel (visible when selected) ── */}
-      {isSelected && !isReadonly && (
+      {/* ── Shape editing panel (visible when a single object is selected) ── */}
+      {isSelected && !isReadonly && !isMultiSelect && (
         <div
           className="absolute -top-9 left-0 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-2 py-1.5 whitespace-nowrap"
           style={{ zIndex: 10 }}

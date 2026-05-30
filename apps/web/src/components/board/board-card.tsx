@@ -13,6 +13,7 @@ interface Props {
   fields: BoardField[]
   zoom?: number
   isSelected?: boolean
+  isMultiSelect?: boolean
   groupColor?: string
   drawMode?: boolean
   isReadonly?: boolean
@@ -35,7 +36,7 @@ interface Props {
 }
 
 export function BoardCard({
-  card, fields, zoom = 1, isSelected, groupColor, drawMode, isReadonly,
+  card, fields, zoom = 1, isSelected, isMultiSelect, groupColor, drawMode, isReadonly,
   onMove, onStartDrag, onCommitDrag, onUpdate, onRecolor, onDelete,
   onResize, onStartResize, onCommitResize,
   onSelect, onOpenDetail, onStartConnect, onSetLocked,
@@ -177,6 +178,7 @@ export function BoardCard({
       <ShapeCard
         card={card}
         isSelected={isSelected}
+        isMultiSelect={isMultiSelect}
         isReadonly={isReadonly}
         outline={outline}
         onRecolor={onRecolor}
@@ -240,8 +242,8 @@ export function BoardCard({
         onClick={handleClick}
         onDoubleClick={(e) => { e.stopPropagation(); if (!isReadonly) setIsEditing(true) }}
       >
-        {/* ── Formatting toolbar (visible when selected) ── */}
-        {isSelected && !isReadonly && (
+        {/* ── Formatting toolbar (visible when a single object is selected) ── */}
+        {isSelected && !isReadonly && !isMultiSelect && (
           <div
             className="absolute -top-9 left-0 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-1.5 py-1 whitespace-nowrap"
             style={{ zIndex: 10 }}
