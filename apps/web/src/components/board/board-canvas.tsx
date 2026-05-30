@@ -143,29 +143,37 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     return { x: (clientX - rect.left - x) / zoom, y: (clientY - rect.top - y) / zoom }
   }
 
+  // Drag the viewport — shared by the middle-mouse button and the hand/pan tool.
+  function startPan(clientX: number, clientY: number) {
+    const el = containerRef.current
+    if (!el) return
+    const ox = clientX - vpRef.current.x
+    const oy = clientY - vpRef.current.y
+    el.style.cursor = 'grabbing'
+    function onMove(ev: MouseEvent) {
+      applyTransform({ ...vpRef.current, x: ev.clientX - ox, y: ev.clientY - oy })
+    }
+    function onUp() {
+      el!.style.cursor = ''
+      setViewport({ ...vpRef.current })
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // ── Middle-mouse pan ─────────────────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current!
     function onDown(e: MouseEvent) {
       if (e.button !== 1) return
       e.preventDefault()
-      const ox = e.clientX - vpRef.current.x
-      const oy = e.clientY - vpRef.current.y
-      el.style.cursor = 'grabbing'
-      function onMove(ev: MouseEvent) {
-        applyTransform({ ...vpRef.current, x: ev.clientX - ox, y: ev.clientY - oy })
-      }
-      function onUp() {
-        el.style.cursor = ''
-        setViewport({ ...vpRef.current })
-        window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
-      }
-      window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
+      startPan(e.clientX, e.clientY)
     }
     el.addEventListener('mousedown', onDown)
     return () => el.removeEventListener('mousedown', onDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Scroll-wheel zoom (toward cursor) ────────────────────────────────────────
@@ -636,6 +644,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
 
   const canvasCursor =
     isReadonly ? 'default' :
+    toolMode === 'pan' ? 'grab' :
     toolMode === 'draw' ? 'crosshair' :
     toolMode === 'link-cards' ? 'crosshair' :
     toolMode !== 'select' ? 'cell' :
@@ -835,6 +844,19 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
                 e.preventDefault()
                 e.stopPropagation()
                 startFreehandDraw(e.clientX, e.clientY)
+              }}
+            />
+          )}
+
+          {/* Pan/hand mode overlay — left-drag pans the board, like the middle-mouse button */}
+          {toolMode === 'pan' && (
+            <div
+              style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, zIndex: 150, cursor: 'grab' }}
+              onMouseDown={(e) => {
+                if (e.button !== 0) return
+                e.preventDefault()
+                e.stopPropagation()
+                startPan(e.clientX, e.clientY)
               }}
             />
           )}

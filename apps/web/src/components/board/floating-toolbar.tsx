@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, forwardRef } from 'react'
 
-export type ToolMode = 'select' | 'text' | 'sticky' | 'rect' | 'circle' | 'diamond' | 'triangle' | 'draw' | 'link' | 'link-cards'
+export type ToolMode = 'select' | 'pan' | 'text' | 'sticky' | 'rect' | 'circle' | 'diamond' | 'triangle' | 'draw' | 'link' | 'link-cards'
 export type StrokeSize = 'thin' | 'medium' | 'thick'
 
 interface Props {
@@ -130,6 +130,11 @@ export function FloatingToolbar({ toolMode, toolColor, toolStroke, toolFill, too
             <Btn mode="select" current={toolMode} label="Sélection (V)" onClick={() => onToolChange('select')}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-7 1-4 7L5 3z" />
+              </svg>
+            </Btn>
+            <Btn mode="pan" current={toolMode} label="Déplacer le board (comme le clic molette)" onClick={() => onToolChange('pan')}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 11.5V6a1.5 1.5 0 013 0m0 0v-.5a1.5 1.5 0 013 0V6m0 0a1.5 1.5 0 013 0v1.5m0 0a1.5 1.5 0 013 0V14a6 6 0 01-6 6h-2.5a6 6 0 01-4.243-1.757l-3-3a1.5 1.5 0 012.122-2.122L10 14.5" />
               </svg>
             </Btn>
 
