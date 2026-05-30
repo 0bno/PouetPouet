@@ -97,6 +97,30 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
 
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
 
+  // Hold Space to temporarily pan with left-drag, whatever the active tool.
+  const [spaceHeld, setSpaceHeld] = useState(false)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== 'Space') return
+      const t = e.target as HTMLElement
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable) return
+      e.preventDefault()
+      setSpaceHeld(true)
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code === 'Space') setSpaceHeld(false)
+    }
+    function reset() { setSpaceHeld(false) }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', reset)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', reset)
+    }
+  }, [])
+
   // Link popover (URL link)
   const [linkPopover, setLinkPopover] = useState<{ screenX: number; screenY: number; canvasX: number; canvasY: number } | null>(null)
   const [linkUrl, setLinkUrl] = useState('')
@@ -643,6 +667,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   const zoom = viewport.zoom
 
   const canvasCursor =
+    spaceHeld ? 'grab' :
     isReadonly ? 'default' :
     toolMode === 'pan' ? 'grab' :
     toolMode === 'draw' ? 'crosshair' :
@@ -835,8 +860,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
             )
           })}
 
-          {/* Draw mode overlay — sits above all cards, catches mousedown anywhere */}
-          {toolMode === 'draw' && (
+          {/* Draw mode overlay — sits above all cards, catches mousedown anywhere
+              (suppressed while Space is held so the pan overlay takes over) */}
+          {toolMode === 'draw' && !spaceHeld && (
             <div
               style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, zIndex: 150, cursor: 'crosshair' }}
               onMouseDown={(e) => {
@@ -848,10 +874,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
             />
           )}
 
-          {/* Pan/hand mode overlay — left-drag pans the board, like the middle-mouse button */}
-          {toolMode === 'pan' && (
+          {/* Pan overlay — left-drag pans the board (hand tool, or while Space is held) */}
+          {(toolMode === 'pan' || spaceHeld) && (
             <div
-              style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, zIndex: 150, cursor: 'grab' }}
+              style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, zIndex: 160, cursor: 'grab' }}
               onMouseDown={(e) => {
                 if (e.button !== 0) return
                 e.preventDefault()
