@@ -122,6 +122,10 @@ export function useBoard(boardId: string) {
     const socket = socketRef.current
     socket.emit('board:join', boardId)
 
+    // On reconnect the server clears all rooms and socket.data — re-join to restore state.
+    const handleReconnect = () => socket.emit('board:join', boardId)
+    socket.on('connect', handleReconnect)
+
     socket.on('board:state', ({ cards: sc, connections: sconn, frames: sf, fields: sfields, role }) => {
       setCards(sc as Card[])
       setConnections(sconn as Connection[])
@@ -219,6 +223,7 @@ export function useBoard(boardId: string) {
     })
 
     return () => {
+      socket.off('connect', handleReconnect)
       socket.emit('board:leave', boardId)
       ;['board:state', 'board:error', 'board:presence', 'timer:started', 'timer:stopped',
         'vote:session:started', 'vote:updated', 'vote:session:closed',

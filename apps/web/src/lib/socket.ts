@@ -7,7 +7,11 @@ let socket: Socket | null = null
 export function getSocket(): Socket {
   if (!socket) {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-    socket = io(SOCKET_URL, { autoConnect: false, auth: { token } })
+    socket = io(SOCKET_URL, {
+      autoConnect: false,
+      auth: (cb: (o: { token: string | null }) => void) =>
+        cb({ token: typeof window !== 'undefined' ? localStorage.getItem('token') : null }),
+    })
   }
   return socket
 }
