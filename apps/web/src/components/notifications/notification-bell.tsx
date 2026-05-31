@@ -276,7 +276,10 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-[360px] max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-50">
+        // The bell (h-9) is centred in the h-14 navbar, so it sits 10px above the bar's
+        // bottom; +18px from the bell lands the panel 8px below the navbar, matching the
+        // gap used by the app's other anchored popups.
+        <div className="absolute right-0 mt-[18px] w-[360px] max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-50">
           {/* Tabs */}
           <div className="flex items-center border-b border-gray-100 dark:border-gray-800">
             <button

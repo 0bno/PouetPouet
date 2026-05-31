@@ -95,17 +95,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className={`bg-gray-50 dark:bg-gray-950 grid grid-rows-[auto_1fr_auto] ${isBoardPage ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30">
         <div className={`flex items-center h-14 gap-4 ${isBoardPage ? 'px-4' : 'px-6 max-w-6xl mx-auto'}`}>
-          <Link href="/dashboard">
-            <Logo />
-          </Link>
-
-          <button
-            onClick={() => useNotificationsStore.getState().openPatchNotes()}
-            title="Notes de version"
-            className="hidden sm:inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 text-[11px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors cursor-pointer leading-none"
-          >
-            v{APP_VERSION}
-          </button>
+          {/* Logo with the app version as a small superscript, clickable to open the release notes. */}
+          <div className="flex items-start gap-0.5">
+            <Link href="/dashboard">
+              <Logo />
+            </Link>
+            <button
+              onClick={() => useNotificationsStore.getState().openPatchNotes()}
+              title="Notes de version"
+              className="text-[10px] font-mono font-bold leading-none text-indigo-400 hover:text-indigo-600 dark:text-indigo-500 dark:hover:text-indigo-300 transition-colors cursor-pointer"
+            >
+              v{APP_VERSION}
+            </button>
+          </div>
 
           {!isBoardPage && (
             <nav className="flex items-center gap-1 ml-2">
