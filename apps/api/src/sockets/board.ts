@@ -159,6 +159,23 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     if (deleted) io.to(`board:${data.boardId}`).emit('connection:deleted', data.id)
   })
 
+  socket.on('connection:update', async (data: {
+    id: string; boardId: string
+    label?: string | null; color?: string | null; shape?: string; arrow?: string; dashed?: boolean; width?: number
+  }) => {
+    if (!canWrite(socket, data.boardId)) return
+    const patch: Record<string, unknown> = {}
+    if (data.label !== undefined) patch.label = data.label
+    if (data.color !== undefined) patch.color = data.color
+    if (data.shape !== undefined) patch.shape = data.shape
+    if (data.arrow !== undefined) patch.arrow = data.arrow
+    if (data.dashed !== undefined) patch.dashed = data.dashed
+    if (data.width !== undefined) patch.width = data.width
+    if (Object.keys(patch).length === 0) return
+    const updated = await ignoreMissing(prisma.cardConnection.update({ where: { id: data.id }, data: patch }))
+    if (updated) io.to(`board:${data.boardId}`).emit('connection:updated', updated)
+  })
+
   // ── Frames ────────────────────────────────────────────────────────────────────
   socket.on('frame:create', async (data: { boardId: string; posX: number; posY: number; title?: string; color?: string; width?: number; height?: number }) => {
     if (!canWrite(socket, data.boardId)) return

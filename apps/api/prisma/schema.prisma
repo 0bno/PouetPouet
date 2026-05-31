@@ -171,6 +171,12 @@ model CardConnection {
   boardId   String
   fromId    String
   toId      String
+  label     String?
+  color     String?
+  shape     String   @default("curved")
+  arrow     String   @default("none")
+  dashed    Boolean  @default(false)
+  width     Float    @default(2)
   createdAt DateTime @default(now())
 
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)

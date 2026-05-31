@@ -7,6 +7,8 @@ import { BoardCard } from './board-card'
 import { FrameItem } from './frame-item'
 import { CardDetailModal } from './card-detail-modal'
 import { ConnectionLine } from './connection-line'
+import { ConnectionToolbar } from './connection-toolbar'
+import type { ConnectionPatch } from '@/hooks/useBoard'
 import type { ToolMode, StrokeSize } from './floating-toolbar'
 
 type ClipCard = Pick<Card, 'type' | 'content' | 'color' | 'posX' | 'posY' | 'width' | 'height'>
@@ -34,6 +36,7 @@ interface Props {
   onSelectCards: (ids: Set<string>) => void
   onAddConnection: (fromId: string, toId: string) => void
   onDeleteConnection: (id: string) => void
+  onUpdateConnection: (id: string, patch: ConnectionPatch) => void
   onMoveFrame: (id: string, posX: number, posY: number, capturedCards: { id: string; startX: number; startY: number; frameStartX: number; frameStartY: number }[]) => void
   onStartDragFrame: (id: string, capturedCardIds: string[]) => void
   onCommitDragFrame: (id: string) => void
@@ -83,7 +86,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   clipboard, isReadonly,
   onAddCard, onMoveCard, onResizeCard, onResizeCardBox, onUpdateCard, onRecolorCard, onDeleteCard,
   onStartDragCard, onCommitDragCard, onStartResizeCard, onCommitResizeCard,
-  onSelectCards, onAddConnection, onDeleteConnection,
+  onSelectCards, onAddConnection, onDeleteConnection, onUpdateConnection,
   onMoveFrame, onStartDragFrame, onCommitDragFrame,
   onResizeFrame, onStartResizeFrame, onCommitResizeFrame,
   onUpdateFrame, onDeleteFrame,
@@ -138,6 +141,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
 
   // Click-click card linking
   const [linkSourceId, setLinkSourceId] = useState<string | null>(null)
+
+  // Selected connection (shows the contextual connection toolbar)
+  const [selectedConnId, setSelectedConnId] = useState<string | null>(null)
+  function handleSelectConnection(id: string) {
+    setSelectedConnId(id)
+    onSelectCards(new Set())
+  }
+  // Escape clears the connection selection (ignored while typing the label).
+  useEffect(() => {
+    if (!selectedConnId) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      const t = e.target as HTMLElement
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return
+      setSelectedConnId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedConnId])
 
   // Reset linkSourceId whenever we leave link-cards mode
   useEffect(() => {
@@ -337,6 +359,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   // ── Canvas mouse down ────────────────────────────────────────────────────────
   function handleCanvasMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     if (e.button !== 0) return
+    setSelectedConnId(null)
     if (isReadonly) return
 
     // Draw mode: work anywhere — cards let the event bubble when drawMode=true
@@ -664,6 +687,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   }
 
   function handleSelect(id: string, add: boolean) {
+    setSelectedConnId(null)
     if (add) {
       const next = new Set(selectedIds)
       if (next.has(id)) next.delete(id)
@@ -687,6 +711,18 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     CURSOR_ARROW
 
   const sourceCard = linkSourceId ? cards.find((c) => c.id === linkSourceId) : null
+
+  // Selected connection + its contextual toolbar position (viewport/fixed coords).
+  const selConn = selectedConnId ? connections.find((c) => c.id === selectedConnId) : null
+  const selConnFrom = selConn ? cards.find((c) => c.id === selConn.fromId) : null
+  const selConnTo = selConn ? cards.find((c) => c.id === selConn.toId) : null
+  let connToolbarPos: { left: number; top: number } | null = null
+  if (selConn && selConnFrom && selConnTo && containerRef.current) {
+    const rect = containerRef.current.getBoundingClientRect()
+    const mcx = ((selConnFrom.posX + selConnFrom.width / 2) + (selConnTo.posX + selConnTo.width / 2)) / 2
+    const mcy = ((selConnFrom.posY + selConnFrom.height / 2) + (selConnTo.posY + selConnTo.height / 2)) / 2
+    connToolbarPos = { left: rect.left + viewport.x + mcx * viewport.zoom, top: rect.top + viewport.y + mcy * viewport.zoom }
+  }
 
   return (
     <>
@@ -738,12 +774,12 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
               return (
                 <ConnectionLine
                   key={conn.id}
-                  id={conn.id}
-                  x1={from.posX + from.width / 2}
-                  y1={from.posY + from.height / 2}
-                  x2={to.posX + to.width / 2}
-                  y2={to.posY + to.height / 2}
-                  onDelete={isReadonly ? undefined : onDeleteConnection}
+                  conn={conn}
+                  from={from}
+                  to={to}
+                  selected={selectedConnId === conn.id}
+                  interactive={!isReadonly}
+                  onSelect={handleSelectConnection}
                 />
               )
             })}
@@ -953,6 +989,19 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
           >+</button>
         </div>
       </div>
+
+      {/* ── Connection contextual toolbar ── */}
+      {!isReadonly && selConn && connToolbarPos && (
+        <div
+          style={{ position: 'fixed', left: connToolbarPos.left, top: connToolbarPos.top, transform: 'translate(-50%, calc(-100% - 14px))', zIndex: 46 }}
+        >
+          <ConnectionToolbar
+            conn={selConn}
+            onUpdate={(patch) => onUpdateConnection(selConn.id, patch)}
+            onDelete={() => { onDeleteConnection(selConn.id); setSelectedConnId(null) }}
+          />
+        </div>
+      )}
 
       {/* ── Link URL popover ── */}
       {linkPopover && (

@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "CardConnection" ADD COLUMN     "label" TEXT,
+ADD COLUMN     "color" TEXT,
+ADD COLUMN     "shape" TEXT NOT NULL DEFAULT 'curved',
+ADD COLUMN     "arrow" TEXT NOT NULL DEFAULT 'none',
+ADD COLUMN     "dashed" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "width" DOUBLE PRECISION NOT NULL DEFAULT 2;

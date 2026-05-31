@@ -4,13 +4,13 @@ import { connectSocket } from '@/lib/socket'
 
 import { DEFAULT_CARD_COLOR } from '@/lib/colors'
 import type {
-  FieldValue, Card, Connection, Frame, BoardField, BoardDetail,
+  FieldValue, Card, Connection, ConnectionPatch, Frame, BoardField, BoardDetail,
   PresenceUser, BoardMember, VoteSession,
 } from './board-types'
 
 // Re-export the data model so existing importers of '@/hooks/useBoard' keep working.
 export type {
-  FieldValue, Card, Connection, Frame, BoardField, BoardDetail,
+  FieldValue, Card, Connection, ConnectionPatch, ConnShape, ConnArrow, Frame, BoardField, BoardDetail,
   PresenceUser, BoardMember, BoardVote, VoteSession,
 } from './board-types'
 export { groupColor, GROUP_COLORS } from './board-types'
@@ -54,6 +54,7 @@ export function useBoard(boardId: string) {
   const [, setHistoryVersion] = useState(0)
   // Queues for async server-assigned IDs (card:created / frame:created)
   const pendingCardHistoryRef = useRef<Array<(card: Card) => void>>([])
+  const pendingConnHistoryRef = useRef<Array<(conn: Connection) => void>>([])
   const pendingFrameHistoryRef = useRef<Array<(frame: Frame) => void>>([])
   // Start positions for drag/resize (pushed to history only on commit)
   const cardDragStartRef = useRef<Map<string, { posX: number; posY: number }> | null>(null)
@@ -176,8 +177,13 @@ export function useBoard(boardId: string) {
     })
 
     // Connections
-    socket.on('connection:created', (conn) => setConnections((prev) => [...prev, conn as Connection]))
+    socket.on('connection:created', (conn) => {
+      const cb = pendingConnHistoryRef.current.shift()
+      cb?.(conn as Connection)
+      setConnections((prev) => (prev.some((c) => c.id === (conn as Connection).id) ? prev : [...prev, conn as Connection]))
+    })
     socket.on('connection:deleted', (id) => setConnections((prev) => prev.filter((c) => c.id !== id)))
+    socket.on('connection:updated', (conn) => setConnections((prev) => prev.map((c) => c.id === (conn as Connection).id ? { ...c, ...(conn as Connection) } : c)))
 
     // Frames — process pending history callback before updating state
     socket.on('frame:created', (frame) => {
@@ -219,7 +225,7 @@ export function useBoard(boardId: string) {
         'cards:locked',
         'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored',
         'cards:grouped', 'cards:ungrouped',
-        'connection:created', 'connection:deleted',
+        'connection:created', 'connection:deleted', 'connection:updated',
         'frame:created', 'frame:moved', 'frame:resized', 'frame:updated', 'frame:deleted',
         'boardfield:created', 'boardfield:updated', 'boardfield:deleted',
         'cardfield:updated', 'cardfield:cleared',
@@ -482,12 +488,59 @@ export function useBoard(boardId: string) {
   }
 
   // ── Connections ───────────────────────────────────────────────────────────────
+  // Recreates a connection from a saved snapshot, re-applying its style afterwards,
+  // and tracks the new server id so further undo/redo stays in sync.
+  function recreateConnection(conn: Connection, trackId: (id: string) => void) {
+    socketRef.current.emit('connection:create', { boardId, fromId: conn.fromId, toId: conn.toId })
+    pendingConnHistoryRef.current.push((created: Connection) => {
+      trackId(created.id)
+      const patch = { label: conn.label, color: conn.color, shape: conn.shape, arrow: conn.arrow, dashed: conn.dashed, width: conn.width }
+      socketRef.current.emit('connection:update', { id: created.id, boardId, ...patch })
+    })
+  }
+
   function addConnection(fromId: string, toId: string) {
     socketRef.current.emit('connection:create', { boardId, fromId, toId })
+    pendingConnHistoryRef.current.push((created: Connection) => {
+      let trackedId = created.id
+      pushHistory({
+        undo: () => socketRef.current.emit('connection:delete', { id: trackedId, boardId }),
+        redo: () => {
+          socketRef.current.emit('connection:create', { boardId, fromId, toId })
+          pendingConnHistoryRef.current.push((again: Connection) => { trackedId = again.id })
+        },
+      })
+    })
   }
 
   function deleteConnection(id: string) {
+    const conn = connectionsRef.current.find((c) => c.id === id)
+    if (!conn) return
+    let trackedId = id
+    pushHistory({
+      undo: () => recreateConnection(conn, (newId) => { trackedId = newId }),
+      redo: () => socketRef.current.emit('connection:delete', { id: trackedId, boardId }),
+    })
     socketRef.current.emit('connection:delete', { id, boardId })
+  }
+
+  function updateConnection(id: string, patch: ConnectionPatch) {
+    const conn = connectionsRef.current.find((c) => c.id === id)
+    if (!conn) return
+    const before: ConnectionPatch = {}
+    ;(Object.keys(patch) as (keyof ConnectionPatch)[]).forEach((k) => { (before as Record<string, unknown>)[k] = conn[k] })
+    setConnections((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c))
+    socketRef.current.emit('connection:update', { id, boardId, ...patch })
+    pushHistory({
+      undo: () => {
+        setConnections((prev) => prev.map((c) => c.id === id ? { ...c, ...before } : c))
+        socketRef.current.emit('connection:update', { id, boardId, ...before })
+      },
+      redo: () => {
+        setConnections((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c))
+        socketRef.current.emit('connection:update', { id, boardId, ...patch })
+      },
+    })
   }
 
   // ── Frames ────────────────────────────────────────────────────────────────────
@@ -808,7 +861,7 @@ export function useBoard(boardId: string) {
     addCard, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected,
-    addConnection, deleteConnection,
+    addConnection, deleteConnection, updateConnection,
     addFrame, moveFrame, resizeFrame, updateFrame, deleteFrame,
     startDragFrame, commitDragFrame, startResizeFrame, commitResizeFrame,
     createField, updateField, deleteField,

@@ -22,12 +22,23 @@ export interface Card {
   fieldValues: FieldValue[]
 }
 
+export type ConnShape = 'straight' | 'curved' | 'orthogonal'
+export type ConnArrow = 'none' | 'end' | 'both'
+
 export interface Connection {
   id: string
   boardId: string
   fromId: string
   toId: string
+  label: string | null
+  color: string | null
+  shape: ConnShape
+  arrow: ConnArrow
+  dashed: boolean
+  width: number
 }
+
+export type ConnectionPatch = Partial<Pick<Connection, 'label' | 'color' | 'shape' | 'arrow' | 'dashed' | 'width'>>
 
 export interface Frame {
   id: string
