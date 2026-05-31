@@ -315,7 +315,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 h-14 bg-white border-b border-gray-200 shrink-0 overflow-x-auto">
+      <div data-popover-anchor className="flex items-center gap-2 px-4 h-14 bg-white border-b border-gray-200 shrink-0 overflow-x-auto">
         <Link href="/dashboard" className="text-gray-400 hover:text-gray-600 transition-colors mr-1 shrink-0">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -431,7 +431,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
         {/* Selection badge */}
         {selectedIds.size > 0 && (
-          <div data-popover-anchor className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 shrink-0">
+          <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 shrink-0">
             <span className="text-xs font-medium text-indigo-700">
               {selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}
             </span>

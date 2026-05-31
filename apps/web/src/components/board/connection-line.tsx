@@ -10,15 +10,16 @@ const DEFAULT_COLOR = '#9ca3af'
 const OUT: Record<Side, Pt> = { n: { x: 0, y: -1 }, s: { x: 0, y: 1 }, e: { x: 1, y: 0 }, w: { x: -1, y: 0 } }
 
 // Triangle pointing right (→): tip at (s, s/2), base at x=0.
-// refX=s places the tip at the path endpoint for markerEnd.
-// refX=0, orient="auto-start-reverse" places the tip at the path start for markerStart.
+// refX=s always places the tip at the anchor point (path start or end).
+// With auto-start-reverse the marker x-axis is flipped, so refX=s still
+// resolves to the tip — the body then extends along the path direction.
 function ArrowMarker({ id, size, color, reverse }: { id: string; size: number; color: string; reverse?: boolean }) {
   const s = size
   return (
     <marker
       id={id}
       markerWidth={s} markerHeight={s}
-      refX={reverse ? 0 : s} refY={s / 2}
+      refX={s} refY={s / 2}
       orient={reverse ? 'auto-start-reverse' : 'auto'}
       markerUnits="userSpaceOnUse"
     >
