@@ -4,57 +4,58 @@ import type { Connection } from '@/hooks/useBoard'
 
 type Rect = { posX: number; posY: number; width: number; height: number }
 type Pt = { x: number; y: number }
+type Side = 'n' | 's' | 'e' | 'w'
 
 const DEFAULT_COLOR = '#9ca3af'
+const OUT: Record<Side, Pt> = { n: { x: 0, y: -1 }, s: { x: 0, y: 1 }, e: { x: 1, y: 0 }, w: { x: -1, y: 0 } }
 
 function center(r: Rect): Pt {
   return { x: r.posX + r.width / 2, y: r.posY + r.height / 2 }
 }
 
-// Point on a rectangle's border along the ray from its center toward `t`.
-function anchor(r: Rect, t: Pt): Pt {
+// One of the 4 edge midpoints (N/S/E/W) — the side of `r` that faces `t`.
+function anchorSide(r: Rect, t: Pt): { p: Pt; side: Side } {
   const c = center(r)
   const dx = t.x - c.x, dy = t.y - c.y
-  if (dx === 0 && dy === 0) return c
-  const hw = r.width / 2, hh = r.height / 2
-  const scale = 1 / Math.max(Math.abs(dx) / hw, Math.abs(dy) / hh)
-  return { x: c.x + dx * scale, y: c.y + dy * scale }
+  const horiz = Math.abs(dx) / (r.width / 2 || 1) >= Math.abs(dy) / (r.height / 2 || 1)
+  const side: Side = horiz ? (dx >= 0 ? 'e' : 'w') : (dy >= 0 ? 's' : 'n')
+  const p: Pt = {
+    e: { x: r.posX + r.width, y: c.y },
+    w: { x: r.posX, y: c.y },
+    s: { x: c.x, y: r.posY + r.height },
+    n: { x: c.x, y: r.posY },
+  }[side]
+  return { p, side }
 }
 
-function norm(dx: number, dy: number): Pt {
-  const len = Math.hypot(dx, dy) || 1
-  return { x: dx / len, y: dy / len }
-}
+// Path + unit tangents at each end (pointing toward the arrow tip / into the card) +
+// label midpoint. Curves and elbows leave each anchor perpendicular to its side.
+function buildPath(shape: string, a: Pt, sa: Side, b: Pt, sb: Side) {
+  const oa = OUT[sa], ob = OUT[sb]
+  // Arrowheads point into the card at each end (opposite the outward side normal).
+  const tStart: Pt = { x: -oa.x, y: -oa.y }
+  const tEnd: Pt = { x: -ob.x, y: -ob.y }
+  const mid: Pt = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
 
-// Builds the path string plus the unit tangents at each end (pointing outward to the
-// arrow tip) and a midpoint for the label.
-function buildPath(shape: string, a: Pt, b: Pt) {
   if (shape === 'straight') {
-    return { d: `M${a.x},${a.y} L${b.x},${b.y}`, tStart: norm(a.x - b.x, a.y - b.y), tEnd: norm(b.x - a.x, b.y - a.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
+    return { d: `M${a.x},${a.y} L${b.x},${b.y}`, tStart, tEnd, mid }
   }
   if (shape === 'orthogonal') {
-    const horiz = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
-    const corner1: Pt = horiz ? { x: (a.x + b.x) / 2, y: a.y } : { x: a.x, y: (a.y + b.y) / 2 }
-    const corner2: Pt = horiz ? { x: (a.x + b.x) / 2, y: b.y } : { x: b.x, y: (a.y + b.y) / 2 }
+    const stub = 24
+    const a1 = { x: a.x + oa.x * stub, y: a.y + oa.y * stub }
+    const b1 = { x: b.x + ob.x * stub, y: b.y + ob.y * stub }
+    const horizA = sa === 'e' || sa === 'w'
+    const corner: Pt = horizA ? { x: b1.x, y: a1.y } : { x: a1.x, y: b1.y }
     return {
-      d: `M${a.x},${a.y} L${corner1.x},${corner1.y} L${corner2.x},${corner2.y} L${b.x},${b.y}`,
-      tStart: norm(corner1.x - a.x, corner1.y - a.y),
-      tEnd: norm(b.x - corner2.x, b.y - corner2.y),
-      mid: { x: (corner1.x + corner2.x) / 2, y: (corner1.y + corner2.y) / 2 },
+      d: `M${a.x},${a.y} L${a1.x},${a1.y} L${corner.x},${corner.y} L${b1.x},${b1.y} L${b.x},${b.y}`,
+      tStart, tEnd, mid: corner,
     }
   }
-  // curved (default): leave each anchor along the dominant axis for a smooth bezier
-  const dx = b.x - a.x, dy = b.y - a.y
-  const horiz = Math.abs(dx) >= Math.abs(dy)
-  const k = 0.5
-  const c1: Pt = horiz ? { x: a.x + dx * k, y: a.y } : { x: a.x, y: a.y + dy * k }
-  const c2: Pt = horiz ? { x: b.x - dx * k, y: b.y } : { x: b.x, y: b.y - dy * k }
-  return {
-    d: `M${a.x},${a.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${b.x},${b.y}`,
-    tStart: norm(a.x - c1.x, a.y - c1.y),
-    tEnd: norm(b.x - c2.x, b.y - c2.y),
-    mid: { x: (a.x + b.x) / 2 + (horiz ? 0 : 0), y: (a.y + b.y) / 2 },
-  }
+  // curved (default)
+  const dist = Math.max(40, Math.hypot(b.x - a.x, b.y - a.y) * 0.4)
+  const c1 = { x: a.x + oa.x * dist, y: a.y + oa.y * dist }
+  const c2 = { x: b.x + ob.x * dist, y: b.y + ob.y * dist }
+  return { d: `M${a.x},${a.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${b.x},${b.y}`, tStart, tEnd, mid }
 }
 
 function arrowHead(p: Pt, t: Pt, size: number, color: string, key: string) {
@@ -72,9 +73,10 @@ export function ConnectionLine({ conn, from, to, selected, interactive, onSelect
   interactive?: boolean
   onSelect?: (id: string) => void
 }) {
-  const a = anchor(from, center(to))
-  const b = anchor(to, center(from))
-  const { d, tStart, tEnd, mid } = buildPath(conn.shape, a, b)
+  const fa = anchorSide(from, center(to))
+  const tb = anchorSide(to, center(from))
+  const a = fa.p, b = tb.p
+  const { d, tStart, tEnd, mid } = buildPath(conn.shape, a, fa.side, b, tb.side)
   const color = conn.color || DEFAULT_COLOR
   const w = conn.width || 2
   const headSize = 7 + w * 1.5
