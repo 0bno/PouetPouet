@@ -89,7 +89,7 @@ export function ShapeCard({
       {/* ── Shape editing panel (visible when a single, unlocked object is selected) ── */}
       {isSelected && !isReadonly && !isMultiSelect && !card.locked && (
         <div
-          className="absolute -top-9 left-0 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-2 py-1.5 whitespace-nowrap"
+          className="absolute bottom-full left-0 mb-2 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-2 py-1.5 whitespace-nowrap"
           style={{ zIndex: 10 }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
