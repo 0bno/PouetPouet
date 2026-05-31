@@ -18,11 +18,13 @@ model User {
   emailVerified      Boolean   @default(false)
   verifyToken        String?   @unique
   verifyTokenExpires DateTime?
+  patchNotesSeenAt   DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   boards         Board[]
   boardShares    BoardShare[]
+  notifications  Notification[]
   boardVotes     BoardVote[]
   boardFavorites BoardFavorite[]
   boardTemplates BoardTemplate[]
@@ -231,6 +233,23 @@ model ActivityResponse {
 
   activity    Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade)
   participant SessionParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+}
+
+// Per-user account activity feed (board shared, role changed, access revoked, board deleted).
+// Patch notes are NOT stored here — they live in code and are tracked via User.patchNotesSeenAt.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 enum BoardRole {

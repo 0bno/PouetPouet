@@ -3,6 +3,9 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { getIO } from '../lib/io.js'
+import { notify } from '../lib/notify.js'
+
+const ROLE_LABEL = { VIEWER: 'lecteur', EDITOR: 'éditeur' } as const
 
 const boardSchema = z.object({
   name: z.string().min(1),
@@ -248,7 +251,20 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
     const board = await prisma.board.findUnique({ where: { id } })
     if (!board) return reply.status(404).send({ error: 'Board introuvable' })
     if (board.ownerId !== userId) return reply.status(403).send({ error: 'Accès refusé' })
+    // Capture who had access before the cascade wipes the shares, so we can notify them.
+    const shares = await prisma.boardShare.findMany({ where: { boardId: id }, select: { userId: true } })
     await prisma.board.delete({ where: { id } })
+    await Promise.all(
+      shares.map((s) =>
+        notify({
+          userId: s.userId,
+          type: 'BOARD_DELETED',
+          title: `Le board « ${board.name} » a été supprimé`,
+          body: 'Son propriétaire a supprimé ce board partagé.',
+          link: null,
+        })
+      )
+    )
     return reply.status(204).send()
   })
 
@@ -350,12 +366,32 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
     if (!invitedUser) return reply.status(404).send({ error: 'Aucun compte trouvé avec cet email' })
     if (invitedUser.id === userId) return reply.status(400).send({ error: 'Vous ne pouvez pas vous inviter vous-même' })
     if (invitedUser.id === board.ownerId) return reply.status(400).send({ error: 'Cet utilisateur est déjà propriétaire du board' })
+    const existing = await prisma.boardShare.findUnique({
+      where: { boardId_userId: { boardId: id, userId: invitedUser.id } },
+    })
     const share = await prisma.boardShare.upsert({
       where: { boardId_userId: { boardId: id, userId: invitedUser.id } },
       update: { role },
       create: { boardId: id, userId: invitedUser.id, role },
       include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
     })
+    if (!existing) {
+      await notify({
+        userId: invitedUser.id,
+        type: 'BOARD_SHARED',
+        title: `« ${board.name} » a été partagé avec vous`,
+        body: `Vous avez accès en tant que ${ROLE_LABEL[role]}.`,
+        link: `/boards/${board.id}`,
+      })
+    } else if (existing.role !== role) {
+      await notify({
+        userId: invitedUser.id,
+        type: 'ROLE_CHANGED',
+        title: `Votre rôle sur « ${board.name} » a changé`,
+        body: `Vous êtes désormais ${ROLE_LABEL[role]}.`,
+        link: `/boards/${board.id}`,
+      })
+    }
     return reply.status(201).send(share)
   })
 
@@ -372,6 +408,13 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
       data: { role },
       include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
     })
+    await notify({
+      userId: share.userId,
+      type: 'ROLE_CHANGED',
+      title: `Votre rôle sur « ${board.name} » a changé`,
+      body: `Vous êtes désormais ${ROLE_LABEL[role]}.`,
+      link: `/boards/${board.id}`,
+    })
     return reply.send(share)
   })
 
@@ -382,7 +425,17 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
     const board = await prisma.board.findUnique({ where: { id } })
     if (!board) return reply.status(404).send({ error: 'Board introuvable' })
     if (board.ownerId !== userId) return reply.status(403).send({ error: 'Accès refusé' })
+    const share = await prisma.boardShare.findUnique({ where: { id: shareId }, select: { userId: true } })
     await prisma.boardShare.delete({ where: { id: shareId } })
+    if (share) {
+      await notify({
+        userId: share.userId,
+        type: 'ACCESS_REVOKED',
+        title: `Votre accès à « ${board.name} » a été retiré`,
+        body: null,
+        link: null,
+      })
+    }
     return reply.status(204).send()
   })
 

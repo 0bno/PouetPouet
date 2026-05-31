@@ -9,6 +9,8 @@ import { useAuthHydrated } from '@/hooks/useAuthHydrated'
 import { Logo } from '@/components/ui/logo'
 import { SessionExpiredModal } from '@/components/session-expired-modal'
 import { SessionCountdown } from '@/components/session-countdown'
+import { NotificationBell } from '@/components/notifications/notification-bell'
+import { useNotificationsStore } from '@/store/notifications'
 
 function Avatar({ name, src }: { name: string; src?: string | null }) {
   if (src) {
@@ -152,12 +154,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
 
           <div className="ml-auto flex items-center gap-3">
+            <NotificationBell />
             <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">{user.name}</span>
             <Link href="/profile" title="Mon profil" className="hover:opacity-80 transition-opacity">
               <Avatar name={user.name} src={user.avatar} />
             </Link>
             <button
-              onClick={() => { logout(); router.push('/login') }}
+              onClick={() => { useNotificationsStore.getState().reset(); logout(); router.push('/login') }}
               className="text-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               Déconnexion
