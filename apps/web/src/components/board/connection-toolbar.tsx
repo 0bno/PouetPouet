@@ -54,6 +54,7 @@ export function ConnectionToolbar({ conn, onUpdate, onDelete }: {
 
   return (
     <div
+      data-popover-anchor
       className="flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-1.5 py-1"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
