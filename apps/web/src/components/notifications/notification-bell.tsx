@@ -341,7 +341,7 @@ export function NotificationBell() {
                         />
                         <button
                           onClick={() => setDetailIndex(i)}
-                          className="group block w-full text-left -mt-0.5"
+                          className="group block w-full text-left -mt-0.5 cursor-pointer"
                         >
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">v{pn.version}</span>
