@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { HexColorPicker, HexColorInput } from 'react-colorful'
 import { BASE_COLORS, getRecentColors, pushRecentColor } from '@/lib/colors'
 
@@ -131,7 +132,7 @@ export function ColorPopover({ value, onChange, title = 'Couleur', align = 'righ
         className="w-5 h-5 rounded-full ring-1 ring-black/15 shadow-sm hover:scale-110 transition-transform"
         style={{ background: value }}
       />
-      {open && rect && (
+      {open && rect && typeof document !== 'undefined' && createPortal(
         <div
           ref={panelRef}
           style={{
@@ -139,10 +140,11 @@ export function ColorPopover({ value, onChange, title = 'Couleur', align = 'righ
             top: rect.bottom + 8,
             ...(align === 'right' ? { right: window.innerWidth - rect.right } : { left: rect.left }),
           }}
-          className="z-[200] bg-white rounded-2xl shadow-xl border border-gray-100 p-3"
+          className="z-[1200] bg-white rounded-2xl shadow-xl border border-gray-100 p-3"
         >
           <ColorPicker value={value} onChange={onChange} />
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
