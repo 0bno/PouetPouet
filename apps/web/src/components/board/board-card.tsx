@@ -8,6 +8,7 @@ import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { ShapeCard } from './board-card-shape'
 import { DrawCard } from './board-card-draw'
+import { ImageCard } from './board-card-image'
 
 interface Props {
   card: Card
@@ -182,6 +183,30 @@ export function BoardCard({
   const maxVisible = maxRows * chipsPerRow
 
   const outline = isSelected ? '2px solid #6366f1' : card.locked ? '1.5px solid #d1d5db' : groupColor ? `2px solid ${groupColor}` : 'none'
+
+  // ── IMAGE card ──────────────────────────────────────────────────────────────
+  if (card.type === 'IMAGE') {
+    return (
+      <ImageCard
+        card={card}
+        isSelected={isSelected}
+        isMultiSelect={isMultiSelect}
+        isReadonly={isReadonly}
+        outline={outline}
+        onRecolor={onRecolor}
+        onDelete={onDelete}
+        onSelect={onSelect}
+        onSetLocked={onSetLocked}
+        onStartConnect={onStartConnect}
+        onLinkCardsClick={onLinkCardsClick}
+        linkCardsMode={linkCardsMode}
+        isLinkSource={isLinkSource}
+        handleMouseDown={handleMouseDown}
+        handleResizeMouseDown={handleResizeMouseDown}
+        isDragging={isDragging}
+      />
+    )
+  }
 
   // ── SHAPE card ──────────────────────────────────────────────────────────────
   if (card.type === 'SHAPE') {

@@ -82,6 +82,32 @@ export function ResizeHandles({ onStart }: { onStart: (e: React.MouseEvent, dir:
   )
 }
 
+const C = 14 // corner zone size (px)
+const E = 8  // edge zone thickness (px)
+
+// Invisible border zones for edge-drag resizing — no visible dots.
+// Corners are 14×14, edges fill the remaining space at E=8px thick.
+export function BorderResizeHandles({ onStart }: { onStart: (e: React.MouseEvent, dir: ResizeDir) => void }) {
+  function md(dir: ResizeDir) {
+    return (e: React.MouseEvent) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); onStart(e, dir) } }
+  }
+  const z = 45
+  return (
+    <>
+      {/* Corners */}
+      <div onMouseDown={md('nw')} style={{ position: 'absolute', top: 0,    left: 0,    width: C, height: C, cursor: 'nwse-resize', zIndex: z }} />
+      <div onMouseDown={md('ne')} style={{ position: 'absolute', top: 0,    right: 0,   width: C, height: C, cursor: 'nesw-resize', zIndex: z }} />
+      <div onMouseDown={md('sw')} style={{ position: 'absolute', bottom: 0, left: 0,    width: C, height: C, cursor: 'nesw-resize', zIndex: z }} />
+      <div onMouseDown={md('se')} style={{ position: 'absolute', bottom: 0, right: 0,   width: C, height: C, cursor: 'nwse-resize', zIndex: z }} />
+      {/* Edges (between corners) */}
+      <div onMouseDown={md('n')}  style={{ position: 'absolute', top: 0,    left: C, right: C,   height: E, cursor: 'ns-resize',   zIndex: z }} />
+      <div onMouseDown={md('s')}  style={{ position: 'absolute', bottom: 0, left: C, right: C,   height: E, cursor: 'ns-resize',   zIndex: z }} />
+      <div onMouseDown={md('w')}  style={{ position: 'absolute', top: C, bottom: C, left: 0,     width: E,  cursor: 'ew-resize',   zIndex: z }} />
+      <div onMouseDown={md('e')}  style={{ position: 'absolute', top: C, bottom: C, right: 0,    width: E,  cursor: 'ew-resize',   zIndex: z }} />
+    </>
+  )
+}
+
 // Small toggle button used in the label formatting toolbar.
 export function FmtBtn({ active, onClick, title, children }: {
   active: boolean; onClick: () => void; title: string; children: React.ReactNode

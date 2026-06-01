@@ -20,3 +20,5 @@ backup.sql
 ideatank.txt
 scripts/
 docs/
+
+apps/web/src/lib/klx-import/samples/

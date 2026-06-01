@@ -9,6 +9,12 @@ import { BoardCanvas } from '@/components/board/board-canvas'
 import type { BoardCanvasHandle } from '@/components/board/board-canvas'
 import { BoardFieldsPanel } from '@/components/board/board-fields-panel'
 import { ShareModal } from '@/components/board/share-modal'
+import { ImportHubModal } from '@/components/board/import-hub-modal'
+import { ImportKlaxoonModal } from '@/components/board/import-klaxoon-modal'
+import { ImportPdfModal, type PdfPageData } from '@/components/board/import-pdf-modal'
+import { ExportHubModal, type ExportFormat } from '@/components/board/export-hub-modal'
+import { exportBoardExcel } from '@/lib/export-excel'
+import { exportBoardPpb } from '@/lib/export-ppb'
 import { BoardSettingsModal } from '@/components/board/board-settings-modal'
 import { useTemplates } from '@/hooks/useTemplates'
 import { useRouter } from 'next/navigation'
@@ -44,6 +50,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     selectCards,
     undo, redo, canUndo, canRedo,
     resetBoard,
+    importCount,
   } = useBoard(id)
   const {
     session, participantCount, currentActivity, activityResponses, isLoading: sessionLoading,
@@ -106,7 +113,12 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   const [showFieldsPanel, setShowFieldsPanel] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showImportHub, setShowImportHub] = useState(false)
+  const [showImportKlaxoon, setShowImportKlaxoon] = useState(false)
+  const [showImportPdf, setShowImportPdf] = useState(false)
+  const [showExportHub, setShowExportHub] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const imageImportRef = useRef<HTMLInputElement>(null)
   const [showVoteConfig, setShowVoteConfig] = useState(false)
   const [showVoteResults, setShowVoteResults] = useState(false)
   const [showLastVote, setShowLastVote] = useState(false)
@@ -118,14 +130,58 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const canvasApiRef = useRef<BoardCanvasHandle>(null)
   const [exporting, setExporting] = useState(false)
 
-  async function handleExportPdf() {
+  async function handleExport(format: ExportFormat) {
     if (exporting) return
     setExporting(true)
     try {
-      await canvasApiRef.current?.exportPdf()
+      if (format === 'pdf') {
+        await canvasApiRef.current?.exportPdf()
+      } else if (format === 'image') {
+        await canvasApiRef.current?.exportImage()
+      } else if (format === 'excel') {
+        await exportBoardExcel(board?.name ?? 'board', cards, connections, frames)
+      } else if (format === 'ppb') {
+        await exportBoardPpb(board?.name ?? 'board', cards, connections, frames, fields)
+      }
     } finally {
       setExporting(false)
     }
+  }
+
+  async function handleImageImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    e.target.value = ''
+    let offsetX = 100
+    for (const file of files) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsDataURL(file)
+      })
+      const img = new Image()
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve()
+        img.src = dataUrl
+      })
+      const MAX_W = 700, MAX_H = 600
+      const ratio = Math.min(MAX_W / img.naturalWidth, MAX_H / img.naturalHeight, 1)
+      const w = Math.max(80, Math.round(img.naturalWidth * ratio))
+      const h = Math.max(60, Math.round(img.naturalHeight * ratio))
+      addCard(offsetX, 100, 'IMAGE', dataUrl, 'transparent', w, h)
+      offsetX += w + 24
+    }
+    setTimeout(() => canvasApiRef.current?.fitToContent(), 100)
+  }
+
+  function handlePdfImport(pages: PdfPageData[]) {
+    setShowImportPdf(false)
+    let x = 100
+    for (const page of pages) {
+      addCard(x, 100, 'IMAGE', page.dataUrl, 'transparent', page.width, page.height)
+      x += page.width + 24
+    }
+    setTimeout(() => canvasApiRef.current?.fitToContent(), 100)
   }
   const timerPickerRef = useRef<HTMLDivElement>(null)
   const timerPickerLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -151,6 +207,10 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const voteTimerEndsAt = activeVoteSession?.timerEndsAt ? new Date(activeVoteSession.timerEndsAt).getTime() : null
   const voteTimerSecondsLeft = voteTimerEndsAt !== null ? Math.max(0, Math.ceil((voteTimerEndsAt - now) / 1000)) : null
   const voteTimerExpired = voteTimerEndsAt !== null && now >= voteTimerEndsAt
+
+  useEffect(() => {
+    if (importCount > 0) canvasApiRef.current?.fitToContent()
+  }, [importCount])
 
   const voteTimerWasExpiredRef = useRef(false)
   useEffect(() => {
@@ -363,14 +423,39 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             <div className="w-px h-6 bg-gray-200 shrink-0" aria-hidden />
             <div className="flex items-center gap-0.5 shrink-0">
               <button
+                onClick={() => setShowImportHub(true)}
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                title="Importer…"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowExportHub(true)}
+                disabled={exporting}
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-wait"
+                title="Exporter…"
+              >
+                {exporting ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 7H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                )}
+              </button>
+              <button
                 onClick={() => setShowShareModal(true)}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                 title="Partager le board"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
-                Partager
               </button>
               <button
                 onClick={() => setShowSettingsModal(true)}
@@ -872,8 +957,39 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         />
       )}
 
+      {/* Hidden image file input */}
+      <input
+        ref={imageImportRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleImageImport}
+      />
+
+      {showImportHub && (
+        <ImportHubModal
+          onClose={() => setShowImportHub(false)}
+          onPickKlaxoon={() => { setShowImportHub(false); setShowImportKlaxoon(true) }}
+          onPickPdf={() => { setShowImportHub(false); setShowImportPdf(true) }}
+          onPickImage={() => { setShowImportHub(false); imageImportRef.current?.click() }}
+        />
+      )}
+
+      {showImportKlaxoon && (
+        <ImportKlaxoonModal boardId={id} onClose={() => setShowImportKlaxoon(false)} />
+      )}
+
+      {showImportPdf && (
+        <ImportPdfModal onClose={() => setShowImportPdf(false)} onImport={handlePdfImport} />
+      )}
+
       {showShareModal && (
-        <ShareModal boardId={id} onClose={() => setShowShareModal(false)} onExportPdf={handleExportPdf} exporting={exporting} />
+        <ShareModal boardId={id} onClose={() => setShowShareModal(false)} />
+      )}
+
+      {showExportHub && (
+        <ExportHubModal onClose={() => setShowExportHub(false)} onExport={handleExport} />
       )}
 
       {showVoteConfig && (

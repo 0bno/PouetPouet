@@ -30,6 +30,7 @@ export function useBoard(boardId: string) {
   const [frames, setFrames] = useState<Frame[]>([])
   const [fields, setFields] = useState<BoardField[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [importCount, setImportCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [userRole, setUserRole] = useState<'OWNER' | 'EDITOR' | 'VIEWER' | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
@@ -137,6 +138,12 @@ export function useBoard(boardId: string) {
       if (role) setUserRole(role as 'OWNER' | 'EDITOR' | 'VIEWER')
     })
 
+    socket.on('board:imported', ({ cards: ic, connections: iconn }: { cards: Card[]; connections: Connection[] }) => {
+      setCards((prev) => [...prev, ...ic.map((c) => ({ ...c, fieldValues: [] }))])
+      setConnections((prev) => [...prev, ...iconn])
+      setImportCount((n) => n + 1)
+    })
+
     socket.on('board:error', (msg: string) => {
       if (msg === 'Accès refusé') setAccessDenied(true)
     })
@@ -237,6 +244,7 @@ export function useBoard(boardId: string) {
         'frame:created', 'frame:moved', 'frame:resized', 'frame:updated', 'frame:deleted',
         'boardfield:created', 'boardfield:updated', 'boardfield:deleted',
         'cardfield:updated', 'cardfield:cleared',
+        'board:imported',
       ].forEach((e) => socket.off(e))
     }
   }, [boardId])
@@ -635,6 +643,7 @@ export function useBoard(boardId: string) {
     })
   }
 
+  // Directional resize: width/height plus posX/posY (for n/w/nw/ne/sw drags).
   function resizeFrame(id: string, width: number, height: number) {
     setFrames((prev) => prev.map((f) => f.id === id ? { ...f, width, height } : f))
     socketRef.current.emit('frame:resize', { id, boardId, width, height })
@@ -878,5 +887,6 @@ export function useBoard(boardId: string) {
     selectCards,
     undo, redo, canUndo, canRedo,
     resetBoard,
+    importCount,
   }
 }
