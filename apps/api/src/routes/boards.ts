@@ -140,6 +140,7 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
             width: f.width ?? 400,
             height: f.height ?? 300,
             color: f.color ?? '#E0E7FF',
+            active: f.active ?? false,
           })),
         })
       }
@@ -453,6 +454,81 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
       orderBy: { createdAt: 'desc' },
     })
     return reply.send(session ?? null)
+  })
+
+  // ── Klaxoon import ───────────────────────────────────────────────────────────
+
+  app.post('/:id/import/klaxoon', { bodyLimit: 50 * 1024 * 1024 }, async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const role = await getUserBoardRole(id, userId)
+    if (!role || role === 'VIEWER') return reply.status(403).send({ error: 'Accès refusé' })
+
+    const body = z.object({
+      cards: z.array(z.object({
+        klxId: z.string(),
+        type: z.enum(['TEXT', 'LABEL', 'DRAW', 'IMAGE']),
+        content: z.string(),
+        color: z.string(),
+        posX: z.number(),
+        posY: z.number(),
+        width: z.number(),
+        height: z.number(),
+        zIndex: z.number(),
+        locked: z.boolean(),
+      })),
+      connections: z.array(z.object({
+        fromKlxId: z.string(),
+        toKlxId: z.string(),
+        shape: z.string(),
+        color: z.string(),
+        width: z.number(),
+        dashed: z.boolean(),
+        arrow: z.string(),
+        label: z.string(),
+      })),
+    }).parse(request.body)
+
+    const createdCards = await prisma.$transaction(
+      body.cards.map((c) =>
+        prisma.card.create({
+          data: { boardId: id, type: c.type as never, content: c.content, color: c.color, posX: c.posX, posY: c.posY, width: c.width, height: c.height, authorId: userId },
+          include: { fieldValues: true },
+        })
+      )
+    )
+
+    // Build klxId → real card id map
+    const idMap = new Map<string, string>()
+    body.cards.forEach((c, i) => idMap.set(c.klxId, createdCards[i].id))
+
+    const validConns = body.connections.filter(
+      (c) => idMap.has(c.fromKlxId) && idMap.has(c.toKlxId)
+    )
+    const createdConns = validConns.length > 0
+      ? await prisma.$transaction(
+          validConns.map((c) =>
+            prisma.cardConnection.create({
+              data: {
+                boardId: id,
+                fromId: idMap.get(c.fromKlxId)!,
+                toId: idMap.get(c.toKlxId)!,
+                shape: c.shape,
+                color: c.color,
+                width: c.width,
+                dashed: c.dashed,
+                arrow: c.arrow,
+                label: c.label || null,
+              },
+            })
+          )
+        )
+      : []
+
+    const io = getIO()
+    io?.to(`board:${id}`).emit('board:imported', { cards: createdCards, connections: createdConns })
+
+    return reply.status(201).send({ cards: createdCards.length, connections: createdConns.length })
   })
 
   // Last closed vote session (any role)

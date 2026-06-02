@@ -40,10 +40,11 @@ interface Props {
   onMoveFrame: (id: string, posX: number, posY: number, capturedCards: { id: string; startX: number; startY: number; frameStartX: number; frameStartY: number }[]) => void
   onStartDragFrame: (id: string, capturedCardIds: string[]) => void
   onCommitDragFrame: (id: string) => void
-  onResizeFrame: (id: string, w: number, h: number) => void
+  onResizeFrameBox: (id: string, posX: number, posY: number, w: number, h: number) => void
   onStartResizeFrame: (id: string) => void
   onCommitResizeFrame: (id: string) => void
   onUpdateFrame: (id: string, title: string) => void
+  onSetFrameActive: (id: string, active: boolean) => void
   onDeleteFrame: (id: string) => void
   onStartDragCard: (id: string) => void
   onCommitDragCard: (id: string) => void
@@ -65,6 +66,7 @@ interface Props {
 export interface BoardCanvasHandle {
   fitToContent: () => void
   exportPdf: () => Promise<void>
+  exportImage: () => Promise<void>
 }
 
 const MIN_ZOOM = 0.1
@@ -88,8 +90,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   onStartDragCard, onCommitDragCard, onStartResizeCard, onCommitResizeCard,
   onSelectCards, onAddConnection, onDeleteConnection, onUpdateConnection,
   onMoveFrame, onStartDragFrame, onCommitDragFrame,
-  onResizeFrame, onStartResizeFrame, onCommitResizeFrame,
-  onUpdateFrame, onDeleteFrame,
+  onResizeFrameBox, onStartResizeFrame, onCommitResizeFrame,
+  onUpdateFrame, onSetFrameActive, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
   voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked,
   boardName,
@@ -291,27 +293,46 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     return () => window.removeEventListener('keydown', onKey)
   }, [clipboard, isReadonly, onPasteCards])
 
-  // ── Paste image ──────────────────────────────────────────────────────────────
+  // ── Paste from system clipboard (text or image) ─────────────────────────────
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
       if (isReadonly) return
+      const active = document.activeElement
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement)?.isContentEditable) return
+
       const items = e.clipboardData?.items
       if (!items) return
+
+      // Image takes priority
       for (const item of Array.from(items)) {
         if (!item.type.startsWith('image/')) continue
         const file = item.getAsFile()
         if (!file) continue
+        e.preventDefault()
         const reader = new FileReader()
         reader.onload = (ev) => {
           const dataUrl = ev.target?.result as string
-          const el = containerRef.current!
-          const rect = el.getBoundingClientRect()
-          const center = toCanvas(rect.left + rect.width / 2, rect.top + rect.height / 2)
-          onAddCard(center.x - 150, center.y - 100, 'IMAGE', dataUrl)
+          const img = new Image()
+          img.onload = () => {
+            const MAX_W = 700, MAX_H = 600
+            const ratio = Math.min(MAX_W / img.naturalWidth, MAX_H / img.naturalHeight, 1)
+            const w = Math.round(img.naturalWidth * ratio)
+            const h = Math.round(img.naturalHeight * ratio)
+            const pos = mousePosRef.current
+            onAddCard(pos.x - w / 2, pos.y - h / 2, 'IMAGE', dataUrl, 'transparent', w, h)
+          }
+          img.src = dataUrl
         }
         reader.readAsDataURL(file)
-        break
+        return
       }
+
+      // Plain text
+      const text = e.clipboardData?.getData('text/plain')?.trim()
+      if (!text) return
+      e.preventDefault()
+      const pos = mousePosRef.current
+      onAddCard(pos.x - 96, pos.y - 64, 'TEXT', text)
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
@@ -530,61 +551,72 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards.length, frames.length])
 
-  // ── PDF export (whole board, one page) ───────────────────────────────────────
-  async function exportPdf() {
+  // ── Shared DOM-capture helper (board → HTMLCanvasElement) ────────────────────
+  async function withCapture<T>(fn: (shot: HTMLCanvasElement) => Promise<T>): Promise<T | undefined> {
     const canvasEl = canvasRef.current
     const svg = connectionsSvgRef.current
     if (!canvasEl) return
     const box = boundsOf([...cards, ...frames])
     if (!box) return
 
-    // modern-screenshot renders the DOM via the browser (SVG foreignObject), so modern
-    // CSS like Tailwind's oklch() colors works — unlike html2canvas, which can't parse it.
-    const [{ domToCanvas }, { jsPDF }] = await Promise.all([
-      import('modern-screenshot'),
-      import('jspdf'),
-    ])
+    // modern-screenshot renders via SVG foreignObject — Tailwind oklch() works fine.
+    const { domToCanvas } = await import('modern-screenshot')
 
-    // Save everything we mutate so the live board is untouched after export.
     const savedTransform = canvasEl.style.transform
-    const savedWidth = canvasEl.style.width
-    const savedHeight = canvasEl.style.height
-    const savedOverflow = canvasEl.style.overflow
+    const savedWidth     = canvasEl.style.width
+    const savedHeight    = canvasEl.style.height
+    const savedOverflow  = canvasEl.style.overflow
     const savedSvg = svg
       ? { left: svg.style.left, top: svg.style.top, width: svg.style.width, height: svg.style.height, viewBox: svg.getAttribute('viewBox') }
       : null
 
-    // The connections layer is a 200000² plane — shrink it to the content box so the
-    // serializer doesn't have to process a gigantic surface.
     if (svg) {
-      svg.style.left = `${box.minX}px`
-      svg.style.top = `${box.minY}px`
-      svg.style.width = `${box.w}px`
+      svg.style.left   = `${box.minX}px`
+      svg.style.top    = `${box.minY}px`
+      svg.style.width  = `${box.w}px`
       svg.style.height = `${box.h}px`
       svg.setAttribute('viewBox', `${box.minX} ${box.minY} ${box.w} ${box.h}`)
     }
-
-    // Lay the content node out at natural size, top-left at the bbox origin, and clip to it.
+    // NOTE: overflow stays 'visible'. The captured node is offset via transform so the
+    // target rect's top-left sits at the node origin; modern-screenshot's SVG viewport
+    // (viewBox 0 0 box.w box.h) then clips in OUTPUT space. Using overflow:hidden here
+    // would instead clip children in the node's LOCAL (pre-transform) space — dropping
+    // everything whose posX exceeds box.w, i.e. a blank export whenever box.minX > 0.
     canvasEl.style.transform = `translate(${-box.minX}px, ${-box.minY}px)`
-    canvasEl.style.width = `${box.w}px`
-    canvasEl.style.height = `${box.h}px`
-    canvasEl.style.overflow = 'hidden'
+    canvasEl.style.width     = `${box.w}px`
+    canvasEl.style.height    = `${box.h}px`
+    canvasEl.style.overflow  = 'visible'
 
-    // Keep the raster within browser canvas limits while staying crisp on small boards.
     const scale = Math.min(2, Math.max(0.5, 4000 / Math.max(box.w, box.h)))
-
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))
 
     try {
       const shot = await domToCanvas(canvasEl, {
-        width: box.w,
-        height: box.h,
-        scale,
+        width: box.w, height: box.h, scale,
         backgroundColor: '#ffffff',
-        // Drop any UI chrome that lives inside the captured node (e.g. vote badges).
         filter: (node) => !(node instanceof HTMLElement && node.dataset.exportIgnore === 'true'),
       })
+      return await fn(shot)
+    } finally {
+      if (svg && savedSvg) {
+        svg.style.left   = savedSvg.left
+        svg.style.top    = savedSvg.top
+        svg.style.width  = savedSvg.width
+        svg.style.height = savedSvg.height
+        if (savedSvg.viewBox) svg.setAttribute('viewBox', savedSvg.viewBox)
+      }
+      canvasEl.style.transform = savedTransform
+      canvasEl.style.width     = savedWidth
+      canvasEl.style.height    = savedHeight
+      canvasEl.style.overflow  = savedOverflow
+      applyTransform({ ...vpRef.current })
+    }
+  }
 
+  // ── PDF export ───────────────────────────────────────────────────────────────
+  async function exportPdf() {
+    const { jsPDF } = await import('jspdf')
+    await withCapture(async (shot) => {
       const orientation = shot.width >= shot.height ? 'landscape' : 'portrait'
       const pdf = new jsPDF({ orientation, unit: 'pt', format: 'a4' })
       const pw = pdf.internal.pageSize.getWidth()
@@ -593,31 +625,23 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
       const aspect = shot.width / shot.height
       let iw = pw - margin * 2
       let ih = iw / aspect
-      if (ih > ph - margin * 2) {
-        ih = ph - margin * 2
-        iw = ih * aspect
-      }
+      if (ih > ph - margin * 2) { ih = ph - margin * 2; iw = ih * aspect }
       pdf.addImage(shot.toDataURL('image/png'), 'PNG', (pw - iw) / 2, (ph - ih) / 2, iw, ih)
       pdf.save(`${(boardName || 'board').replace(/[^\w-]+/g, '_')}.pdf`)
-    } finally {
-      // Restore the live board exactly as it was.
-      if (svg && savedSvg) {
-        svg.style.left = savedSvg.left
-        svg.style.top = savedSvg.top
-        svg.style.width = savedSvg.width
-        svg.style.height = savedSvg.height
-        if (savedSvg.viewBox) svg.setAttribute('viewBox', savedSvg.viewBox)
-      }
-      canvasEl.style.transform = savedTransform
-      canvasEl.style.width = savedWidth
-      canvasEl.style.height = savedHeight
-      canvasEl.style.overflow = savedOverflow
-      // Re-assert the live viewport transform.
-      applyTransform({ ...vpRef.current })
-    }
+    })
   }
 
-  useImperativeHandle(ref, () => ({ fitToContent, exportPdf }))
+  // ── Image export (PNG) ───────────────────────────────────────────────────────
+  async function exportImage() {
+    await withCapture(async (shot) => {
+      const a = document.createElement('a')
+      a.download = `${(boardName || 'board').replace(/[^\w-]+/g, '_')}.png`
+      a.href = shot.toDataURL('image/png')
+      a.click()
+    })
+  }
+
+  useImperativeHandle(ref, () => ({ fitToContent, exportPdf, exportImage }))
 
   // ── Link confirmation ────────────────────────────────────────────────────────
   function confirmLink() {
@@ -753,10 +777,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
               onMove={onMoveFrame}
               onStartDrag={onStartDragFrame}
               onCommitDrag={onCommitDragFrame}
-              onResize={onResizeFrame}
+              onResizeBox={onResizeFrameBox}
               onStartResize={onStartResizeFrame}
               onCommitResize={onCommitResizeFrame}
               onUpdate={onUpdateFrame}
+              onSetActive={onSetFrameActive}
               onDelete={onDeleteFrame}
             />
           ))}

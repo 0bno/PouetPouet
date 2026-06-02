@@ -30,6 +30,7 @@ export function useBoard(boardId: string) {
   const [frames, setFrames] = useState<Frame[]>([])
   const [fields, setFields] = useState<BoardField[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [importCount, setImportCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [userRole, setUserRole] = useState<'OWNER' | 'EDITOR' | 'VIEWER' | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
@@ -64,7 +65,7 @@ export function useBoard(boardId: string) {
     framePos: { posX: number; posY: number }
     cardPositions: Map<string, { posX: number; posY: number }>
   } | null>(null)
-  const frameResizeStartRef = useRef<{ id: string; width: number; height: number } | null>(null)
+  const frameResizeStartRef = useRef<{ id: string; posX: number; posY: number; width: number; height: number } | null>(null)
 
   function bumpHistory() { setHistoryVersion((v) => v + 1) }
 
@@ -135,6 +136,12 @@ export function useBoard(boardId: string) {
       setFrames(sf as Frame[])
       setFields((sfields as BoardField[]).map((f) => ({ ...f, options: f.options as string[] | null })))
       if (role) setUserRole(role as 'OWNER' | 'EDITOR' | 'VIEWER')
+    })
+
+    socket.on('board:imported', ({ cards: ic, connections: iconn }: { cards: Card[]; connections: Connection[] }) => {
+      setCards((prev) => [...prev, ...ic.map((c) => ({ ...c, fieldValues: [] }))])
+      setConnections((prev) => [...prev, ...iconn])
+      setImportCount((n) => n + 1)
     })
 
     socket.on('board:error', (msg: string) => {
@@ -237,6 +244,7 @@ export function useBoard(boardId: string) {
         'frame:created', 'frame:moved', 'frame:resized', 'frame:updated', 'frame:deleted',
         'boardfield:created', 'boardfield:updated', 'boardfield:deleted',
         'cardfield:updated', 'cardfield:cleared',
+        'board:imported',
       ].forEach((e) => socket.off(e))
     }
   }, [boardId])
@@ -635,15 +643,17 @@ export function useBoard(boardId: string) {
     })
   }
 
-  function resizeFrame(id: string, width: number, height: number) {
-    setFrames((prev) => prev.map((f) => f.id === id ? { ...f, width, height } : f))
+  // Directional resize: width/height plus posX/posY (for n/w/nw/ne/sw drags).
+  function resizeFrameBox(id: string, posX: number, posY: number, width: number, height: number) {
+    setFrames((prev) => prev.map((f) => f.id === id ? { ...f, posX, posY, width, height } : f))
+    socketRef.current.emit('frame:move', { id, boardId, posX, posY })
     socketRef.current.emit('frame:resize', { id, boardId, width, height })
   }
 
   function startResizeFrame(id: string) {
     const frame = framesRef.current.find((f) => f.id === id)
     if (!frame) return
-    frameResizeStartRef.current = { id, width: frame.width, height: frame.height }
+    frameResizeStartRef.current = { id, posX: frame.posX, posY: frame.posY, width: frame.width, height: frame.height }
   }
 
   function commitResizeFrame(id: string) {
@@ -652,19 +662,18 @@ export function useBoard(boardId: string) {
     if (!start || start.id !== id) return
     const frame = framesRef.current.find((f) => f.id === id)
     if (!frame) return
-    const { width: oldW, height: oldH } = start
-    const { width: newW, height: newH } = frame
-    if (Math.abs(newW - oldW) < 0.5 && Math.abs(newH - oldH) < 0.5) return
-    pushHistory({
-      undo: () => {
-        setFrames((prev) => prev.map((f) => f.id === id ? { ...f, width: oldW, height: oldH } : f))
-        socketRef.current.emit('frame:resize', { id, boardId, width: oldW, height: oldH })
-      },
-      redo: () => {
-        setFrames((prev) => prev.map((f) => f.id === id ? { ...f, width: newW, height: newH } : f))
-        socketRef.current.emit('frame:resize', { id, boardId, width: newW, height: newH })
-      },
-    })
+    const old = { posX: start.posX, posY: start.posY, width: start.width, height: start.height }
+    const next = { posX: frame.posX, posY: frame.posY, width: frame.width, height: frame.height }
+    if (
+      Math.abs(next.width - old.width) < 0.5 && Math.abs(next.height - old.height) < 0.5 &&
+      Math.abs(next.posX - old.posX) < 0.5 && Math.abs(next.posY - old.posY) < 0.5
+    ) return
+    const apply = (b: typeof old) => {
+      setFrames((prev) => prev.map((f) => f.id === id ? { ...f, ...b } : f))
+      socketRef.current.emit('frame:move', { id, boardId, posX: b.posX, posY: b.posY })
+      socketRef.current.emit('frame:resize', { id, boardId, width: b.width, height: b.height })
+    }
+    pushHistory({ undo: () => apply(old), redo: () => apply(next) })
   }
 
   function updateFrame(id: string, title: string) {
@@ -675,6 +684,23 @@ export function useBoard(boardId: string) {
       redo: () => socketRef.current.emit('frame:update', { id, boardId, title }),
     })
     socketRef.current.emit('frame:update', { id, boardId, title })
+  }
+
+  function setFrameActive(id: string, active: boolean) {
+    const old = framesRef.current.find((f) => f.id === id)?.active ?? false
+    if (old === active) return
+    setFrames((prev) => prev.map((f) => f.id === id ? { ...f, active } : f))
+    socketRef.current.emit('frame:update', { id, boardId, active })
+    pushHistory({
+      undo: () => {
+        setFrames((prev) => prev.map((f) => f.id === id ? { ...f, active: old } : f))
+        socketRef.current.emit('frame:update', { id, boardId, active: old })
+      },
+      redo: () => {
+        setFrames((prev) => prev.map((f) => f.id === id ? { ...f, active } : f))
+        socketRef.current.emit('frame:update', { id, boardId, active })
+      },
+    })
   }
 
   function deleteFrame(id: string) {
@@ -871,12 +897,13 @@ export function useBoard(boardId: string) {
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected,
     addConnection, deleteConnection, updateConnection,
-    addFrame, moveFrame, resizeFrame, updateFrame, deleteFrame,
+    addFrame, moveFrame, resizeFrameBox, updateFrame, setFrameActive, deleteFrame,
     startDragFrame, commitDragFrame, startResizeFrame, commitResizeFrame,
     createField, updateField, deleteField,
     setFieldValue, clearFieldValue,
     selectCards,
     undo, redo, canUndo, canRedo,
     resetBoard,
+    importCount,
   }
 }
