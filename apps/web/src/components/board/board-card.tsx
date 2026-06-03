@@ -56,17 +56,20 @@ export function BoardCard({
   })
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const cardDivRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
   const editEntryPointRef = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (!isEditing || !textareaRef.current) return
     const ta = textareaRef.current
+    // Trigger auto-height on entry so existing content already expands the card
+    ta.style.height = 'auto'
+    ta.style.height = `${ta.scrollHeight}px`
     const pt = editEntryPointRef.current
     editEntryPointRef.current = null
     ta.focus()
     if (pt) {
-      // Place cursor at the click position inside the textarea
       const caretPos = (document as Document & {
         caretPositionFromPoint?: (x: number, y: number) => { offset: number } | null
       }).caretPositionFromPoint?.(pt.x, pt.y)
@@ -155,6 +158,13 @@ export function BoardCard({
     setIsEditing(false)
     if (isLabel) saveLabelContent(content, labelFmt)
     else onUpdate(card.id, content)
+    // Persist expanded height if the card grew during editing
+    if (cardDivRef.current && card.type === 'TEXT') {
+      const newH = cardDivRef.current.offsetHeight
+      if (newH > Math.max(card.height, MIN_H) + 2) {
+        onResize(card.id, card.width, newH)
+      }
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -403,13 +413,16 @@ export function BoardCard({
   // ── TEXT / IMAGE / LINK card ─────────────────────────────────────────────────
   return (
     <div
+      ref={cardDivRef}
       data-card-id={card.id}
-      className="absolute rounded-xl shadow-md hover:shadow-xl transition-shadow duration-200 flex flex-col group select-none overflow-hidden"
+      className={`absolute rounded-xl shadow-md hover:shadow-xl transition-shadow duration-200 flex flex-col group select-none ${isEditing && card.type === 'TEXT' ? '' : 'overflow-hidden'}`}
       style={{
         left: card.posX,
         top: card.posY,
         width: Math.max(card.width, MIN_W),
-        height: Math.max(card.height, MIN_H),
+        ...(isEditing && card.type === 'TEXT'
+          ? { minHeight: Math.max(card.height, MIN_H) }
+          : { height: Math.max(card.height, MIN_H) }),
         background: card.type === 'IMAGE' ? '#1e1e1e' : card.color,
         cursor: isReadonly ? 'default' : (card.locked ? 'default' : isEditing ? 'default' : 'grab'),
         outline, outlineOffset: '2px',
@@ -471,7 +484,7 @@ export function BoardCard({
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 min-h-0 px-3 overflow-hidden">
+      <div className={`px-3 ${isEditing && card.type === 'TEXT' ? 'pb-2' : 'flex-1 min-h-0 overflow-hidden'}`}>
         {card.type === 'IMAGE' ? (
           <img src={card.content} alt="" className="w-full h-full object-contain rounded" draggable={false} />
         ) : card.type === 'LINK' ? (
@@ -496,10 +509,15 @@ export function BoardCard({
           <textarea
             ref={textareaRef}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = `${e.target.scrollHeight}px`
+            }}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
-            className="w-full h-full bg-transparent resize-none text-sm text-gray-800 focus:outline-none placeholder-gray-500/60 leading-relaxed"
+            className="w-full bg-transparent resize-none text-sm text-gray-800 focus:outline-none placeholder-gray-500/60 leading-relaxed overflow-hidden"
+            style={{ height: 'auto' }}
             placeholder="Votre idée…"
             onMouseDown={(e) => e.stopPropagation()}
           />
