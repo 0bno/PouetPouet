@@ -20,6 +20,37 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.3.0',
+    date: '2026-06-03',
+    title: 'Cartes texte enrichies & groupes avancés',
+    summary: 'Personnalisation du texte dans les cartes, gestion avancée des groupes (couleur, suppression, surbrillance) et corrections d'ergonomie.',
+    sections: [
+      {
+        heading: '✨ Nouveautés',
+        items: [
+          'Mise en forme du texte dans les cartes TEXT : taille, gras, italique, souligné, barré, couleur et alignement, accessibles depuis la modale de détail.',
+          'En-tête colorée sur les cartes TEXT : teinte automatiquement dérivée de la couleur de la carte pour distinguer visuellement l'en-tête du corps.',
+          'Panneau des groupes accessible au survol du bouton Groupes, ancré sous la barre de navigation.',
+          'Le panneau se fixe automatiquement quand un groupe est en surbrillance, et se ferme en cliquant ailleurs.',
+          'Couleur de contour personnalisée par groupe, persistante et partagée entre tous les participants.',
+          'Suppression d'un groupe directement depuis le panneau (les cartes restent sur le board).',
+          'Dissolution automatique d'un groupe quand il ne contient plus qu'un seul objet.',
+          'Liaisons des autres groupes atténuées en mode surbrillance pour mettre en valeur le groupe sélectionné.',
+          'Raccourci Échap pour quitter la surbrillance d'un groupe.',
+        ],
+      },
+      {
+        heading: '🐛 Corrections',
+        items: [
+          'Hauteur des cartes TEXT correctement préservée après la sortie de l'édition (plus de collapse inattendu).',
+          'Mise à jour des liaisons immédiatement visible après modification d'une carte TEXT.',
+          'Position du popup de timer corrigée pour respecter l'écart habituel sous la barre de navigation.',
+          'Panneau des groupes ancré sous le bouton Groupes au lieu du coin supérieur droit.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.2.1',
     date: '2026-05-31',
     title: 'Corrections v0.2.1',
