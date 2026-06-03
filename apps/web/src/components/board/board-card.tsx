@@ -6,6 +6,7 @@ import { parseLabelFmt, formatFieldValue, type LabelFmt } from '@/lib/card-forma
 import { ConnectHandles, LinkCardsOverlay, FmtBtn, BorderResizeHandles, type ResizeDir } from './board-card-parts'
 import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
 import { ColorPicker } from '@/components/ui/color-picker'
+import { headerTint } from '@/lib/colors'
 import { ShapeCard } from './board-card-shape'
 import { DrawCard } from './board-card-draw'
 import { ImageCard } from './board-card-image'
@@ -438,6 +439,8 @@ export function BoardCard({
   }
 
   // ── TEXT / IMAGE / LINK card ─────────────────────────────────────────────────
+  // TEXT cards get a colored header band derived from the card color.
+  const headerBg = card.type === 'TEXT' ? headerTint(card.color) : undefined
   return (
     <div
       data-card-id={card.id}
@@ -457,8 +460,12 @@ export function BoardCard({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
-      {/* ── Actions row ── */}
-      <div className="shrink-0 flex justify-end items-center gap-1 px-2 pt-1.5 h-7 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* ── Header band (colored for TEXT) + actions row ── */}
+      <div
+        className="shrink-0 flex justify-end items-center gap-1 px-2 pt-1.5 h-7 rounded-t-xl"
+        style={headerBg ? { background: headerBg } : undefined}
+      >
+       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {isReadonly ? (
           <div className="w-5 h-5 rounded-full flex items-center justify-center text-gray-400/50" title="Lecture seule">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -507,6 +514,7 @@ export function BoardCard({
             )}
           </>
         )}
+       </div>
       </div>
 
       {/* ── Content ── */}
