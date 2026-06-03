@@ -59,7 +59,7 @@ export function BoardCard({
   const isDragging = useRef(false)
 
   useEffect(() => {
-    if (isEditing) { textareaRef.current?.focus(); textareaRef.current?.select() }
+    if (isEditing) { textareaRef.current?.focus() }
   }, [isEditing])
 
   useEffect(() => {
@@ -161,6 +161,7 @@ export function BoardCard({
   function handleDoubleClick(e: React.MouseEvent) {
     if (isDragging.current) return
     if (isReadonly || card.locked) return
+    e.preventDefault()
     e.stopPropagation()
     if (card.type === 'TEXT') setIsEditing(true)
   }
