@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { Card, BoardField } from '@/hooks/useBoard'
-import { parseLabelFmt, formatFieldValue, type LabelFmt } from '@/lib/card-format'
+import { parseLabelFmt, parseTextFmt, serializeTextFmt, formatFieldValue, type LabelFmt, type TextFmt } from '@/lib/card-format'
 import { ConnectHandles, LinkCardsOverlay, FmtBtn, BorderResizeHandles, type ResizeDir } from './board-card-parts'
 import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
 import { ColorPicker } from '@/components/ui/color-picker'
@@ -47,13 +47,22 @@ export function BoardCard({
   linkCardsMode, isLinkSource, onLinkCardsClick,
 }: Props) {
   const isLabel = card.type === 'LABEL'
+  const isText = card.type === 'TEXT'
 
-  const [isEditing, setIsEditing] = useState(card.content === '' && (card.type === 'TEXT' || isLabel))
-  const [content, setContent] = useState(() => isLabel ? parseLabelFmt(card.content).text : card.content)
+  // Initial text, unwrapped from any formatting JSON (TEXT and LABEL store rich text as JSON).
+  const initialText = isLabel ? parseLabelFmt(card.content).text : isText ? parseTextFmt(card.content).text : card.content
+
+  const [isEditing, setIsEditing] = useState(initialText === '' && (isText || isLabel))
+  const [content, setContent] = useState(initialText)
   const [labelFmt, setLabelFmt] = useState<Omit<LabelFmt, 'text'>>(() => {
     if (!isLabel) return { size: 16, bold: false, italic: false, underline: false, strike: false, color: '#374151' }
     const f = parseLabelFmt(card.content)
     return { size: f.size, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike, color: f.color }
+  })
+  // TEXT card formatting (set from the detail modal; the card just renders it).
+  const [textFmt, setTextFmt] = useState<Omit<TextFmt, 'text'>>(() => {
+    const f = parseTextFmt(card.content)
+    return { size: f.size, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike, color: f.color, align: f.align }
   })
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -99,6 +108,10 @@ export function BoardCard({
       const f = parseLabelFmt(card.content)
       setContent(f.text)
       setLabelFmt({ size: f.size, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike, color: f.color })
+    } else if (isText) {
+      const f = parseTextFmt(card.content)
+      setContent(f.text)
+      setTextFmt({ size: f.size, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike, color: f.color, align: f.align })
     } else {
       setContent(card.content)
     }
@@ -169,11 +182,17 @@ export function BoardCard({
     onUpdate(card.id, JSON.stringify({ ...fmt, text }))
   }
 
+  // TEXT cards preserve their formatting across inline text edits.
+  function saveTextContent(text: string) {
+    onUpdate(card.id, serializeTextFmt({ ...textFmt, text }))
+  }
+
   function handleBlur() {
     // Read scrollHeight synchronously BEFORE setIsEditing unmounts the textarea.
     const ta = textareaRef.current
     setIsEditing(false)
     if (isLabel) saveLabelContent(content, labelFmt)
+    else if (isText) saveTextContent(content)
     else onUpdate(card.id, content)
     if (card.type === 'TEXT' && ta) {
       ta.style.height = 'auto'
@@ -441,6 +460,15 @@ export function BoardCard({
   // ── TEXT / IMAGE / LINK card ─────────────────────────────────────────────────
   // TEXT cards get a colored header band derived from the card color.
   const headerBg = card.type === 'TEXT' ? headerTint(card.color) : undefined
+  // TEXT card text styling (configured from the detail modal).
+  const textStyle: React.CSSProperties = {
+    fontSize: textFmt.size,
+    fontWeight: textFmt.bold ? 700 : 400,
+    fontStyle: textFmt.italic ? 'italic' : 'normal',
+    textDecoration: [textFmt.underline ? 'underline' : '', textFmt.strike ? 'line-through' : ''].filter(Boolean).join(' ') || 'none',
+    color: textFmt.color,
+    textAlign: textFmt.align,
+  }
   return (
     <div
       data-card-id={card.id}
@@ -552,13 +580,13 @@ export function BoardCard({
             }}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
-            className="w-full bg-transparent resize-none text-sm text-gray-800 focus:outline-none placeholder-gray-500/60 leading-relaxed overflow-hidden"
-            style={{ height: 'auto' }}
+            className="w-full bg-transparent resize-none focus:outline-none placeholder-gray-500/60 leading-relaxed overflow-hidden"
+            style={{ height: 'auto', ...textStyle }}
             placeholder="Votre idée…"
             onMouseDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <p className="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+          <p className="whitespace-pre-wrap break-words leading-relaxed" style={textStyle}>
             {content || <span className="text-gray-400/70 text-xs italic">Double-cliquer pour écrire</span>}
           </p>
         )}
