@@ -56,10 +56,10 @@ export function headerTint(hex: string): string {
   const lum = 0.299 * r + 0.587 * g + 0.114 * b // perceived luminance, 0–255
   if (lum < 70) {
     // Already dark — lighten toward white so the header reads as distinct.
-    return rgbToHex(r + (255 - r) * 0.3, g + (255 - g) * 0.3, b + (255 - b) * 0.3)
+    return rgbToHex(r + (255 - r) * 0.05, g + (255 - g) * 0.05, b + (255 - b) * 0.05)
   }
   // Light/pastel — darken toward black for a richer header band.
-  return rgbToHex(r * 0.8, g * 0.8, b * 0.8)
+  return rgbToHex(r * 0.95, g * 0.95, b * 0.95)
 }
 
 export function getRecentColors(): string[] {
