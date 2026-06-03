@@ -29,6 +29,7 @@ import { PresenceIndicator } from '@/components/board/presence-indicator'
 import { TemplateDraftBanner } from '@/components/board/template-draft-banner'
 import { useAuthStore } from '@/store/auth'
 import { ColorPopover } from '@/components/ui/color-picker'
+import { GroupsPanel } from '@/components/board/groups-panel'
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -119,6 +120,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [showExportHub, setShowExportHub] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const imageImportRef = useRef<HTMLInputElement>(null)
+  const [showGroupsPanel, setShowGroupsPanel] = useState(false)
+  const [highlightedGroupId, setHighlightedGroupId] = useState<string | null>(null)
   const [showVoteConfig, setShowVoteConfig] = useState(false)
   const [showVoteResults, setShowVoteResults] = useState(false)
   const [showLastVote, setShowLastVote] = useState(false)
@@ -338,6 +341,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const selectedGroupIds = new Set(selectedCards.map((c) => c.groupId).filter(Boolean))
   const allInSameGroup = selectedGroupIds.size === 1 && selectedCards.every((c) => c.groupId !== null)
   const canGroup = selectedIds.size >= 2
+  const groupCount = new Set(cards.map((c) => c.groupId).filter(Boolean)).size
 
   const myVoteCount = activeVoteSession?.votes.filter((v) => v.userId === currentUserId).length ?? 0
   const voteRemaining = activeVoteSession ? activeVoteSession.votesPerPerson - myVoteCount : 0
@@ -635,6 +639,19 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 Cadre
               </button>
               <button
+                onClick={() => { setShowGroupsPanel((v) => !v); if (showGroupsPanel) setHighlightedGroupId(null) }}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${showGroupsPanel || highlightedGroupId ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
+                title="Voir les groupes"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="9" cy="7" r="3" strokeWidth={2} />
+                  <circle cx="15" cy="7" r="3" strokeWidth={2} />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 20c0-3.314 2.686-6 6-6s6 2.686 6 6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 14c1.657 0 3 1.343 3 3v3" />
+                </svg>
+                Groupes{groupCount > 0 ? ` (${groupCount})` : ''}
+              </button>
+              <button
                 onClick={() => setShowFieldsPanel(true)}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${fields.length > 0 ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
                 title="Gérer les champs personnalisés"
@@ -906,6 +923,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onCastVote={castVote}
           onUncastVote={uncastVote}
           onSetCardLocked={(id, locked) => lockCards([id], locked)}
+          highlightedGroupId={highlightedGroupId}
         />
 
         {timerExpired && (
@@ -930,6 +948,16 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           />
         )}
       </div>
+
+      {/* Groups panel */}
+      {showGroupsPanel && (
+        <GroupsPanel
+          cards={cards}
+          highlightedGroupId={highlightedGroupId}
+          onHighlight={setHighlightedGroupId}
+          onClose={() => { setShowGroupsPanel(false); setHighlightedGroupId(null) }}
+        />
+      )}
 
       {/* Fields panel modal */}
       {showFieldsPanel && (

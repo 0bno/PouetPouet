@@ -61,6 +61,7 @@ interface Props {
   onUncastVote?: (cardId: string) => void
   onSetCardLocked?: (id: string, locked: boolean) => void
   boardName?: string
+  highlightedGroupId?: string | null
 }
 
 export interface BoardCanvasHandle {
@@ -94,7 +95,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   onUpdateFrame, onSetFrameActive, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
   voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked,
-  boardName,
+  boardName, highlightedGroupId,
 }: Props, ref) {
   // ── Refs ────────────────────────────────────────────────────────────────────
   const containerRef     = useRef<HTMLDivElement>(null)
@@ -834,36 +835,40 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
           />
 
           {/* Non-DRAW cards first, then DRAW cards on top */}
-          {[...cards.filter((c) => c.type !== 'DRAW'), ...cards.filter((c) => c.type === 'DRAW')].map((card) => (
-            <BoardCard
-              key={card.id}
-              card={card}
-              fields={fields}
-              zoom={zoom}
-              isSelected={selectedIds.has(card.id)}
-              isMultiSelect={selectedIds.size > 1}
-              groupColor={card.groupId ? groupColor(card.groupId) : undefined}
-              drawMode={toolMode === 'draw'}
-              isReadonly={isReadonly}
-              onMove={onMoveCard}
-              onStartDrag={onStartDragCard}
-              onCommitDrag={onCommitDragCard}
-              onUpdate={onUpdateCard}
-              onRecolor={onRecolorCard}
-              onDelete={onDeleteCard}
-              onResize={onResizeCard}
-              onResizeBox={onResizeCardBox}
-              onStartResize={onStartResizeCard}
-              onCommitResize={onCommitResizeCard}
-              onSelect={handleSelect}
-              onOpenDetail={setDetailCardId}
-              onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}
-              onSetLocked={onSetCardLocked}
-              linkCardsMode={toolMode === 'link-cards'}
-              isLinkSource={linkSourceId === card.id}
-              onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
-            />
-          ))}
+          {[...cards.filter((c) => c.type !== 'DRAW'), ...cards.filter((c) => c.type === 'DRAW')].map((card) => {
+            const dimmed = !!highlightedGroupId && card.groupId !== highlightedGroupId
+            return (
+              <div key={card.id} style={{ opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
+                <BoardCard
+                  card={card}
+                  fields={fields}
+                  zoom={zoom}
+                  isSelected={selectedIds.has(card.id)}
+                  isMultiSelect={selectedIds.size > 1}
+                  groupColor={card.groupId ? groupColor(card.groupId) : undefined}
+                  drawMode={toolMode === 'draw'}
+                  isReadonly={isReadonly}
+                  onMove={onMoveCard}
+                  onStartDrag={onStartDragCard}
+                  onCommitDrag={onCommitDragCard}
+                  onUpdate={onUpdateCard}
+                  onRecolor={onRecolorCard}
+                  onDelete={onDeleteCard}
+                  onResize={onResizeCard}
+                  onResizeBox={onResizeCardBox}
+                  onStartResize={onStartResizeCard}
+                  onCommitResize={onCommitResizeCard}
+                  onSelect={handleSelect}
+                  onOpenDetail={setDetailCardId}
+                  onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}
+                  onSetLocked={onSetCardLocked}
+                  linkCardsMode={toolMode === 'link-cards'}
+                  isLinkSource={linkSourceId === card.id}
+                  onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
+                />
+              </div>
+            )
+          })}
 
           {/* Vote badges overlay */}
           {voteSession && cards.filter((c) => c.type !== 'DRAW').map((card) => {
