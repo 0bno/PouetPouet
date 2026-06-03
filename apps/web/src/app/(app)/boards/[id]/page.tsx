@@ -124,6 +124,18 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [highlightedGroupId, setHighlightedGroupId] = useState<string | null>(null)
   const groupsBtnRef = useRef<HTMLButtonElement>(null)
   const [groupsBtnRect, setGroupsBtnRect] = useState<DOMRect | null>(null)
+  const groupsLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleGroupsEnter() {
+    if (groupsLeaveTimer.current) clearTimeout(groupsLeaveTimer.current)
+    if (groupsBtnRef.current) setGroupsBtnRect(groupsBtnRef.current.getBoundingClientRect())
+    setShowGroupsPanel(true)
+  }
+  function handleGroupsLeave() {
+    // Stay open if a group is highlighted (panel is "pinned").
+    if (highlightedGroupId) return
+    groupsLeaveTimer.current = setTimeout(() => setShowGroupsPanel(false), 150)
+  }
   const [showVoteConfig, setShowVoteConfig] = useState(false)
   const [showVoteResults, setShowVoteResults] = useState(false)
   const [showLastVote, setShowLastVote] = useState(false)
@@ -642,15 +654,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
               </button>
               <button
                 ref={groupsBtnRef}
-                onClick={() => {
-                  if (showGroupsPanel) {
-                    setShowGroupsPanel(false)
-                    setHighlightedGroupId(null)
-                  } else {
-                    if (groupsBtnRef.current) setGroupsBtnRect(groupsBtnRef.current.getBoundingClientRect())
-                    setShowGroupsPanel(true)
-                  }
-                }}
+                onMouseEnter={handleGroupsEnter}
+                onMouseLeave={handleGroupsLeave}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${showGroupsPanel || highlightedGroupId ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
                 title="Voir les groupes"
               >
@@ -971,6 +976,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onClose={() => { setShowGroupsPanel(false); setHighlightedGroupId(null) }}
           top={templateDraftOf ? 170 : 120}
           right={groupsBtnRect ? window.innerWidth - groupsBtnRect.right : 16}
+          onMouseEnter={() => { if (groupsLeaveTimer.current) clearTimeout(groupsLeaveTimer.current) }}
+          onMouseLeave={handleGroupsLeave}
         />
       )}
 

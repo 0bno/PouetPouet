@@ -11,13 +11,13 @@ interface Props {
   onRecolor: (groupId: string, color: string) => void
   onDelete: (groupId: string) => void
   onClose: () => void
-  // Viewport anchor: `top` lines up with the usual gap below the navbar,
-  // `right` aligns the panel's right edge with the Groups button.
   top: number
   right: number
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }
 
-export function GroupsPanel({ cards, highlightedGroupId, onHighlight, onRecolor, onDelete, onClose, top, right }: Props) {
+export function GroupsPanel({ cards, highlightedGroupId, onHighlight, onRecolor, onDelete, onClose, top, right, onMouseEnter, onMouseLeave }: Props) {
   const groups = new Map<string, Card[]>()
   cards.forEach((c) => {
     if (!c.groupId) return
@@ -30,17 +30,20 @@ export function GroupsPanel({ cards, highlightedGroupId, onHighlight, onRecolor,
     <div
       style={{ position: 'fixed', top, right }}
       className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 z-[200] flex flex-col overflow-hidden"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <span className="text-sm font-semibold text-gray-800">Groupes</span>
-        <button
-          onClick={onClose}
-          className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {highlightedGroupId && (
+          <button
+            onClick={() => onHighlight(null)}
+            className="text-[10px] font-medium text-indigo-500 hover:text-indigo-700 transition-colors"
+            title="Désactiver la surbrillance"
+          >
+            Effacer
+          </button>
+        )}
       </div>
 
       {groups.size === 0 ? (
@@ -96,16 +99,6 @@ export function GroupsPanel({ cards, highlightedGroupId, onHighlight, onRecolor,
         </div>
       )}
 
-      {highlightedGroupId && (
-        <div className="border-t border-gray-100 px-4 py-2">
-          <button
-            onClick={() => onHighlight(null)}
-            className="w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
-          >
-            Effacer la mise en avant
-          </button>
-        </div>
-      )}
     </div>
   )
 }
