@@ -306,11 +306,25 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [toolOpacity, setToolOpacity] = useState(0.3)
 
   function handleToolChange(tool: ToolMode, color?: string, stroke?: StrokeSize, fill?: boolean, opacity?: number) {
+    if (tool !== toolMode) selectCards(new Set())
     setToolMode(tool)
     if (color !== undefined) setToolColor(color)
     if (stroke !== undefined) setToolStroke(stroke)
     if (fill !== undefined) setToolFill(fill)
     if (opacity !== undefined) setToolOpacity(opacity)
+  }
+
+  function closeAllDropdowns() {
+    setShowVoteMenu(false)
+    setShowOverflowMenu(false)
+    setShowTimerPicker(false)
+  }
+  function closeAllOverlays() {
+    setShowVoteMenu(false)
+    setShowOverflowMenu(false)
+    setShowTimerPicker(false)
+    setShowGroupsPanel(false)
+    setHighlightedGroupId(null)
   }
 
   useEffect(() => {
@@ -363,7 +377,15 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.size > 0) deleteSelected()
       }
-      if (e.key === 'Escape') { setToolMode('select'); selectCards(new Set()); setHighlightedGroupId(null) }
+      if (e.key === 'Escape') {
+        setToolMode('select')
+        selectCards(new Set())
+        setShowVoteMenu(false)
+        setShowOverflowMenu(false)
+        setShowTimerPicker(false)
+        setShowGroupsPanel(false)
+        setHighlightedGroupId(null)
+      }
       if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) setToolMode('select')
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -478,7 +500,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             <div className="w-px h-6 bg-gray-200 shrink-0" aria-hidden />
             <div className="flex items-center gap-0.5 shrink-0">
               <button
-                onClick={() => setShowImportHub(true)}
+                onClick={() => { closeAllOverlays(); setShowImportHub(true) }}
                 className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                 title="Importer…"
               >
@@ -487,7 +509,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 </svg>
               </button>
               <button
-                onClick={() => setShowExportHub(true)}
+                onClick={() => { closeAllOverlays(); setShowExportHub(true) }}
                 disabled={exporting}
                 className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-wait"
                 title="Exporter…"
@@ -504,7 +526,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 )}
               </button>
               <button
-                onClick={() => setShowShareModal(true)}
+                onClick={() => { closeAllOverlays(); setShowShareModal(true) }}
                 className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                 title="Partager le board"
               >
@@ -513,7 +535,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 </svg>
               </button>
               <button
-                onClick={() => setShowSettingsModal(true)}
+                onClick={() => { closeAllOverlays(); setShowSettingsModal(true) }}
                 className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                 title="Paramètres du board"
               >
@@ -621,7 +643,10 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
               <div ref={voteMenuContainerRef} className="relative shrink-0">
                 <button
                   onClick={() => {
-                    if (voteMenuContainerRef.current) setVoteMenuRect(voteMenuContainerRef.current.getBoundingClientRect())
+                    if (!showVoteMenu) {
+                      closeAllDropdowns()
+                      if (voteMenuContainerRef.current) setVoteMenuRect(voteMenuContainerRef.current.getBoundingClientRect())
+                    }
                     setShowVoteMenu(!showVoteMenu)
                   }}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${showVoteMenu ? 'text-gray-900 bg-gray-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
@@ -641,7 +666,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                     className="w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-[200]"
                   >
                     <button
-                      onClick={() => { setShowVoteMenu(false); setShowVoteConfig(true) }}
+                      onClick={() => { closeAllOverlays(); setShowVoteConfig(true) }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
                     >
                       <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -653,7 +678,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                       <>
                         <div className="border-t border-gray-100 my-1" />
                         <button
-                          onClick={() => { setShowVoteMenu(false); setShowLastVote(true) }}
+                          onClick={() => { closeAllOverlays(); setShowLastVote(true) }}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
                         >
                           <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -704,7 +729,10 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           <div ref={timerPickerRef} className="relative shrink-0">
             <button
               onClick={() => {
-                if (timerPickerRef.current) setTimerPickerRect(timerPickerRef.current.getBoundingClientRect())
+                if (!showTimerPicker) {
+                  closeAllDropdowns()
+                  if (timerPickerRef.current) setTimerPickerRect(timerPickerRef.current.getBoundingClientRect())
+                }
                 setShowTimerPicker(!showTimerPicker)
               }}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${showTimerPicker ? 'text-gray-900 bg-gray-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
@@ -803,7 +831,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             <div className="w-px h-6 bg-gray-200 shrink-0" aria-hidden />
             <div ref={overflowMenuContainerRef} className="relative shrink-0">
               <button
-                onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+                onClick={() => { if (!showOverflowMenu) closeAllDropdowns(); setShowOverflowMenu(!showOverflowMenu) }}
                 className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${showOverflowMenu || showGroupsPanel ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
                 title="Plus d'outils"
               >
@@ -841,7 +869,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                     )}
                   </button>
                   <button
-                    onClick={() => { setShowOverflowMenu(false); setShowFieldsPanel(true) }}
+                    onClick={() => { setShowOverflowMenu(false); setShowGroupsPanel(false); setShowFieldsPanel(true) }}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left ${fields.length > 0 ? 'text-indigo-600' : 'text-gray-700 hover:bg-gray-50'}`}
                   >
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
