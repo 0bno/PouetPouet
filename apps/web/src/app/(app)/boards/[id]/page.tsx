@@ -905,7 +905,11 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onSetFieldValue={setFieldValue}
           onClearFieldValue={clearFieldValue}
           onExitLinkCardsMode={() => setToolMode('select')}
-          onPasteCards={pasteCards}
+          onPasteCards={(clipCards, x, y) => {
+            pasteCards(clipCards, x, y)
+            setClipboard([])
+            try { localStorage.removeItem('klx_clipboard') } catch {}
+          }}
           voteSession={activeVoteSession}
           voteCanVote={voteCanVote}
           currentUserId={currentUserId}
