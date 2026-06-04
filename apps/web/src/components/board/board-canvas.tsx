@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react'
-import type { Card, Frame, BoardField, Connection, VoteSession } from '@/hooks/useBoard'
+import type { Card, Frame, BoardField, Connection, VoteSession, ClipboardCard } from '@/hooks/useBoard'
 import { groupColor } from '@/hooks/useBoard'
 import { BoardCard } from './board-card'
 import { FrameItem } from './frame-item'
@@ -11,7 +11,7 @@ import { ConnectionToolbar } from './connection-toolbar'
 import type { ConnectionPatch } from '@/hooks/useBoard'
 import type { ToolMode, StrokeSize } from './floating-toolbar'
 
-type ClipCard = Pick<Card, 'type' | 'content' | 'color' | 'posX' | 'posY' | 'width' | 'height'>
+type ClipCard = ClipboardCard
 
 interface Props {
   cards: Card[]
@@ -303,6 +303,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
       if (isReadonly) return
+      // Board clipboard takes priority — if it has content, Ctrl+V is handled by keydown
+      if (clipboard.length > 0) return
       const active = document.activeElement
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement)?.isContentEditable) return
 
@@ -342,7 +344,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [isReadonly, onAddCard])
+  }, [isReadonly, onAddCard, clipboard])
 
   // ── Freehand draw (called from canvas or card bubble) ────────────────────────
   function startFreehandDraw(clientX: number, clientY: number) {
