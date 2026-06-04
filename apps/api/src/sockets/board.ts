@@ -147,6 +147,12 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     io.to(`board:${data.boardId}`).emit('cards:locked', { ids: data.ids, locked: data.locked })
   })
 
+  socket.on('card:layer', async (data: { id: string; boardId: string; layer: number }) => {
+    if (!canWrite(socket, data.boardId)) return
+    const card = await ignoreMissing(prisma.card.update({ where: { id: data.id }, data: { layer: data.layer } }))
+    if (card) io.to(`board:${data.boardId}`).emit('card:layered', { id: data.id, layer: data.layer })
+  })
+
   // ── Groups ────────────────────────────────────────────────────────────────────
   socket.on('cards:group', async (data: { boardId: string; cardIds: string[] }) => {
     if (!canWrite(socket, data.boardId)) return
@@ -231,6 +237,12 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     if (!canWrite(socket, data.boardId)) return
     await prisma.frame.delete({ where: { id: data.id } })
     io.to(`board:${data.boardId}`).emit('frame:deleted', data.id)
+  })
+
+  socket.on('frame:layer', async (data: { id: string; boardId: string; layer: number }) => {
+    if (!canWrite(socket, data.boardId)) return
+    const frame = await ignoreMissing(prisma.frame.update({ where: { id: data.id }, data: { layer: data.layer } }))
+    if (frame) io.to(`board:${data.boardId}`).emit('frame:layered', { id: data.id, layer: data.layer })
   })
 
   // ── Board fields ──────────────────────────────────────────────────────────────

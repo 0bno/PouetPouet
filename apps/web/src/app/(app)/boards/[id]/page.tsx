@@ -38,6 +38,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     timerEndsAt, startTimer, stopTimer,
     activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote, extendVote,
     lockCards, lockSelected,
+    setCardLayer, setFrameLayer, setLayerSelected,
     moveSelectedBy, arrangeSelected,
     updateBoardInfo,
     addCard, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
@@ -913,6 +914,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onCastVote={castVote}
           onUncastVote={uncastVote}
           onSetCardLocked={(id, locked) => lockCards([id], locked)}
+          onSetFrameLayer={setFrameLayer}
           highlightedGroupId={highlightedGroupId}
         />
 
@@ -1018,6 +1020,31 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 </div>
               </>
             )}
+            <div className="w-px h-4 bg-gray-200" />
+            {(() => {
+              const selLayer = (() => {
+                const layers = selectedCards.map((c) => c.layer ?? 1)
+                return layers.every((l) => l === layers[0]) ? layers[0] : null
+              })()
+              return (
+                <div className="flex items-center rounded-lg bg-gray-50 border border-gray-200 overflow-hidden shrink-0">
+                  {([0, 1, 2] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLayerSelected(l)}
+                      title={l === 0 ? 'Arrière-plan' : l === 1 ? 'Plan principal' : 'Avant-plan'}
+                      className={`w-7 h-7 flex items-center justify-center transition-colors ${selLayer === l ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:text-indigo-600 hover:bg-gray-100'}`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {l === 0 && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />}
+                        {l === 1 && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14" />}
+                        {l === 2 && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />}
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
             <div className="w-px h-4 bg-gray-200" />
             <button
               onClick={deleteSelected}

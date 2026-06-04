@@ -169,6 +169,12 @@ export function useBoard(boardId: string) {
     socket.on('cards:locked', ({ ids, locked }: { ids: string[]; locked: boolean }) => {
       setCards((prev) => prev.map((c) => ids.includes(c.id) ? { ...c, locked } : c))
     })
+    socket.on('card:layered', ({ id, layer }: { id: string; layer: number }) => {
+      setCards((prev) => prev.map((c) => c.id === id ? { ...c, layer } : c))
+    })
+    socket.on('frame:layered', ({ id, layer }: { id: string; layer: number }) => {
+      setFrames((prev) => prev.map((f) => f.id === id ? { ...f, layer } : f))
+    })
 
     // Cards — process pending history callback before updating state
     socket.on('card:created', (card) => {
@@ -254,7 +260,7 @@ export function useBoard(boardId: string) {
       socket.emit('board:leave', boardId)
       ;['board:state', 'board:error', 'board:presence', 'timer:started', 'timer:stopped',
         'vote:session:started', 'vote:updated', 'vote:session:closed',
-        'cards:locked',
+        'cards:locked', 'card:layered', 'frame:layered',
         'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored',
         'cards:grouped', 'cards:ungrouped', 'cards:group-colored',
         'connection:created', 'connection:deleted', 'connection:updated',
@@ -908,6 +914,64 @@ export function useBoard(boardId: string) {
     return updated
   }
 
+  // ── Layers ───────────────────────────────────────────────────────────────────
+  function setCardLayer(id: string, layer: number) {
+    const oldLayer = cardsRef.current.find((c) => c.id === id)?.layer ?? 1
+    if (oldLayer === layer) return
+    setCards((prev) => prev.map((c) => c.id === id ? { ...c, layer } : c))
+    socketRef.current.emit('card:layer', { id, boardId, layer })
+    pushHistory({
+      undo: () => {
+        setCards((prev) => prev.map((c) => c.id === id ? { ...c, layer: oldLayer } : c))
+        socketRef.current.emit('card:layer', { id, boardId, layer: oldLayer })
+      },
+      redo: () => {
+        setCards((prev) => prev.map((c) => c.id === id ? { ...c, layer } : c))
+        socketRef.current.emit('card:layer', { id, boardId, layer })
+      },
+    })
+  }
+
+  function setFrameLayer(id: string, layer: number) {
+    const oldLayer = framesRef.current.find((f) => f.id === id)?.layer ?? 1
+    if (oldLayer === layer) return
+    setFrames((prev) => prev.map((f) => f.id === id ? { ...f, layer } : f))
+    socketRef.current.emit('frame:layer', { id, boardId, layer })
+    pushHistory({
+      undo: () => {
+        setFrames((prev) => prev.map((f) => f.id === id ? { ...f, layer: oldLayer } : f))
+        socketRef.current.emit('frame:layer', { id, boardId, layer: oldLayer })
+      },
+      redo: () => {
+        setFrames((prev) => prev.map((f) => f.id === id ? { ...f, layer } : f))
+        socketRef.current.emit('frame:layer', { id, boardId, layer })
+      },
+    })
+  }
+
+  // Applies a layer to all selected cards in one batched undo entry.
+  function setLayerSelected(layer: number) {
+    const ids = Array.from(selectedIdsRef.current)
+    if (ids.length === 0) return
+    const oldLayers = new Map(ids.map((id) => {
+      const c = cardsRef.current.find((cc) => cc.id === id)
+      return [id, c?.layer ?? 1] as [string, number]
+    }))
+    if ([...oldLayers.values()].every((l) => l === layer)) return
+    setCards((prev) => prev.map((c) => ids.includes(c.id) ? { ...c, layer } : c))
+    ids.forEach((id) => socketRef.current.emit('card:layer', { id, boardId, layer }))
+    pushHistory({
+      undo: () => {
+        setCards((prev) => prev.map((c) => ids.includes(c.id) ? { ...c, layer: oldLayers.get(c.id) ?? 1 } : c))
+        ids.forEach((id) => socketRef.current.emit('card:layer', { id, boardId, layer: oldLayers.get(id) ?? 1 }))
+      },
+      redo: () => {
+        setCards((prev) => prev.map((c) => ids.includes(c.id) ? { ...c, layer } : c))
+        ids.forEach((id) => socketRef.current.emit('card:layer', { id, boardId, layer }))
+      },
+    })
+  }
+
   // ── Lock ──────────────────────────────────────────────────────────────────────
   function lockCards(ids: string[], locked: boolean) {
     const prevLocked = new Map(ids.map((id) => {
@@ -1008,6 +1072,7 @@ export function useBoard(boardId: string) {
     timerEndsAt, startTimer, stopTimer,
     activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote, extendVote,
     lockCards, lockSelected,
+    setCardLayer, setFrameLayer, setLayerSelected,
     moveSelectedBy, arrangeSelected,
     updateBoardInfo,
     addCard, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
