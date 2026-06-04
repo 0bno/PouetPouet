@@ -18,6 +18,8 @@ model User {
   emailVerified      Boolean   @default(false)
   verifyToken        String?   @unique
   verifyTokenExpires DateTime?
+  resetToken         String?   @unique
+  resetTokenExpires  DateTime?
   patchNotesSeenAt   DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
