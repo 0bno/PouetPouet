@@ -306,6 +306,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const [toolOpacity, setToolOpacity] = useState(0.3)
 
   function handleToolChange(tool: ToolMode, color?: string, stroke?: StrokeSize, fill?: boolean, opacity?: number) {
+    if (tool !== toolMode) selectCards(new Set())
     setToolMode(tool)
     if (color !== undefined) setToolColor(color)
     if (stroke !== undefined) setToolStroke(stroke)
