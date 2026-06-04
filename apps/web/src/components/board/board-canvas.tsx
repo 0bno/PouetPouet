@@ -60,6 +60,7 @@ interface Props {
   onCastVote?: (cardId: string) => void
   onUncastVote?: (cardId: string) => void
   onSetCardLocked?: (id: string, locked: boolean) => void
+  onSetFrameLayer?: (id: string, layer: number) => void
   boardName?: string
   highlightedGroupId?: string | null
 }
@@ -95,6 +96,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   onUpdateFrame, onSetFrameActive, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
   voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked,
+  onSetFrameLayer,
   boardName, highlightedGroupId,
 }: Props, ref) {
   // ── Refs ────────────────────────────────────────────────────────────────────
@@ -747,6 +749,69 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
 
   const detailCard = detailCardId ? cards.find((c) => c.id === detailCardId) ?? null : null
   const zoom = viewport.zoom
+
+  // ── Layer rendering helpers ───────────────────────────────────────────────────
+  function renderFramesForLayer(layer: number) {
+    return frames.filter((f) => (f.layer ?? 1) === layer).map((frame) => (
+      <FrameItem
+        key={frame.id}
+        frame={frame}
+        cards={cards}
+        zoom={zoom}
+        isReadonly={isReadonly}
+        onMove={onMoveFrame}
+        onStartDrag={onStartDragFrame}
+        onCommitDrag={onCommitDragFrame}
+        onResizeBox={onResizeFrameBox}
+        onStartResize={onStartResizeFrame}
+        onCommitResize={onCommitResizeFrame}
+        onUpdate={onUpdateFrame}
+        onSetActive={onSetFrameActive}
+        onDelete={onDeleteFrame}
+        onSetLayer={onSetFrameLayer}
+      />
+    ))
+  }
+
+  function renderCardsForLayer(layer: number) {
+    return [
+      ...cards.filter((c) => c.type !== 'DRAW' && (c.layer ?? 1) === layer),
+      ...cards.filter((c) => c.type === 'DRAW' && (c.layer ?? 1) === layer),
+    ].map((card) => {
+      const dimmed = !!highlightedGroupId && card.groupId !== highlightedGroupId
+      return (
+        <div key={card.id} style={{ opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
+          <BoardCard
+            card={card}
+            fields={fields}
+            zoom={zoom}
+            isSelected={selectedIds.has(card.id)}
+            isMultiSelect={selectedIds.size > 1}
+            groupColor={card.groupId ? (card.groupColor ?? groupColor(card.groupId)) : undefined}
+            drawMode={toolMode === 'draw'}
+            isReadonly={isReadonly}
+            onMove={onMoveCard}
+            onStartDrag={onStartDragCard}
+            onCommitDrag={onCommitDragCard}
+            onUpdate={onUpdateCard}
+            onRecolor={onRecolorCard}
+            onDelete={onDeleteCard}
+            onResize={onResizeCard}
+            onResizeBox={onResizeCardBox}
+            onStartResize={onStartResizeCard}
+            onCommitResize={onCommitResizeCard}
+            onSelect={handleSelect}
+            onOpenDetail={setDetailCardId}
+            onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}
+            onSetLocked={onSetCardLocked}
+            linkCardsMode={toolMode === 'link-cards'}
+            isLinkSource={linkSourceId === card.id}
+            onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
+          />
+        </div>
+      )
+    })
+  }
   // Dot-grid metrics derived from the synced viewport state, so a React re-render
   // never resets the grid to an unzoomed/misaligned value behind applyTransform.
   const dotD = DOT_SPACING * viewport.zoom
@@ -794,26 +859,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
           ref={canvasRef}
           style={{ position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', willChange: 'transform', opacity: viewReady ? 1 : 0, transition: 'opacity 0.2s ease' }}
         >
-          {frames.map((frame) => (
-            <FrameItem
-              key={frame.id}
-              frame={frame}
-              cards={cards}
-              zoom={zoom}
-              isReadonly={isReadonly}
-              onMove={onMoveFrame}
-              onStartDrag={onStartDragFrame}
-              onCommitDrag={onCommitDragFrame}
-              onResizeBox={onResizeFrameBox}
-              onStartResize={onStartResizeFrame}
-              onCommitResize={onCommitResizeFrame}
-              onUpdate={onUpdateFrame}
-              onSetActive={onSetFrameActive}
-              onDelete={onDeleteFrame}
-            />
-          ))}
+          {/* ── Layer 0: Background ── */}
+          {renderFramesForLayer(0)}
+          {renderCardsForLayer(0)}
 
-          {/* SVG: connections + connect ghost + source highlight (below cards) */}
+          {/* ── Layer 1: Main (default) — connections stay here ── */}
+          {renderFramesForLayer(1)}
+
+          {/* SVG: connections + connect ghost + source highlight */}
           <svg
             ref={connectionsSvgRef}
             style={{ position: 'absolute', left: -100000, top: -100000, width: 200000, height: 200000, overflow: 'visible', pointerEvents: 'none' }}
@@ -863,41 +916,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
             style={{ position: 'absolute', display: 'none', border: '1px solid #818cf8', background: 'rgba(99,102,241,0.08)', borderRadius: 3, pointerEvents: 'none' }}
           />
 
-          {/* Non-DRAW cards first, then DRAW cards on top */}
-          {[...cards.filter((c) => c.type !== 'DRAW'), ...cards.filter((c) => c.type === 'DRAW')].map((card) => {
-            const dimmed = !!highlightedGroupId && card.groupId !== highlightedGroupId
-            return (
-              <div key={card.id} style={{ opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
-                <BoardCard
-                  card={card}
-                  fields={fields}
-                  zoom={zoom}
-                  isSelected={selectedIds.has(card.id)}
-                  isMultiSelect={selectedIds.size > 1}
-                  groupColor={card.groupId ? (card.groupColor ?? groupColor(card.groupId)) : undefined}
-                  drawMode={toolMode === 'draw'}
-                  isReadonly={isReadonly}
-                  onMove={onMoveCard}
-                  onStartDrag={onStartDragCard}
-                  onCommitDrag={onCommitDragCard}
-                  onUpdate={onUpdateCard}
-                  onRecolor={onRecolorCard}
-                  onDelete={onDeleteCard}
-                  onResize={onResizeCard}
-                  onResizeBox={onResizeCardBox}
-                  onStartResize={onStartResizeCard}
-                  onCommitResize={onCommitResizeCard}
-                  onSelect={handleSelect}
-                  onOpenDetail={setDetailCardId}
-                  onStartConnect={toolMode === 'select' ? handleStartConnect : undefined}
-                  onSetLocked={onSetCardLocked}
-                  linkCardsMode={toolMode === 'link-cards'}
-                  isLinkSource={linkSourceId === card.id}
-                  onLinkCardsClick={toolMode === 'link-cards' ? handleLinkCardClick : undefined}
-                />
-              </div>
-            )
-          })}
+          {renderCardsForLayer(1)}
+
+          {/* ── Layer 2: Foreground ── */}
+          {renderFramesForLayer(2)}
+          {renderCardsForLayer(2)}
 
           {/* Vote badges overlay */}
           {voteSession && cards.filter((c) => c.type !== 'DRAW').map((card) => {
