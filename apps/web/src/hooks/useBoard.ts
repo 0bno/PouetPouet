@@ -57,6 +57,8 @@ export function useBoard(boardId: string) {
   const pendingCardHistoryRef = useRef<Array<(card: Card) => void>>([])
   const pendingConnHistoryRef = useRef<Array<(conn: Connection) => void>>([])
   const pendingFrameHistoryRef = useRef<Array<(frame: Frame) => void>>([])
+  const pendingGroupHistoryRef = useRef<Array<(groupId: string) => void>>([])
+
   // Start positions for drag/resize (pushed to history only on commit)
   const cardDragStartRef = useRef<Map<string, { posX: number; posY: number }> | null>(null)
   // Coalesces card:move socket emits to at most one batch per animation frame.
@@ -194,6 +196,8 @@ export function useBoard(boardId: string) {
 
     // Groups
     socket.on('cards:grouped', ({ cardIds, groupId }: { cardIds: string[]; groupId: string }) => {
+      const cb = pendingGroupHistoryRef.current.shift()
+      cb?.(groupId)
       setCards((prev) => prev.map((c) => cardIds.includes(c.id) ? { ...c, groupId } : c))
     })
     socket.on('cards:ungrouped', (groupId: string) => {
@@ -536,22 +540,71 @@ export function useBoard(boardId: string) {
     if (ids.length < 2) return
     const selectedCards = cardsRef.current.filter((c) => ids.includes(c.id))
     const groupIds = new Set(selectedCards.map((c) => c.groupId).filter(Boolean))
-    if (groupIds.size === 1 && selectedCards.every((c) => c.groupId !== null)) {
-      socketRef.current.emit('cards:ungroup', { boardId, groupId: Array.from(groupIds)[0] })
+    const allSameGroup = groupIds.size === 1 && selectedCards.every((c) => c.groupId !== null)
+
+    if (allSameGroup) {
+      const existingGroupId = Array.from(groupIds)[0] as string
+      let trackedGroupId = existingGroupId
+      socketRef.current.emit('cards:ungroup', { boardId, groupId: existingGroupId })
+      pushHistory({
+        undo: () => {
+          socketRef.current.emit('cards:group', { boardId, cardIds: ids })
+          pendingGroupHistoryRef.current.push((newGroupId) => { trackedGroupId = newGroupId })
+        },
+        redo: () => socketRef.current.emit('cards:ungroup', { boardId, groupId: trackedGroupId }),
+      })
     } else {
+      let trackedGroupId = ''
+      pendingGroupHistoryRef.current.push((newGroupId) => {
+        trackedGroupId = newGroupId
+        pushHistory({
+          undo: () => socketRef.current.emit('cards:ungroup', { boardId, groupId: trackedGroupId }),
+          redo: () => {
+            socketRef.current.emit('cards:group', { boardId, cardIds: ids })
+            pendingGroupHistoryRef.current.push((ngId) => { trackedGroupId = ngId })
+          },
+        })
+      })
       socketRef.current.emit('cards:group', { boardId, cardIds: ids })
     }
   }
 
   // Dissolves a group by id (used by the groups panel).
   function ungroupById(groupId: string) {
+    const cardsInGroup = cardsRef.current.filter((c) => c.groupId === groupId)
+    if (cardsInGroup.length === 0) { socketRef.current.emit('cards:ungroup', { boardId, groupId }); return }
+    const cardIds = cardsInGroup.map((c) => c.id)
+    const savedColor = cardsInGroup[0].groupColor ?? null
+    let trackedGroupId = groupId
+    pushHistory({
+      undo: () => {
+        socketRef.current.emit('cards:group', { boardId, cardIds })
+        pendingGroupHistoryRef.current.push((newGroupId) => {
+          trackedGroupId = newGroupId
+          if (savedColor) socketRef.current.emit('cards:group-color', { boardId, groupId: newGroupId, color: savedColor })
+        })
+      },
+      redo: () => socketRef.current.emit('cards:ungroup', { boardId, groupId: trackedGroupId }),
+    })
     socketRef.current.emit('cards:ungroup', { boardId, groupId })
   }
 
   // Sets a custom outline color for every card of a group.
   function recolorGroup(groupId: string, color: string) {
+    const oldColor = cardsRef.current.find((c) => c.groupId === groupId)?.groupColor ?? null
+    if (oldColor === color) return
     setCards((prev) => prev.map((c) => c.groupId === groupId ? { ...c, groupColor: color } : c))
     socketRef.current.emit('cards:group-color', { boardId, groupId, color })
+    pushHistory({
+      undo: () => {
+        setCards((prev) => prev.map((c) => c.groupId === groupId ? { ...c, groupColor: oldColor } : c))
+        socketRef.current.emit('cards:group-color', { boardId, groupId, color: oldColor as string })
+      },
+      redo: () => {
+        setCards((prev) => prev.map((c) => c.groupId === groupId ? { ...c, groupColor: color } : c))
+        socketRef.current.emit('cards:group-color', { boardId, groupId, color })
+      },
+    })
   }
 
   // ── Connections ───────────────────────────────────────────────────────────────
@@ -857,7 +910,20 @@ export function useBoard(boardId: string) {
 
   // ── Lock ──────────────────────────────────────────────────────────────────────
   function lockCards(ids: string[], locked: boolean) {
+    const prevLocked = new Map(ids.map((id) => {
+      const c = cardsRef.current.find((cc) => cc.id === id)
+      return [id, c?.locked ?? false] as [string, boolean]
+    }))
     socketRef.current.emit('card:lock', { ids, boardId, locked })
+    pushHistory({
+      undo: () => {
+        const toLock = ids.filter((id) => prevLocked.get(id) === true)
+        const toUnlock = ids.filter((id) => prevLocked.get(id) === false)
+        if (toLock.length) socketRef.current.emit('card:lock', { ids: toLock, boardId, locked: true })
+        if (toUnlock.length) socketRef.current.emit('card:lock', { ids: toUnlock, boardId, locked: false })
+      },
+      redo: () => socketRef.current.emit('card:lock', { ids, boardId, locked }),
+    })
   }
 
   function lockSelected(locked: boolean) {
