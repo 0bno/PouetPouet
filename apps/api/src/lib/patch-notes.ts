@@ -20,6 +20,22 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.3.1',
+    date: '2026-06-05',
+    title: 'Correctifs sessions & Scrum Poker',
+    summary: 'Participants anonymes peuvent enfin rejoindre les sessions, reconnexion automatique effective et bouton Scrum bloque corrige.',
+    sections: [
+      {
+        heading: '🐛 Corrections',
+        items: [
+          "Sessions : les participants anonymes peuvent desormais rejoindre une session (la connexion socket refusait les acces sans compte, rendant le lien de session non fonctionnel).",
+          "Sessions : un participant recharge la page et rejoint automatiquement sa session sans ressaisir son prenom (la resilience annoncee en v0.3.0 est desormais effective).",
+          "Scrum Poker : le bouton Connexion ne reste plus bloque en chargement apres un rechargement de page en mode participant anonyme.",
+        ],
+      },
+    ],
+  },
+  {
     version: '0.3.0',
     date: '2026-06-04',
     title: 'Couches, sessions, clipboard inter-boards & améliorations',
