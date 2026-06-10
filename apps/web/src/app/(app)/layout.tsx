@@ -117,6 +117,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             /* FORGE F0 : la navigation du shell est rendue depuis les manifests
                des modules — activer un module l'ajoute ici sans toucher au layout. */
             <nav className="flex items-center gap-1 ml-2">
+              <Link
+                href="/hub"
+                title="Tous les modules"
+                className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+                  pathname === '/hub'
+                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
+                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-200 dark:hover:bg-gray-800'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z" />
+                </svg>
+              </Link>
               {FORGE_MODULES.flatMap((m) => m.nav).map((link) => {
                 const active = link.match === 'exact' ? pathname === link.href : pathname.startsWith(link.match)
                 return (
