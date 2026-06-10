@@ -1,6 +1,6 @@
-import type { Server, Socket } from 'socket.io'
-import { prisma } from '../lib/prisma.js'
-import { bus } from '../lib/bus.js'
+﻿import type { Server, Socket } from 'socket.io'
+import { prisma } from '../../lib/prisma.js'
+import { bus } from '../../lib/bus.js'
 
 function roomKey(sessionId: string) {
   return `daily:${sessionId}`
@@ -75,14 +75,14 @@ async function advanceSpeaker(io: Server, sessionId: string, skip: boolean) {
 }
 
 export function dailySocketHandlers(io: Server, socket: Socket) {
-  // ── Host joins session room ───────────────────────────────────────────────────
+  // â”€â”€ Host joins session room â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('daily:host_join', async (sessionId: string) => {
     if (!(await isOwner(socket, sessionId))) return
     await socket.join(roomKey(sessionId))
     await broadcastState(io, sessionId)
   })
 
-  // ── Shuffle participant order (PENDING only) ──────────────────────────────────
+  // â”€â”€ Shuffle participant order (PENDING only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('daily:shuffle', async (sessionId: string) => {
     if (!(await isOwner(socket, sessionId))) return
     const participants = await prisma.dailyParticipant.findMany({
@@ -98,7 +98,7 @@ export function dailySocketHandlers(io: Server, socket: Socket) {
     await broadcastState(io, sessionId)
   })
 
-  // ── Start session ─────────────────────────────────────────────────────────────
+  // â”€â”€ Start session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('daily:start', async (sessionId: string) => {
     if (!(await isOwner(socket, sessionId))) return
     const now = new Date()
@@ -118,19 +118,19 @@ export function dailySocketHandlers(io: Server, socket: Socket) {
     await broadcastState(io, sessionId)
   })
 
-  // ── Pass to next ──────────────────────────────────────────────────────────────
+  // â”€â”€ Pass to next â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('daily:next', async (sessionId: string) => {
     if (!(await isOwner(socket, sessionId))) return
     await advanceSpeaker(io, sessionId, false)
   })
 
-  // ── Skip current speaker ──────────────────────────────────────────────────────
+  // â”€â”€ Skip current speaker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('daily:skip', async (sessionId: string) => {
     if (!(await isOwner(socket, sessionId))) return
     await advanceSpeaker(io, sessionId, true)
   })
 
-  // ── End session manually ──────────────────────────────────────────────────────
+  // â”€â”€ End session manually â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('daily:end', async (sessionId: string) => {
     if (!(await isOwner(socket, sessionId))) return
     const now = new Date()

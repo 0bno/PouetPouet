@@ -3,22 +3,23 @@ import type { Server, Socket } from 'socket.io'
 import type { ModuleManifest } from '@pouetpouet/shared'
 import { POUETPOUET_MODULE, SCRUM_MODULE, DAILY_MODULE, WHEEL_MODULE } from '@pouetpouet/shared'
 
-import { boardRoutes } from '../routes/boards.js'
-import { templateRoutes } from '../routes/templates.js'
-import { scrumRoutes } from '../routes/scrum.js'
-import { dailyRoutes } from '../routes/daily.js'
-import { wheelRoutes } from '../routes/wheel.js'
-import { boardSocketHandlers } from '../sockets/board.js'
-import { voteSocketHandlers } from '../sockets/vote.js'
-import { scrumSocketHandlers } from '../sockets/scrum.js'
-import { dailySocketHandlers } from '../sockets/daily.js'
+import { boardRoutes } from './pouetpouet/boards.routes.js'
+import { templateRoutes } from './pouetpouet/templates.routes.js'
+import { boardSocketHandlers } from './pouetpouet/board.sockets.js'
+import { voteSocketHandlers } from './pouetpouet/vote.sockets.js'
+import { scrumRoutes } from './scrum/scrum.routes.js'
+import { scrumSocketHandlers } from './scrum/scrum.sockets.js'
+import { dailyRoutes } from './daily/daily.routes.js'
+import { dailySocketHandlers } from './daily/daily.sockets.js'
+import { wheelRoutes } from './wheel/wheel.routes.js'
 
 // FORGE F0 — registre des modules côté API.
 // Le socle (index.ts) monte routes et handlers socket en itérant ce registre :
 // activer/désactiver un module = l'ajouter/retirer ici. Les routes du socle
 // (auth, notifications, sessions live) restent montées explicitement.
-// La restructuration physique en packages/module-* viendra ensuite ; ce
-// registre fixe déjà la frontière logique de chaque module.
+// Chaque module vit dans son dossier modules/<id>/ et ne doit importer que
+// depuis son dossier, ../../lib (socle) et @pouetpouet/shared. L'extraction
+// en packages npm (packages/module-*) viendra quand cette frontière tiendra.
 
 export interface ApiModule {
   manifest: ModuleManifest

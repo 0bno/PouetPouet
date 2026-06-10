@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto'
+﻿import { randomUUID } from 'crypto'
 import type { Server, Socket } from 'socket.io'
-import { prisma } from '../lib/prisma.js'
+import { prisma } from '../../lib/prisma.js'
 
 function canWrite(socket: Socket, boardId: string): boolean {
   const role = socket.data.boardRoles?.[boardId]
@@ -8,7 +8,7 @@ function canWrite(socket: Socket, boardId: string): boolean {
 }
 
 // Realtime mutations can race with a delete from another client (or the same one).
-// Swallow Prisma's "record not found" (P2025) and "foreign key violation" (P2003 —
+// Swallow Prisma's "record not found" (P2025) and "foreign key violation" (P2003 â€”
 // e.g. upserting a field value on a just-deleted card) so a stale event never
 // crashes the handler.
 async function ignoreMissing<T>(op: Promise<T>): Promise<T | null> {
@@ -36,10 +36,10 @@ async function broadcastPresence(io: Server, boardId: string) {
 }
 
 export function boardSocketHandlers(io: Server, socket: Socket) {
-  // ── Board state ───────────────────────────────────────────────────────────────
+  // â”€â”€ Board state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('board:join', async (boardId: string) => {
     const userId: string | undefined = socket.data.userId
-    if (!userId) { socket.emit('board:error', 'Accès refusé'); return }
+    if (!userId) { socket.emit('board:error', 'AccÃ¨s refusÃ©'); return }
     const board = await prisma.board.findUnique({ where: { id: boardId } })
     if (!board) { socket.emit('board:error', 'Board introuvable'); return }
 
@@ -54,7 +54,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
       if (share) role = share.role as 'EDITOR' | 'VIEWER'
     }
 
-    if (!role) { socket.emit('board:error', 'Accès refusé'); return }
+    if (!role) { socket.emit('board:error', 'AccÃ¨s refusÃ©'); return }
 
     socket.data.boardRoles = socket.data.boardRoles ?? {}
     socket.data.boardRoles[boardId] = role
@@ -91,7 +91,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     }
   })
 
-  // ── Cards ─────────────────────────────────────────────────────────────────────
+  // â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('card:create', async (data: { boardId: string; content: string; posX: number; posY: number; color?: string; type?: string; width?: number; height?: number; layer?: number }) => {
     if (!canWrite(socket, data.boardId)) return
     const card = await prisma.card.create({ data: data as never, include: { fieldValues: true } })
@@ -130,7 +130,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
       })
       if (remaining.length === 1) {
         // The lone survivor may itself have been deleted by a concurrent
-        // card:delete (bulk/group deletion races) — tolerate the missing row.
+        // card:delete (bulk/group deletion races) â€” tolerate the missing row.
         const ungrouped = await ignoreMissing(
           prisma.card.update({ where: { id: remaining[0].id }, data: { groupId: null } })
         )
@@ -157,7 +157,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     if (card) io.to(`board:${data.boardId}`).emit('card:layered', { id: data.id, layer: data.layer })
   })
 
-  // ── Groups ────────────────────────────────────────────────────────────────────
+  // â”€â”€ Groups â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('cards:group', async (data: { boardId: string; cardIds: string[] }) => {
     if (!canWrite(socket, data.boardId)) return
     const groupId = randomUUID()
@@ -177,7 +177,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     io.to(`board:${data.boardId}`).emit('cards:group-colored', { groupId: data.groupId, color: data.color })
   })
 
-  // ── Connections ───────────────────────────────────────────────────────────────
+  // â”€â”€ Connections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('connection:create', async (data: { boardId: string; fromId: string; toId: string }) => {
     if (!canWrite(socket, data.boardId)) return
     const existing = await prisma.cardConnection.findFirst({ where: { boardId: data.boardId, fromId: data.fromId, toId: data.toId } })
@@ -209,7 +209,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     if (updated) io.to(`board:${data.boardId}`).emit('connection:updated', updated)
   })
 
-  // ── Frames ────────────────────────────────────────────────────────────────────
+  // â”€â”€ Frames â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('frame:create', async (data: { boardId: string; posX: number; posY: number; title?: string; color?: string; width?: number; height?: number }) => {
     if (!canWrite(socket, data.boardId)) return
     const frame = await prisma.frame.create({ data })
@@ -249,7 +249,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     if (frame) io.to(`board:${data.boardId}`).emit('frame:layered', { id: data.id, layer: data.layer })
   })
 
-  // ── Board fields ──────────────────────────────────────────────────────────────
+  // â”€â”€ Board fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('boardfield:create', async (data: { boardId: string; name: string; emoji?: string; type: string; options?: string[] | null; order?: number }) => {
     if (!canWrite(socket, data.boardId)) return
     const field = await prisma.boardField.create({
@@ -280,10 +280,10 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     if (deleted) io.to(`board:${data.boardId}`).emit('boardfield:deleted', data.id)
   })
 
-  // ── Card field values ─────────────────────────────────────────────────────────
+  // â”€â”€ Card field values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('cardfield:set', async (data: { boardId: string; cardId: string; fieldId: string; value: string }) => {
     if (!canWrite(socket, data.boardId)) return
-    // Upsert on a just-deleted card/field raises a FK violation — ignore it.
+    // Upsert on a just-deleted card/field raises a FK violation â€” ignore it.
     const fv = await ignoreMissing(prisma.cardFieldValue.upsert({
       where: { cardId_fieldId: { cardId: data.cardId, fieldId: data.fieldId } },
       update: { value: data.value },
@@ -298,7 +298,7 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     io.to(`board:${data.boardId}`).emit('cardfield:cleared', { cardId: data.cardId, fieldId: data.fieldId })
   })
 
-  // ── Timer ─────────────────────────────────────────────────────────────────────
+  // â”€â”€ Timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('timer:start', (data: { boardId: string; duration: number }) => {
     if (!canWrite(socket, data.boardId)) return
     const endsAt = Date.now() + data.duration * 1000

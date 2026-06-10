@@ -1,5 +1,5 @@
-import type { Server, Socket } from 'socket.io'
-import { prisma } from '../lib/prisma.js'
+﻿import type { Server, Socket } from 'socket.io'
+import { prisma } from '../../lib/prisma.js'
 
 function canWrite(socket: Socket, boardId: string): boolean {
   const role = socket.data.boardRoles?.[boardId]
@@ -77,7 +77,7 @@ export function voteSocketHandlers(io: Server, socket: Socket) {
       }, { isolationLevel: 'Serializable' })
       if (!created) return
     } catch {
-      return  // serialization conflict — the concurrent cast won, drop this one
+      return  // serialization conflict â€” the concurrent cast won, drop this one
     }
 
     const updated = await fetchSession(data.sessionId)
