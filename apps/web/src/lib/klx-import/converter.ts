@@ -1,8 +1,22 @@
 // Converts a Klaxoon _brainstorm_data.json to PouetPouet card + connection lists.
 // Pure function — no I/O, no side effects.
 
-const POSTIT_BASE = 192  // Klaxoon default postit size at scale=1 (px)
-const DRAW_PAD    = 8    // padding inside DRAW card bounding box
+const DRAW_PAD = 8  // padding inside DRAW card bounding box
+
+// Sizes a TEXT card to its content instead of carrying over the Klaxoon postit
+// scale (192px × up to 3, mostly empty space). Metrics match the board card:
+// 14px font ≈ 7.8px/char, line-height ≈ 23px, 28px header + paddings.
+function fitTextCard(text: string): { width: number; height: number } {
+  const len = text.length
+  const width = len <= 30 ? 150 : len <= 120 ? 190 : 240
+  const charsPerLine = Math.floor((width - 24) / 7.8)
+  let lines = 0
+  for (const line of text.split('\n')) {
+    lines += Math.max(1, Math.ceil(line.length / charsPerLine))
+  }
+  const height = Math.min(500, Math.max(110, 40 + lines * 23))
+  return { width, height }
+}
 
 // Best-effort mapping for Klaxoon's c{n} CSS variables (no official source).
 const C_MAP: Record<string, string> = {
@@ -180,8 +194,7 @@ export function convertKlaxoon(data: any, imageMap?: Map<string, string>, debug 
 
     const color = colorMap.get(idea.color?.id) ?? '#FFEB3B'
     const text = idea.content_html ? stripHtml(idea.content_html) : (idea.text ?? '')
-    const scaleX = idea.scale?.scale_x ?? 1
-    const scaleY = idea.scale?.scale_y ?? 1
+    const { width, height } = fitTextCard(text)
 
     cards.push({
       klxId: idea.uuid,
@@ -190,8 +203,8 @@ export function convertKlaxoon(data: any, imageMap?: Map<string, string>, debug 
       color,
       posX: Math.round((idea.coords?.left ?? 0) - ox),
       posY: Math.round((idea.coords?.top ?? 0) - oy),
-      width:  Math.max(150, Math.round(POSTIT_BASE * scaleX)),
-      height: Math.max(110, Math.round(POSTIT_BASE * scaleY)),
+      width,
+      height,
       zIndex: idea.z_index ?? 0,
       locked: idea.is_locked ?? false,
       groupKey: null,
@@ -207,16 +220,19 @@ export function convertKlaxoon(data: any, imageMap?: Map<string, string>, debug 
       const text = item.text ?? (item.content_html ? stripHtml(item.content_html) : '')
       const scaleX = item.scale?.scale_x ?? 1
       const w = Math.max(80, Math.round((item.content_width ?? 160) * scaleX))
+      // Klaxoon enlarges titles via scale; carry it into the font size so a
+      // ×3 text stays a big title instead of a 20px label in an oversized box.
+      const size = Math.min(64, Math.max(14, Math.round(16 * scaleX)))
 
       cards.push({
         klxId: item.uuid,
         type: 'LABEL',
-        content: JSON.stringify({ text, size: 20, bold: false, italic: false, underline: false, strike: false, color: '#374151' }),
+        content: JSON.stringify({ text, size, bold: false, italic: false, underline: false, strike: false, color: '#374151' }),
         color: '#374151',
         posX: Math.round((item.coords?.left ?? 0) - ox),
         posY: Math.round((item.coords?.top ?? 0) - oy),
         width: w,
-        height: 56,
+        height: Math.max(40, Math.round(size * 1.6)),
         zIndex: item.z_index ?? 0,
         locked: item.is_locked ?? false,
         groupKey: null,
@@ -290,12 +306,14 @@ export function convertKlaxoon(data: any, imageMap?: Map<string, string>, debug 
 
       const scaleX = item.scale?.scale_x ?? 1
       const scaleY = item.scale?.scale_y ?? 1
-      const MAX_W = 1200, MAX_H = 900
+      // Cap large screenshots; keep small icons at their true (tiny) size
+      // rather than inflating them to a minimum card size.
+      const MAX_W = 800, MAX_H = 600
       const naturalW = (item.width ?? 200) * scaleX
       const naturalH = (item.height ?? 150) * scaleY
       const ratio = Math.min(MAX_W / naturalW, MAX_H / naturalH, 1)
-      const cardW = Math.max(80, Math.round(naturalW * ratio))
-      const cardH = Math.max(60, Math.round(naturalH * ratio))
+      const cardW = Math.max(24, Math.round(naturalW * ratio))
+      const cardH = Math.max(24, Math.round(naturalH * ratio))
 
       cards.push({
         klxId: item.uuid,
