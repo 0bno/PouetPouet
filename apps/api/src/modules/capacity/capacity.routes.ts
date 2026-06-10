@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { prisma } from '../lib/prisma.js'
+import { prisma } from '../../lib/prisma.js'
 
 // Full graph returned for the event detail screen.
 const EVENT_INCLUDE = {

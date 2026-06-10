@@ -65,10 +65,27 @@ export const WHEEL_MODULE: ModuleManifest = {
   listensTo: [],
 }
 
+export const CAPACITY_MODULE: ModuleManifest = {
+  id: 'capacity',
+  name: 'Capacité',
+  description: "Planification de capacité d'équipe (PI / sprint / release)",
+  icon: '📊',
+  color: '#10b981',
+  nav: [{ label: 'Capacité', href: '/capacity', match: '/capacity' }],
+  apiPrefix: '/api/capacity',
+  ownedEntities: ['CapacityTeam', 'CapacityTeamMember', 'CapacityEvent', 'CapacityEventMember', 'CapacityAbsence'],
+  // F3 : Team deviendra le pivot partagé avec Daily ; la vélocité réelle
+  // pourra être alimentée par scrum.ticket.estimated
+  referencedPivots: ['User', 'Team'],
+  emits: [],
+  listensTo: ['scrum.ticket.estimated'],
+}
+
 /** Modules actifs, dans l'ordre d'affichage de la navigation. */
 export const FORGE_MODULES: ModuleManifest[] = [
   POUETPOUET_MODULE,
   DAILY_MODULE,
   SCRUM_MODULE,
   WHEEL_MODULE,
+  CAPACITY_MODULE,
 ]
