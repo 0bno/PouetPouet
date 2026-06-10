@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io'
 import { prisma } from '../lib/prisma.js'
+import { bus } from '../lib/bus.js'
 
 // In-memory participant registry: socketId → { name, roomId }
 const participants = new Map<string, { name: string; roomId: string }>()
@@ -156,6 +157,13 @@ export function scrumSocketHandlers(io: Server, socket: Socket) {
       include: { votes: { orderBy: { createdAt: 'asc' } } },
     })
     io.to(roomKey(roomId)).emit('scrum:ticket:done', ticket)
+    // F3 : alimentera la vélocité estimée du module Capacité
+    bus.publish({
+      type: 'scrum.ticket.estimated',
+      module: 'scrum',
+      actorId: socket.data.userId as string | undefined,
+      payload: { roomId, ticketId, title: ticket.title, estimate, scale },
+    })
   })
 
   // ── Reset votes for revote (host) ────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io'
 import { prisma } from '../lib/prisma.js'
+import { bus } from '../lib/bus.js'
 
 function roomKey(sessionId: string) {
   return `daily:${sessionId}`
@@ -62,6 +63,11 @@ async function advanceSpeaker(io: Server, sessionId: string, skip: boolean) {
     await prisma.dailySession.update({
       where: { id: sessionId },
       data: { status: 'DONE', endedAt: now, currentIndex: nextOrder },
+    })
+    bus.publish({
+      type: 'daily.session.ended',
+      module: 'daily',
+      payload: { sessionId, endedAt: now.toISOString() },
     })
   }
 
@@ -135,6 +141,12 @@ export function dailySocketHandlers(io: Server, socket: Socket) {
     await prisma.dailySession.update({
       where: { id: sessionId },
       data: { status: 'DONE', endedAt: now },
+    })
+    bus.publish({
+      type: 'daily.session.ended',
+      module: 'daily',
+      actorId: socket.data.userId as string | undefined,
+      payload: { sessionId, endedAt: now.toISOString() },
     })
     await broadcastState(io, sessionId)
   })

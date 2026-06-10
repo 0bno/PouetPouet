@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { getIO } from '../lib/io.js'
 import { notify } from '../lib/notify.js'
+import { bus } from '../lib/bus.js'
 
 const ROLE_LABEL = { VIEWER: 'lecteur', EDITOR: 'éditeur' } as const
 
@@ -535,6 +536,13 @@ export const boardRoutes: FastifyPluginAsync = async (app) => {
 
     const io = getIO()
     io?.to(`board:${id}`).emit('board:imported', { cards: createdCards, connections: createdConns })
+
+    bus.publish({
+      type: 'pouetpouet.board.imported',
+      module: 'pouetpouet',
+      actorId: userId,
+      payload: { boardId: id, source: 'klaxoon', cards: createdCards.length, connections: createdConns.length },
+    })
 
     return reply.status(201).send({ cards: createdCards.length, connections: createdConns.length })
   })

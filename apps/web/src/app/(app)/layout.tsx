@@ -12,6 +12,7 @@ import { SessionCountdown } from '@/components/session-countdown'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { useNotificationsStore } from '@/store/notifications'
 import { APP_VERSION } from '@/lib/version'
+import { FORGE_MODULES } from '@pouetpouet/shared'
 
 function Avatar({ name, src }: { name: string; src?: string | null }) {
   if (src) {
@@ -113,57 +114,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {!isBoardPage && (
+            /* FORGE F0 : la navigation du shell est rendue depuis les manifests
+               des modules — activer un module l'ajoute ici sans toucher au layout. */
             <nav className="flex items-center gap-1 ml-2">
-              <Link
-                href="/dashboard"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === '/dashboard'
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
-                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                Mes boards
-              </Link>
-              <Link
-                href="/daily"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  pathname.startsWith('/daily')
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
-                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                Mes dailys
-              </Link>
-              <Link
-                href="/scrum"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  pathname.startsWith('/scrum')
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
-                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                Scrum Poker
-              </Link>
-              <Link
-                href="/wheel"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  pathname.startsWith('/wheel')
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
-                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                La roue
-              </Link>
-              <Link
-                href="/equipes"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  pathname.startsWith('/equipes')
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
-                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                Mes équipes
-              </Link>
+              {FORGE_MODULES.flatMap((m) => m.nav).map((link) => {
+                const active = link.match === 'exact' ? pathname === link.href : pathname.startsWith(link.match)
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400'
+                        : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                )
+              })}
             </nav>
           )}
 
