@@ -20,6 +20,29 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.5.0',
+    date: '2026-06-11',
+    title: 'Webhooks sortants & activité récente dans le hub',
+    summary: 'Abonnez-vous aux événements PouetPouet via webhooks signés HMAC. Le hub affiche maintenant votre activité récente cross-modules.',
+    sections: [
+      {
+        heading: '✨ Nouveautés',
+        items: [
+          'Webhooks sortants : créez jusqu\'à 20 webhooks pour recevoir des événements (import board, daily terminé, Scrum estimé, tirage roue) sur votre endpoint HTTP. Signature HMAC-SHA256 dans l\'en-tête X-Webhook-Signature.',
+          'Test de webhook : bouton ⚡ pour envoyer un ping signé et vérifier la connectivité en temps réel.',
+          'Hub — activité récente : section "Récent" listant vos derniers boards modifiés, dailys, salles Scrum et tirages.',
+          'Daily — enrichissement du payload de fin de session (nombre de participants, durée) sur l\'auto-fin comme sur la fin manuelle.',
+        ],
+      },
+      {
+        heading: '🔧 Corrections',
+        items: [
+          'Daily : la fin automatique (dernier participant) n\'incluait pas le nombre de participants ni la durée dans la notification — corrigé.',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.4.0',
     date: '2026-06-11',
     title: 'FORGE F3 — Liaisons inter-modules & favoris hub',

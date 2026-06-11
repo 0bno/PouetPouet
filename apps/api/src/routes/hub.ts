@@ -19,4 +19,45 @@ export const hubRoutes: FastifyPluginAsync = async (app) => {
 
     return { boards, teams, scrumRooms, dailySessions, capacityEvents, wheelEvents }
   })
+
+  // Recent activity — dernières actions cross-modules pour la section "Récent" du hub.
+  app.get('/recent', { preHandler: [app.authenticate] }, async (request) => {
+    const { id: userId } = request.user as { id: string }
+
+    const [boards, dailySessions, scrumRooms, wheelDraws] = await Promise.all([
+      prisma.board.findMany({
+        where: { ownerId: userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 4,
+        select: { id: true, name: true, updatedAt: true, coverImage: true },
+      }),
+      prisma.dailySession.findMany({
+        where: { ownerId: userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 3,
+        select: { id: true, name: true, status: true, endedAt: true, updatedAt: true },
+      }),
+      prisma.scrumRoom.findMany({
+        where: { ownerId: userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 3,
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          updatedAt: true,
+          team: { select: { id: true, name: true } },
+          _count: { select: { tickets: true } },
+        },
+      }),
+      prisma.wheelDraw.findMany({
+        where: { ownerId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+        select: { id: true, teamName: true, results: true, count: true, createdAt: true },
+      }),
+    ])
+
+    return { boards, dailySessions, scrumRooms, wheelDraws }
+  })
 }
