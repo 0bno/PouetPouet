@@ -25,6 +25,7 @@ import { bus } from './lib/bus.js'
 import { notify } from './lib/notify.js'
 import { prisma } from './lib/prisma.js'
 import { redis } from './lib/redis.js'
+import { scheduleRetention } from './lib/retention.js'
 
 const PORT = Number(process.env.PORT ?? 4000)
 
@@ -338,5 +339,8 @@ io.use((socket, next) => {
 
 setIO(io)
 registerSocketHandlers(io)
+
+// Purge quotidienne des données inactives (sessions fermées, notifs lues, audit)
+scheduleRetention(app.log)
 
 await app.listen({ port: PORT, host: '0.0.0.0' })
