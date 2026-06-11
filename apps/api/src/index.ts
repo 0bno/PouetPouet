@@ -172,6 +172,20 @@ bus.subscribe('scrum.ticket.estimated', async (e) => {
   }
 })
 
+bus.subscribe('pouetpouet.board.imported', async (e) => {
+  if (!e.actorId) return
+  const { boardId, cards, connections } = e.payload as { boardId: string; cards: number; connections: number }
+  const board = await prisma.board.findUnique({ where: { id: boardId }, select: { name: true } })
+  if (!board) return
+  await notify({
+    userId: e.actorId,
+    type: 'BOARD_IMPORTED',
+    title: 'Import terminé',
+    body: `"${board.name}" — ${cards} carte${cards !== 1 ? 's' : ''}${connections > 0 ? `, ${connections} connexion${connections !== 1 ? 's' : ''}` : ''}.`,
+    link: `/dashboard`,
+  })
+})
+
 bus.subscribe('wheel.draw.completed', async (e) => {
   const { teamName, results } = e.payload as { teamName: string; results: string[]; count: number }
   if (!e.actorId) return

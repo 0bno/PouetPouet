@@ -9,6 +9,7 @@ export type NotificationType =
   | 'DAILY_SESSION_ENDED'
   | 'SCRUM_ALL_ESTIMATED'
   | 'WHEEL_DRAW'
+  | 'BOARD_IMPORTED'
 
 interface NotifyInput {
   userId: string
