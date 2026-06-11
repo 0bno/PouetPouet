@@ -5,24 +5,25 @@ import {
   computeMemberCapacity,
   computeEventCapacity,
   summarizeHistory,
-  type CapacityEvent,
-  type CapacityEventMember,
-} from './capacity'
+} from './capacity.js'
+import type { CapacityEvent, CapacityEventMember, CapacityAbsence } from './capacity.js'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+const MON_FRI = [1, 2, 3, 4, 5]
 
 function makeEvent(overrides: Partial<CapacityEvent> = {}): CapacityEvent {
   return {
-    id: 'ev1',
+    id: 'ev-1',
     name: 'Sprint 1',
     ownerId: 'u1',
     teamId: null,
     parentId: null,
     type: 'SPRINT',
     status: 'PLANNING',
-    startDate: '2026-01-05', // Monday
-    endDate: '2026-01-09',   // Friday  → 5 working days
-    workingDays: [1, 2, 3, 4, 5],
+    startDate: '2026-06-01',
+    endDate: '2026-06-12', // 2 weeks Mon-Fri = 10 working days
+    workingDays: MON_FRI,
     hoursPerDay: 8,
     focusFactor: 0.8,
     pointsPerPersonDay: null,
@@ -38,8 +39,8 @@ function makeEvent(overrides: Partial<CapacityEvent> = {}): CapacityEvent {
 
 function makeMember(overrides: Partial<CapacityEventMember> = {}): CapacityEventMember {
   return {
-    id: 'm1',
-    eventId: 'ev1',
+    id: 'm-1',
+    eventId: 'ev-1',
     name: 'Alice',
     role: 'Dev',
     fte: 1,
@@ -50,32 +51,50 @@ function makeMember(overrides: Partial<CapacityEventMember> = {}): CapacityEvent
   }
 }
 
-// ── countWorkingDays ──────────────────────────────────────────────────────────
+function makeAbsence(overrides: Partial<CapacityAbsence> = {}): CapacityAbsence {
+  return {
+    id: 'abs-1',
+    eventMemberId: 'm-1',
+    startDate: '2026-06-02',
+    endDate: '2026-06-02',
+    fraction: 1,
+    reason: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+// ── countWorkingDays ───────────────────────────────────────────────────────────
 
 describe('countWorkingDays', () => {
-  it('counts 5 working days for a Mon–Fri week', () => {
-    expect(countWorkingDays('2026-01-05', '2026-01-09', [1, 2, 3, 4, 5])).toBe(5)
+  it('counts Mon–Fri over a standard 2-week sprint', () => {
+    // 2026-06-01 (Mon) → 2026-06-12 (Fri) = 10 working days
+    expect(countWorkingDays('2026-06-01', '2026-06-12', MON_FRI)).toBe(10)
   })
 
-  it('counts 0 when start > end', () => {
-    expect(countWorkingDays('2026-01-09', '2026-01-05', [1, 2, 3, 4, 5])).toBe(0)
+  it('counts a single Monday as 1', () => {
+    expect(countWorkingDays('2026-06-01', '2026-06-01', MON_FRI)).toBe(1)
   })
 
-  it('counts 1 when start === end and it is a working day', () => {
-    expect(countWorkingDays('2026-01-05', '2026-01-05', [1, 2, 3, 4, 5])).toBe(1)
+  it('counts 0 for a single Saturday (Mon-Fri schedule)', () => {
+    expect(countWorkingDays('2026-06-06', '2026-06-06', MON_FRI)).toBe(0)
   })
 
-  it('counts 0 when start === end and it is not a working day (Sunday)', () => {
-    expect(countWorkingDays('2026-01-04', '2026-01-04', [1, 2, 3, 4, 5])).toBe(0)
+  it('returns 0 when end is before start', () => {
+    expect(countWorkingDays('2026-06-12', '2026-06-01', MON_FRI)).toBe(0)
   })
 
-  it('handles a 4-day week (Mon–Thu)', () => {
-    // Week of Jan 5–9: Mon–Thu = 4 days
-    expect(countWorkingDays('2026-01-05', '2026-01-09', [1, 2, 3, 4])).toBe(4)
+  it('returns 0 for the same day when not a working day', () => {
+    expect(countWorkingDays('2026-06-07', '2026-06-07', MON_FRI)).toBe(0) // Sunday
   })
 
-  it('counts 10 days over two full Mon–Fri weeks', () => {
-    expect(countWorkingDays('2026-01-05', '2026-01-16', [1, 2, 3, 4, 5])).toBe(10)
+  it('counts weekends too when workingDays includes them', () => {
+    expect(countWorkingDays('2026-06-01', '2026-06-07', [0, 1, 2, 3, 4, 5, 6])).toBe(7)
+  })
+
+  it('counts only Saturday when workingDays = [6]', () => {
+    // 2026-06-01 (Mon) → 2026-06-07 (Sun) has one Saturday (2026-06-06)
+    expect(countWorkingDays('2026-06-01', '2026-06-07', [6])).toBe(1)
   })
 })
 
@@ -84,163 +103,200 @@ describe('countWorkingDays', () => {
 describe('absenceWorkingDays', () => {
   const event = makeEvent()
 
-  it('counts absence that exactly covers the event period', () => {
-    const absence = { startDate: '2026-01-05', endDate: '2026-01-09' }
-    expect(absenceWorkingDays(absence, event)).toBe(5)
+  it('counts the working days of an absence fully within the event', () => {
+    const result = absenceWorkingDays({ startDate: '2026-06-02', endDate: '2026-06-02' }, event)
+    expect(result).toBe(1)
   })
 
-  it('clips absence extending before the event start', () => {
-    const absence = { startDate: '2026-01-01', endDate: '2026-01-07' }
-    // Jan 5 Mon, 6 Tue, 7 Wed = 3
-    expect(absenceWorkingDays(absence, event)).toBe(3)
+  it('clips an absence that starts before the event', () => {
+    const result = absenceWorkingDays({ startDate: '2026-05-25', endDate: '2026-06-05' }, event)
+    // Event starts 2026-06-01 (Mon). Mon→Fri = 5 working days
+    expect(result).toBe(5)
   })
 
-  it('clips absence extending past the event end', () => {
-    const absence = { startDate: '2026-01-07', endDate: '2026-01-15' }
-    // Jan 7 Wed, 8 Thu, 9 Fri = 3
-    expect(absenceWorkingDays(absence, event)).toBe(3)
+  it('clips an absence that extends beyond the event end', () => {
+    const result = absenceWorkingDays({ startDate: '2026-06-10', endDate: '2026-06-30' }, event)
+    // Event ends 2026-06-12. Wed+Thu+Fri = 3 days
+    expect(result).toBe(3)
   })
 
-  it('returns 0 when absence is entirely outside the event', () => {
-    const absence = { startDate: '2026-01-12', endDate: '2026-01-14' }
-    expect(absenceWorkingDays(absence, event)).toBe(0)
+  it('returns 0 when absence is outside the event entirely', () => {
+    const result = absenceWorkingDays({ startDate: '2026-06-15', endDate: '2026-06-20' }, event)
+    expect(result).toBe(0)
   })
 })
 
 // ── computeMemberCapacity ─────────────────────────────────────────────────────
 
 describe('computeMemberCapacity', () => {
-  it('computes full-time member with no absences', () => {
-    const event = makeEvent()
-    const member = makeMember({ fte: 1 })
+  const event = makeEvent()
+
+  it('computes full-time capacity with no absences', () => {
+    const member = makeMember()
     const cap = computeMemberCapacity(member, event)
-    expect(cap.netPersonDays).toBe(5)          // 5 working days × 1 fte
-    expect(cap.hours).toBe(32)                  // 5 × 8h × 0.8 focus
-    expect(cap.points).toBeNull()
     expect(cap.absentDays).toBe(0)
+    expect(cap.netPersonDays).toBe(10)
+    expect(cap.effectiveFocus).toBe(0.8)
+    expect(cap.hours).toBe(64) // 10 × 8 × 0.8
+    expect(cap.points).toBeNull()
   })
 
-  it('computes half-time member', () => {
-    const event = makeEvent()
-    const member = makeMember({ fte: 0.5 })
-    const cap = computeMemberCapacity(member, event)
-    expect(cap.netPersonDays).toBe(2.5)
-    expect(cap.hours).toBe(16)
+  it('computes points when pointsPerPersonDay is set', () => {
+    const eventWithPpd = makeEvent({ pointsPerPersonDay: 2 })
+    const member = makeMember()
+    const cap = computeMemberCapacity(member, eventWithPpd)
+    expect(cap.points).toBe(20) // 10 × 2
   })
 
-  it('applies member-level focusFactor over event default', () => {
-    const event = makeEvent({ focusFactor: 0.8 })
-    const member = makeMember({ fte: 1, focusFactor: 0.6 })
-    const cap = computeMemberCapacity(member, event)
-    expect(cap.effectiveFocus).toBe(0.6)
-    expect(cap.hours).toBeCloseTo(5 * 8 * 0.6)
-  })
-
-  it('deducts absences weighted by fraction', () => {
-    const event = makeEvent()
+  it('deducts absence working days, weighted by fraction', () => {
     const member = makeMember({
-      fte: 1,
-      absences: [{
-        id: 'a1',
-        eventMemberId: 'm1',
-        startDate: '2026-01-05',
-        endDate: '2026-01-06', // Mon + Tue = 2 days
-        fraction: 0.5,         // half-day absence each → deducts 1 day
-        reason: null,
-        createdAt: '2026-01-01T00:00:00Z',
-      }],
+      absences: [makeAbsence({ startDate: '2026-06-01', endDate: '2026-06-05', fraction: 1 })],
     })
     const cap = computeMemberCapacity(member, event)
-    expect(cap.absentDays).toBe(1)     // 2 days × 0.5 fraction
-    expect(cap.netPersonDays).toBe(4)  // 5 - 1
-    expect(cap.hours).toBe(25.6)       // 4 × 8 × 0.8
+    expect(cap.absentDays).toBe(5)
+    expect(cap.netPersonDays).toBe(5)
+    expect(cap.hours).toBe(32) // 5 × 8 × 0.8
   })
 
-  it('computes story points when pointsPerPersonDay is set', () => {
-    const event = makeEvent({ pointsPerPersonDay: 3 })
-    const member = makeMember({ fte: 1 })
+  it('handles half-day absences (fraction = 0.5)', () => {
+    const member = makeMember({
+      absences: [makeAbsence({ startDate: '2026-06-01', endDate: '2026-06-02', fraction: 0.5 })],
+    })
     const cap = computeMemberCapacity(member, event)
-    expect(cap.points).toBe(15) // 5 days × 3 pts
+    expect(cap.absentDays).toBe(1) // 2 days × 0.5
+    expect(cap.netPersonDays).toBe(9)
+  })
+
+  it('uses member focusFactor over event focusFactor when set', () => {
+    const member = makeMember({ focusFactor: 0.5 })
+    const cap = computeMemberCapacity(member, event)
+    expect(cap.effectiveFocus).toBe(0.5)
+    expect(cap.hours).toBe(40) // 10 × 8 × 0.5
+  })
+
+  it('handles 0.5 fte (part-time member)', () => {
+    const member = makeMember({ fte: 0.5 })
+    const cap = computeMemberCapacity(member, event)
+    expect(cap.netPersonDays).toBe(5) // 10 × 0.5
+    expect(cap.hours).toBe(32) // 5 × 8 × 0.8
+  })
+
+  it('netPersonDays cannot go below 0', () => {
+    const member = makeMember({
+      absences: [makeAbsence({ startDate: '2026-05-01', endDate: '2026-06-30', fraction: 1 })],
+    })
+    const cap = computeMemberCapacity(member, event)
+    expect(cap.netPersonDays).toBe(0)
+    expect(cap.hours).toBe(0)
   })
 })
 
 // ── computeEventCapacity ──────────────────────────────────────────────────────
 
 describe('computeEventCapacity', () => {
-  it('sums totals across two members', () => {
+  it('aggregates two members totals correctly', () => {
+    const event = makeEvent({
+      pointsPerPersonDay: 2,
+      members: [makeMember({ id: 'm1', order: 0 }), makeMember({ id: 'm2', order: 1 })],
+    })
+    const cap = computeEventCapacity(event)
+    expect(cap.totalWorkingDays).toBe(10)
+    expect(cap.totalNetPersonDays).toBe(20)
+    expect(cap.totalHours).toBe(128)
+    expect(cap.totalPoints).toBe(40)
+  })
+
+  it('computes loadRatio = committedPoints / capacityPoints', () => {
+    const event = makeEvent({
+      pointsPerPersonDay: 2,
+      committedPoints: 50,
+      members: [makeMember()],
+    })
+    const cap = computeEventCapacity(event)
+    expect(cap.loadRatio).toBe(2.5) // 50 / 20
+  })
+
+  it('loadRatio is null when no pointsPerPersonDay', () => {
+    const event = makeEvent({ committedPoints: 30, members: [makeMember()] })
+    const cap = computeEventCapacity(event)
+    expect(cap.loadRatio).toBeNull()
+  })
+
+  it('computes predictability = completedPoints / committedPoints', () => {
+    const event = makeEvent({ committedPoints: 20, completedPoints: 18, members: [] })
+    const cap = computeEventCapacity(event)
+    expect(cap.predictability).toBe(0.9)
+  })
+
+  it('predictability is null when committedPoints is zero', () => {
+    const event = makeEvent({ committedPoints: 0, completedPoints: 5, members: [] })
+    const cap = computeEventCapacity(event)
+    expect(cap.predictability).toBeNull()
+  })
+
+  it('sorts members by order before aggregating', () => {
     const event = makeEvent({
       members: [
-        makeMember({ id: 'm1', name: 'Alice', fte: 1, order: 0 }),
-        makeMember({ id: 'm2', name: 'Bob', fte: 0.5, order: 1 }),
+        makeMember({ id: 'm2', order: 1, name: 'Bob' }),
+        makeMember({ id: 'm1', order: 0, name: 'Alice' }),
       ],
     })
     const cap = computeEventCapacity(event)
-    expect(cap.totalWorkingDays).toBe(5)
-    expect(cap.totalNetPersonDays).toBe(7.5)  // 5 + 2.5
-    expect(cap.totalHours).toBe(48)           // (5 × 8 × 0.8) + (2.5 × 8 × 0.8) = 32 + 20
-    expect(cap.totalPoints).toBeNull()
-  })
-
-  it('computes loadRatio from committedPoints', () => {
-    const event = makeEvent({
-      pointsPerPersonDay: 2,
-      committedPoints: 12,
-      members: [makeMember({ fte: 1 })],
-    })
-    const cap = computeEventCapacity(event) // totalPoints = 5 × 2 = 10
-    expect(cap.totalPoints).toBe(10)
-    expect(cap.loadRatio).toBe(1.2) // 12 / 10
-  })
-
-  it('computes predictability from committed and completed', () => {
-    const event = makeEvent({
-      committedPoints: 20,
-      completedPoints: 18,
-      members: [],
-    })
-    const cap = computeEventCapacity(event)
-    expect(cap.predictability).toBe(0.9) // 18 / 20
-  })
-
-  it('loadRatio is null when totalPoints is null', () => {
-    const event = makeEvent({ members: [makeMember()], committedPoints: 10 })
-    const cap = computeEventCapacity(event)
-    expect(cap.loadRatio).toBeNull()
+    expect(cap.members[0].member.name).toBe('Alice')
+    expect(cap.members[1].member.name).toBe('Bob')
   })
 })
 
 // ── summarizeHistory ──────────────────────────────────────────────────────────
 
 describe('summarizeHistory', () => {
-  it('returns nulls when history is empty', () => {
-    const current = makeEvent({ members: [makeMember()] })
-    const s = summarizeHistory([], current)
-    expect(s.avgVelocity).toBeNull()
-    expect(s.avgPredictability).toBeNull()
-    expect(s.forecastPoints).toBeNull()
+  function makeHistoricEvent(completedPoints: number, committedPoints: number): CapacityEvent {
+    return makeEvent({
+      id: `hist-${completedPoints}`,
+      completedPoints,
+      committedPoints,
+      pointsPerPersonDay: null,
+      members: [makeMember()], // 10 net person-days
+    })
+  }
+
+  it('returns null stats for empty history', () => {
+    const { avgVelocity, avgPredictability, forecastPoints } = summarizeHistory([], makeEvent())
+    expect(avgVelocity).toBeNull()
+    expect(avgPredictability).toBeNull()
+    expect(forecastPoints).toBeNull()
   })
 
-  it('computes weighted average velocity from multiple sprints', () => {
-    const past1 = makeEvent({
-      id: 'e2', completedPoints: 10, committedPoints: 10,
-      members: [makeMember({ id: 'p1' })], // 5 net person-days → velocity = 2
-    })
-    const past2 = makeEvent({
-      id: 'e3', completedPoints: 20, committedPoints: 20,
-      startDate: '2026-01-05', endDate: '2026-01-16', // 10 working days
-      members: [makeMember({ id: 'p2' })], // 10 net person-days → velocity = 2
-    })
-    const current = makeEvent({ members: [makeMember()] }) // 5 person-days
-    const s = summarizeHistory([past1, past2], current)
-    expect(s.avgVelocity).toBe(2) // both sprints have velocity 2
-    expect(s.forecastPoints).toBe(10) // 5 × 2
+  it('computes average realized velocity across past events', () => {
+    // Sprint A: 20 pts, 10 person-days → velocity = 2
+    // Sprint B: 30 pts, 10 person-days → velocity = 3
+    // Weighted average by person-days (equal weight here) = 2.5
+    const history = [makeHistoricEvent(20, 25), makeHistoricEvent(30, 35)]
+    const { avgVelocity } = summarizeHistory(history, makeEvent())
+    expect(avgVelocity).toBe(2.5)
   })
 
-  it('forecasts null when all past events have no completedPoints', () => {
-    const past = makeEvent({ id: 'p', completedPoints: null, members: [makeMember()] })
+  it('computes average predictability across past events', () => {
+    // 20/25 = 0.8; 18/20 = 0.9; avg = 0.85
+    const history = [makeHistoricEvent(20, 25), makeHistoricEvent(18, 20)]
+    const { avgPredictability } = summarizeHistory(history, makeEvent())
+    expect(avgPredictability).toBe(0.85)
+  })
+
+  it('forecasts points for the current event using historical velocity', () => {
+    // history velocity = 2 pt/person-day; current has 10 net person-days → 20
+    const history = [makeHistoricEvent(20, 25)]
     const current = makeEvent({ members: [makeMember()] })
-    const s = summarizeHistory([past], current)
-    expect(s.avgVelocity).toBeNull()
-    expect(s.forecastPoints).toBeNull()
+    const { forecastPoints } = summarizeHistory(history, current)
+    expect(forecastPoints).toBe(20)
+  })
+
+  it('ignores past events without completedPoints for velocity', () => {
+    const history = [
+      makeHistoricEvent(20, 25),
+      makeEvent({ id: 'no-completed', members: [makeMember()] }),
+    ]
+    const { avgVelocity } = summarizeHistory(history, makeEvent())
+    expect(avgVelocity).toBe(2)
   })
 })
