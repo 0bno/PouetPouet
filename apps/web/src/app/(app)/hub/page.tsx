@@ -1,13 +1,38 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { FORGE_MODULES } from '@pouetpouet/shared'
 import { useAuthStore } from '@/store/auth'
+import { api } from '@/lib/api'
 
-// FORGE F1 — hub launcher : les tuiles sont rendues depuis les manifests des
-// modules. Activer un module dans le registre l'ajoute ici automatiquement.
+interface HubStats {
+  boards: number
+  teams: number
+  scrumRooms: number
+  dailySessions: number
+  capacityEvents: number
+  wheelEvents: number
+}
+
+// FORGE F3.2 — compteurs cross-modules : chaque stat est possédée par un module
+// différent, mais le hub les agrège en une vue unifiée (démonstration du graphe).
+const STAT_CONFIG: { key: keyof HubStats; label: string; icon: string }[] = [
+  { key: 'boards', label: 'Boards', icon: '🧀' },
+  { key: 'teams', label: 'Équipes', icon: '👥' },
+  { key: 'scrumRooms', label: 'Salles Scrum', icon: '🃏' },
+  { key: 'dailySessions', label: 'Dailys', icon: '☀️' },
+  { key: 'capacityEvents', label: 'Sprints', icon: '📊' },
+  { key: 'wheelEvents', label: 'Tirages', icon: '🎡' },
+]
+
 export default function HubPage() {
   const { user } = useAuthStore()
+  const [stats, setStats] = useState<HubStats | null>(null)
+
+  useEffect(() => {
+    api.get<HubStats>('/api/hub/stats').then(setStats).catch(() => {})
+  }, [])
 
   return (
     <div className="flex flex-col gap-8">
@@ -19,6 +44,24 @@ export default function HubPage() {
           Vos outils collaboratifs, au même endroit.
         </p>
       </div>
+
+      {/* Cross-module stats */}
+      {stats && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          {STAT_CONFIG.map(({ key, label, icon }) => (
+            <div
+              key={key}
+              className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 text-center"
+            >
+              <div className="text-xl">{icon}</div>
+              <div className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-0.5">
+                {stats[key]}
+              </div>
+              <div className="text-[11px] text-gray-400 dark:text-gray-500">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {FORGE_MODULES.map((mod) => (

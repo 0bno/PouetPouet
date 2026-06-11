@@ -69,7 +69,7 @@ async function issueVerification(user: { id: string; email: string; name: string
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
-  app.post('/register', async (request, reply) => {
+  app.post('/register', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (request, reply) => {
     const body = registerSchema.parse(request.body)
     const existing = await prisma.user.findUnique({ where: { email: body.email } })
     if (existing) return reply.status(409).send({ error: 'Email déjà utilisé' })
@@ -94,7 +94,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ pending: true, email: user.email, emailSent: sent, devLink })
   })
 
-  app.post('/login', async (request, reply) => {
+  app.post('/login', { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } }, async (request, reply) => {
     const body = loginSchema.parse(request.body)
     const user = await prisma.user.findUnique({ where: { email: body.email } })
     if (!user) return reply.status(401).send({ error: 'Identifiants invalides' })
@@ -130,7 +130,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ user: updated, token: jwt })
   })
 
-  app.post('/resend-verification', async (request, reply) => {
+  app.post('/resend-verification', { config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (request, reply) => {
     const { email } = resendSchema.parse(request.body)
     const user = await prisma.user.findUnique({ where: { email } })
     // Always answer ok so we never leak whether an account exists or is already verified.
@@ -184,7 +184,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true })
   })
 
-  app.post('/forgot-password', async (request, reply) => {
+  app.post('/forgot-password', { config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (request, reply) => {
     const { email } = forgotSchema.parse(request.body)
     const user = await prisma.user.findUnique({ where: { email } })
     // Always reply ok so we never leak whether an account exists.

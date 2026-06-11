@@ -6,15 +6,18 @@ import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import cookie from '@fastify/cookie'
+import rateLimit from '@fastify/rate-limit'
 import { Server } from 'socket.io'
 
 import { authRoutes } from './routes/auth.js'
 import { sessionRoutes } from './routes/sessions.js'
 import { notificationRoutes } from './routes/notifications.js'
+import { hubRoutes } from './routes/hub.js'
 import { registerModuleRoutes } from './modules/registry.js'
 import { registerSocketHandlers } from './sockets/index.js'
 import { setIO } from './lib/io.js'
 import { bus } from './lib/bus.js'
+import { notify } from './lib/notify.js'
 import { prisma } from './lib/prisma.js'
 import { redis } from './lib/redis.js'
 
@@ -35,6 +38,20 @@ const app = Fastify({ logger: { level: 'info' } })
 
 if (process.env.SENTRY_DSN) {
   Sentry.setupFastifyErrorHandler(app)
+}
+
+// Rate-limit actif uniquement en prod (pas de faux positifs en dev/test)
+if (process.env.NODE_ENV === 'production') {
+  await app.register(rateLimit, {
+    global: false, // les limites sont déclarées par route dans auth.ts et boards.routes.ts
+    redis: redis.status === 'ready' ? redis : undefined,
+    keyGenerator: (req) => req.ip,
+    errorResponseBuilder: (_req, ctx) => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: `Trop de requêtes. Réessayez dans ${Math.ceil(ctx.ttl / 1000)} secondes.`,
+    }),
+  })
 }
 
 await app.register(cors, {
@@ -62,14 +79,56 @@ app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply
 app.register(authRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/sessions' })
 app.register(notificationRoutes, { prefix: '/api/notifications' })
+app.register(hubRoutes, { prefix: '/api/hub' })
 
 // Modules FORGE : montés depuis le registre (cf. modules/registry.ts)
 registerModuleRoutes(app)
 
-// Trace de tous les événements inter-modules — preuve de vie du bus et
-// point d'observation pendant que les premières liaisons F3 se construisent.
+// Trace de tous les événements inter-modules
 bus.subscribe('*', (e) => {
   app.log.info({ forgeEvent: e.type, module: e.module, payload: e.payload }, 'forge event')
+})
+
+// F3.2 — liaisons événementielles : les modules notifient leurs propriétaires via le bus.
+bus.subscribe('daily.session.ended', async (e) => {
+  const { sessionId } = e.payload as { sessionId: string }
+  const session = await prisma.dailySession.findUnique({
+    where: { id: sessionId },
+    select: { ownerId: true, name: true },
+  })
+  if (session) {
+    await notify({
+      userId: session.ownerId,
+      type: 'DAILY_SESSION_ENDED',
+      title: 'Daily terminé',
+      body: `"${session.name}" est terminé.`,
+      link: '/daily',
+    })
+  }
+})
+
+bus.subscribe('scrum.ticket.estimated', async (e) => {
+  const { roomId } = e.payload as { roomId: string }
+  // Notifier uniquement si tous les tickets du sprint sont estimés.
+  const [total, done] = await Promise.all([
+    prisma.scrumTicket.count({ where: { roomId } }),
+    prisma.scrumTicket.count({ where: { roomId, status: 'DONE' } }),
+  ])
+  if (total > 0 && total === done) {
+    const room = await prisma.scrumRoom.findUnique({
+      where: { id: roomId },
+      select: { ownerId: true, name: true },
+    })
+    if (room) {
+      await notify({
+        userId: room.ownerId,
+        type: 'SCRUM_ALL_ESTIMATED',
+        title: 'Tous les tickets estimés',
+        body: `"${room.name}" — ${total} ticket${total > 1 ? 's' : ''} estimé${total > 1 ? 's' : ''}.`,
+        link: `/scrum`,
+      })
+    }
+  }
 })
 
 // La DB est critique (503 si down) ; Redis est optionnel à ce stade → 'degraded' seulement
