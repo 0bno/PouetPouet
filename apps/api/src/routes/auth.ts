@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js'
 import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/mailer.js'
 
 const USER_SELECT = {
-  id: true, email: true, name: true, avatar: true, bio: true, theme: true, emailVerified: true, createdAt: true,
+  id: true, email: true, name: true, avatar: true, bio: true, theme: true, emailVerified: true, favoriteModules: true, createdAt: true,
 } as const
 
 // Test-only shortcut, controlled by env, so the email step can be skipped while building.
@@ -291,5 +291,20 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!key) return reply.status(404).send({ error: 'Clé introuvable.' })
     await prisma.apiKey.delete({ where: { id: keyId } })
     return reply.send({ ok: true })
+  })
+
+  // ── Module favorites ─────────────────────────────────────────────────────────
+  const favModuleSchema = z.object({ moduleId: z.string().min(1).max(64) })
+
+  app.post('/favorites/modules', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.user as { id: string }
+    const { moduleId } = favModuleSchema.parse(request.body)
+    const user = await prisma.user.findUnique({ where: { id }, select: { favoriteModules: true } })
+    if (!user) return reply.status(404).send({ error: 'Utilisateur introuvable.' })
+    const next = user.favoriteModules.includes(moduleId)
+      ? user.favoriteModules.filter((m) => m !== moduleId)
+      : [...user.favoriteModules, moduleId]
+    const updated = await prisma.user.update({ where: { id }, data: { favoriteModules: next }, select: USER_SELECT })
+    return reply.send(updated)
   })
 }

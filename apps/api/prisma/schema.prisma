@@ -21,6 +21,7 @@ model User {
   resetToken         String?   @unique
   resetTokenExpires  DateTime?
   patchNotesSeenAt   DateTime?
+  favoriteModules    String[]  @default([])
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
