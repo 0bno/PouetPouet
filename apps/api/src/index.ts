@@ -151,21 +151,43 @@ bus.subscribe('daily.session.ended', async (e) => {
 bus.subscribe('scrum.ticket.estimated', async (e) => {
   const { roomId } = e.payload as { roomId: string }
   // Notifier uniquement si tous les tickets du sprint sont estimés.
-  const [total, done] = await Promise.all([
-    prisma.scrumTicket.count({ where: { roomId } }),
-    prisma.scrumTicket.count({ where: { roomId, status: 'DONE' } }),
-  ])
-  if (total > 0 && total === done) {
+  const tickets = await prisma.scrumTicket.findMany({
+    where: { roomId },
+    select: { status: true, estimate: true },
+  })
+  const done = tickets.filter((t) => t.status === 'DONE').length
+  if (tickets.length > 0 && tickets.length === done) {
+    const totalPoints = tickets.reduce((sum, t) => {
+      const n = t.estimate ? Number(t.estimate) : NaN
+      return sum + (isNaN(n) ? 0 : n)
+    }, 0)
     const room = await prisma.scrumRoom.findUnique({
       where: { id: roomId },
-      select: { ownerId: true, name: true },
+      select: { ownerId: true, name: true, teamId: true },
     })
     if (room) {
+      const pointsStr = totalPoints > 0 ? ` · ${totalPoints} pts` : ''
+
+      // F3.2 — Scrum→Capacity: si la salle est liée à une équipe et qu'il existe un sprint
+      // en phase PLANNING sans committedPoints définis, on y remonte la vélocité estimée.
+      if (room.teamId && totalPoints > 0) {
+        const activeSprint = await prisma.capacityEvent.findFirst({
+          where: { teamId: room.teamId, ownerId: room.ownerId, status: 'PLANNING', committedPoints: null },
+          orderBy: { startDate: 'asc' },
+        })
+        if (activeSprint) {
+          await prisma.capacityEvent.update({
+            where: { id: activeSprint.id },
+            data: { committedPoints: totalPoints },
+          })
+        }
+      }
+
       await notify({
         userId: room.ownerId,
         type: 'SCRUM_ALL_ESTIMATED',
         title: 'Tous les tickets estimés',
-        body: `"${room.name}" — ${total} ticket${total > 1 ? 's' : ''} estimé${total > 1 ? 's' : ''}.`,
+        body: `"${room.name}" — ${tickets.length} ticket${tickets.length > 1 ? 's' : ''}${pointsStr}.`,
         link: `/scrum`,
       })
     }

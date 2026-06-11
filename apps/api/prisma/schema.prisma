@@ -324,11 +324,13 @@ model ScrumRoom {
   name      String
   code      String   @unique
   ownerId   String
+  teamId    String?
   scale     String   @default("FIBONACCI")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   owner   User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  team    Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
   tickets ScrumTicket[]
 }
 
@@ -384,6 +386,7 @@ model Team {
   wheelDraws     WheelDraw[]
   dailySessions  DailySession[]
   capacityEvents CapacityEvent[]
+  scrumRooms     ScrumRoom[]
 }
 
 model TeamMember {
