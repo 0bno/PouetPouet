@@ -37,6 +37,22 @@ model User {
   wheelEvents    WheelEvent[]
   wheelDraws     WheelDraw[]
   capacityEvents CapacityEvent[]
+  apiKeys        ApiKey[]
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  keyHash    String    @unique
+  prefix     String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Board {

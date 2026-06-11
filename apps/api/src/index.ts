@@ -85,8 +85,30 @@ if (process.env.NODE_ENV !== 'production') {
   await app.register(swaggerUi, { routePrefix: '/documentation' })
 }
 
-// Décorateur d'authentification utilisé comme preHandler dans les routes
+// Décorateur d'authentification utilisé comme preHandler dans les routes.
+// Accepte un JWT (cookie/bearer) OU une clé API dans X-API-Key.
 app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+  const apiKey = request.headers['x-api-key'] as string | undefined
+  if (apiKey) {
+    const { createHash } = await import('node:crypto')
+    const hash = createHash('sha256').update(apiKey).digest('hex')
+    const key = await prisma.apiKey.findUnique({
+      where: { keyHash: hash },
+      select: { id: true, userId: true, expiresAt: true },
+    })
+    if (!key || (key.expiresAt && key.expiresAt < new Date())) {
+      return reply.status(401).send({ error: 'Clé API invalide ou expirée.' })
+    }
+    // Update lastUsedAt without blocking the request
+    prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
+    const user = await prisma.user.findUnique({
+      where: { id: key.userId },
+      select: { id: true, email: true },
+    })
+    if (!user) return reply.status(401).send({ error: 'Utilisateur introuvable.' })
+    request.user = { id: user.id, email: user.email }
+    return
+  }
   try {
     await request.jwtVerify()
   } catch (err) {

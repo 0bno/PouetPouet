@@ -20,6 +20,22 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.3.0',
+    date: '2026-06-11',
+    title: 'Clés API',
+    summary: 'Générez des clés API pour accéder à PouetPouet depuis vos scripts et outils CI. Gestion complète depuis votre profil.',
+    sections: [
+      {
+        heading: '✨ Nouveautés',
+        items: [
+          'Clés API — créez jusqu\'à 10 clés par compte, révoquez-les à tout moment depuis votre profil',
+          'Authentification par header X-API-Key en complément du JWT pour les appels programmatiques',
+          'Suivi de la dernière utilisation par clé',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.2.0',
     date: '2026-06-11',
     title: 'Curseurs temps réel, RGPD, sécurité CSP, fix viewport',

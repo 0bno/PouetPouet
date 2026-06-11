@@ -252,4 +252,44 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Content-Type', 'application/json')
     return reply.send(JSON.stringify({ exportedAt: new Date().toISOString(), user, boards, scrumRooms, dailySessions, capacityEvents, wheelEvents, notifications }, null, 2))
   })
+
+  // ── API Keys ──────────────────────────────────────────────────────────────────
+  // Keys use the format pp_<64 hex chars>. Only the SHA-256 hash is stored.
+  // The prefix (first 8 chars after "pp_") is stored in plain text for display.
+
+  const apiKeyNameSchema = z.object({ name: z.string().min(1).max(64) })
+
+  app.get('/keys', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.user as { id: string }
+    const keys = await prisma.apiKey.findMany({
+      where: { userId: id },
+      select: { id: true, name: true, prefix: true, lastUsedAt: true, expiresAt: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    return reply.send(keys)
+  })
+
+  app.post('/keys', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.user as { id: string }
+    const { name } = apiKeyNameSchema.parse(request.body)
+
+    const count = await prisma.apiKey.count({ where: { userId: id } })
+    if (count >= 10) return reply.status(429).send({ error: 'Maximum 10 clés API par compte.' })
+
+    const raw = `pp_${crypto.randomBytes(32).toString('hex')}`
+    const keyHash = crypto.createHash('sha256').update(raw).digest('hex')
+    const prefix = raw.slice(3, 11)
+
+    await prisma.apiKey.create({ data: { userId: id, name, keyHash, prefix } })
+    return reply.status(201).send({ key: raw, name, prefix })
+  })
+
+  app.delete('/keys/:keyId', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.user as { id: string }
+    const { keyId } = request.params as { keyId: string }
+    const key = await prisma.apiKey.findFirst({ where: { id: keyId, userId: id } })
+    if (!key) return reply.status(404).send({ error: 'Clé introuvable.' })
+    await prisma.apiKey.delete({ where: { id: keyId } })
+    return reply.send({ ok: true })
+  })
 }

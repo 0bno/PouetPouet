@@ -1,8 +1,18 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth'
+import { api } from '@/lib/api'
+
+interface ApiKeyMeta {
+  id: string
+  name: string
+  prefix: string
+  lastUsedAt: string | null
+  expiresAt: string | null
+  createdAt: string
+}
 
 function resizeImage(file: File, maxPx: number): Promise<string> {
   return new Promise((resolve) => {
@@ -75,6 +85,54 @@ export default function ProfilePage() {
   const [deletePwd, setDeletePwd] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+
+  const [apiKeys, setApiKeys] = useState<ApiKeyMeta[]>([])
+  const [apiKeyName, setApiKeyName] = useState('')
+  const [creatingKey, setCreatingKey] = useState(false)
+  const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
+  const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null)
+  const [keyCopied, setKeyCopied] = useState(false)
+
+  const loadApiKeys = useCallback(async () => {
+    try {
+      const keys = await api.get<ApiKeyMeta[]>('/api/auth/keys')
+      setApiKeys(keys)
+    } catch { /* silent */ }
+  }, [])
+
+  useEffect(() => { loadApiKeys() }, [loadApiKeys])
+
+  async function handleCreateKey(e: React.FormEvent) {
+    e.preventDefault()
+    if (!apiKeyName.trim()) return
+    setCreatingKey(true)
+    try {
+      const res = await api.post<{ key: string; name: string; prefix: string }>('/api/auth/keys', { name: apiKeyName.trim() })
+      setNewKeyValue(res.key)
+      setApiKeyName('')
+      await loadApiKeys()
+    } finally {
+      setCreatingKey(false)
+    }
+  }
+
+  async function handleDeleteKey(id: string) {
+    setDeletingKeyId(id)
+    try {
+      await api.delete(`/api/auth/keys/${id}`)
+      setApiKeys((prev) => prev.filter((k) => k.id !== id))
+    } finally {
+      setDeletingKeyId(null)
+    }
+  }
+
+  function copyKey() {
+    if (!newKeyValue) return
+    navigator.clipboard.writeText(newKeyValue).then(() => {
+      setKeyCopied(true)
+      setTimeout(() => setKeyCopied(false), 2000)
+    })
+  }
 
   if (!user) return null
 
@@ -367,6 +425,86 @@ export default function ProfilePage() {
           </a>
         </div>
       </div>
+
+      {/* ── Clés API ── */}
+      <SectionCard title="Clés API">
+        <div className="space-y-5">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Utilisez une clé API pour accéder à l&apos;API PouetPouet depuis vos scripts (header <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">X-API-Key</code>). Maximum 10 clés.
+          </p>
+
+          {/* New key form */}
+          <form onSubmit={handleCreateKey} className="flex gap-2">
+            <input
+              type="text"
+              value={apiKeyName}
+              onChange={(e) => setApiKeyName(e.target.value)}
+              placeholder="Nom de la clé (ex: CI, script export…)"
+              maxLength={64}
+              className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400 dark:placeholder-gray-500"
+            />
+            <button
+              type="submit"
+              disabled={creatingKey || !apiKeyName.trim()}
+              className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              {creatingKey ? 'Création…' : 'Créer'}
+            </button>
+          </form>
+
+          {/* New key reveal (shown once) */}
+          {newKeyValue && (
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-4 space-y-2">
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Copiez cette clé maintenant — elle ne sera plus affichée.</p>
+              <div className="flex gap-2 items-center">
+                <code className="flex-1 font-mono text-xs bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 truncate">
+                  {newKeyValue}
+                </code>
+                <button
+                  onClick={copyKey}
+                  className="shrink-0 px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                >
+                  {keyCopied ? '✓ Copié' : 'Copier'}
+                </button>
+                <button
+                  onClick={() => setNewKeyValue(null)}
+                  className="shrink-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Existing keys list */}
+          {apiKeys.length > 0 && (
+            <ul className="space-y-2">
+              {apiKeys.map((k) => (
+                <li key={k.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{k.name}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">
+                      pp_{k.prefix}… · créée {new Date(k.createdAt).toLocaleDateString('fr-FR')}
+                      {k.lastUsedAt && ` · utilisée ${new Date(k.lastUsedAt).toLocaleDateString('fr-FR')}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteKey(k.id)}
+                    disabled={deletingKeyId === k.id}
+                    className="shrink-0 px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900/50 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50"
+                  >
+                    {deletingKeyId === k.id ? '…' : 'Révoquer'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {apiKeys.length === 0 && !newKeyValue && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic">Aucune clé API active.</p>
+          )}
+        </div>
+      </SectionCard>
 
       {/* ── Zone de danger ── */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-red-200 dark:border-red-900/50 shadow-sm p-6">
