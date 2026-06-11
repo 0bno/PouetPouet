@@ -20,6 +20,23 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.4.0',
+    date: '2026-06-11',
+    title: 'FORGE F3 — Liaisons inter-modules & favoris hub',
+    summary: 'Scrum Poker alimente désormais la Capacité via le pivot Équipe. Marquez vos modules favoris dans le hub. Notifications enrichies pour tous les événements.',
+    sections: [
+      {
+        heading: '✨ Nouveautés',
+        items: [
+          'Scrum → Capacité : liez une salle Scrum Poker à une équipe — quand tous les tickets sont estimés, le total de points remplit automatiquement le sprint en planification.',
+          'Hub — modules favoris : cliquez l\'étoile sur une tuile pour la mettre en favori ; les favoris apparaissent en premier.',
+          'Notifications enrichies : import de board (résumé cartes + connexions), Scrum terminé (total story points), tirage Roue (résultat).',
+          'Scrum Poker — recherche par équipe dans la liste des salles.',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.3.0',
     date: '2026-06-11',
     title: 'Clés API',
