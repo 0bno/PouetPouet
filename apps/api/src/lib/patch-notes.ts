@@ -20,6 +20,34 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.10.0',
+    date: '2026-06-12',
+    title: 'Palettes de couleurs & hub repensé',
+    summary: 'Choisissez votre palette (charte FDE incluse) depuis votre profil. Le hub gagne une section "Modules à venir" et des récents plus compacts.',
+    sections: [
+      {
+        heading: '🎨 Palettes de couleurs',
+        items: [
+          'Sept palettes au choix dans Profil → Préférences : Défaut, FDE Bleu-Vert, FDE Orange-Vert, FDE Bleu-Orange, Améthyste, Océan et Rubis.',
+          'Chaque palette se combine avec le mode nuit et s\'applique instantanément à toute l\'interface.',
+        ],
+      },
+      {
+        heading: '✨ Hub',
+        items: [
+          'Les éléments récents tiennent sur une ligne, triés du plus frais au plus ancien — "Tout afficher" pour dérouler.',
+          'Nouvelle section "Modules à venir" : un aperçu de ce qui arrive sur la plateforme.',
+        ],
+      },
+      {
+        heading: '🔧 Corrections',
+        items: [
+          'Capacité : la liste des événements plantait dès qu\'un événement existait — corrigé.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.9.1',
     date: '2026-06-12',
     title: 'Aide plus lisible',
