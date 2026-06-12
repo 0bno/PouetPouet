@@ -172,6 +172,16 @@ export function useBoard(boardId: string) {
 
     socket.on('board:presence', (users: PresenceUser[]) => {
       setPresence(users)
+      // Quelqu'un de connecté mais absent de la liste des membres (premier accès
+      // via lien de partage : la BoardShare vient d'être créée) → recharger la
+      // liste, sinon le compteur affiche "2/1".
+      setMembers((prevMembers) => {
+        const known = new Set(prevMembers.map((m) => m.id))
+        if (users.some((u) => !known.has(u.id))) {
+          api.get<BoardMember[]>(`/api/boards/${boardId}/members`).then(setMembers).catch(() => {})
+        }
+        return prevMembers
+      })
       // Remove cursors for users who left the board
       const activeIds = new Set(users.map((u) => u.id))
       setCursors((prev) => {
