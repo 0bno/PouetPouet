@@ -37,6 +37,12 @@ interface Props {
   linkCardsMode?: boolean
   isLinkSource?: boolean
   onLinkCardsClick?: (cardId: string, additive: boolean) => void
+  // One-shot : true uniquement pour la carte que CE client vient de créer
+  // (sinon une création distante volerait le focus de l'utilisateur en train d'écrire).
+  consumeAutoEdit?: (cardId: string) => boolean
+  // Verrou doux : utilisateur distant en train d'éditer cette carte
+  remoteEditor?: { userId: string; name: string } | null
+  onEditingChange?: (cardId: string, editing: boolean) => void
 }
 
 // Memoized: on large boards every card re-rendering on each drag frame is the
@@ -47,7 +53,7 @@ export const BoardCard = memo(function BoardCard({
   onMove, onStartDrag, onCommitDrag, onUpdate, onRecolor, onDelete,
   onResize, onResizeBox, onStartResize, onCommitResize,
   onSelect, onOpenDetail, onStartConnect, onSetLocked,
-  linkCardsMode, isLinkSource, onLinkCardsClick,
+  linkCardsMode, isLinkSource, onLinkCardsClick, consumeAutoEdit, remoteEditor, onEditingChange,
 }: Props) {
   const isLabel = card.type === 'LABEL'
   const isText = card.type === 'TEXT'
@@ -55,7 +61,9 @@ export const BoardCard = memo(function BoardCard({
   // Initial text, unwrapped from any formatting JSON (TEXT and LABEL store rich text as JSON).
   const initialText = isLabel ? parseLabelFmt(card.content).text : isText ? parseTextFmt(card.content).text : card.content
 
-  const [isEditing, setIsEditing] = useState(initialText === '' && (isText || isLabel))
+  const [isEditing, setIsEditing] = useState(
+    () => initialText === '' && (isText || isLabel) && (consumeAutoEdit?.(card.id) ?? false),
+  )
   const [content, setContent] = useState(initialText)
   const [labelFmt, setLabelFmt] = useState<Omit<LabelFmt, 'text'>>(() => {
     if (!isLabel) return { size: 16, bold: false, italic: false, underline: false, strike: false, color: '#374151' }
@@ -96,6 +104,7 @@ export const BoardCard = memo(function BoardCard({
     const pt = editEntryPointRef.current
     editEntryPointRef.current = null
     ta.focus()
+    // (l'émission editing=true/false est gérée par l'effet dédié ci-dessous)
     if (pt) {
       const caretPos = (document as Document & {
         caretPositionFromPoint?: (x: number, y: number) => { offset: number } | null
@@ -104,6 +113,17 @@ export const BoardCard = memo(function BoardCard({
       const offset = caretPos?.offset ?? range?.startOffset ?? ta.value.length
       ta.setSelectionRange(offset, offset)
     }
+  }, [isEditing])
+
+  // Verrou doux : signaler l'entrée/sortie d'édition aux autres clients
+  // (et libérer le verrou si la carte se démonte en cours d'édition).
+  useEffect(() => {
+    if (!onEditingChange) return
+    if (isEditing) {
+      onEditingChange(card.id, true)
+      return () => onEditingChange(card.id, false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing])
 
   useEffect(() => {
@@ -234,7 +254,7 @@ export const BoardCard = memo(function BoardCard({
 
   function handleDoubleClick(e: React.MouseEvent) {
     if (isDragging.current) return
-    if (isReadonly || card.locked) return
+    if (isReadonly || card.locked || remoteEditor) return
     e.preventDefault()
     e.stopPropagation()
     if (card.type === 'TEXT') {
@@ -362,7 +382,7 @@ export const BoardCard = memo(function BoardCard({
         }}
         onMouseDown={handleMouseDown}
         onClick={handleClick}
-        onDoubleClick={(e) => { e.stopPropagation(); if (!isReadonly && !card.locked) setIsEditing(true) }}
+        onDoubleClick={(e) => { e.stopPropagation(); if (!isReadonly && !card.locked && !remoteEditor) setIsEditing(true) }}
       >
         {/* ── Formatting toolbar (visible when a single, unlocked object is selected) ── */}
         {isSelected && !isReadonly && !isMultiSelect && !card.locked && (
@@ -491,6 +511,13 @@ export const BoardCard = memo(function BoardCard({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
+      {/* ── Verrou doux : badge "Untel écrit…" ── */}
+      {remoteEditor && (
+        <div className="absolute -top-2.5 left-2 z-10 flex items-center gap-1 bg-indigo-600 text-white rounded-full px-2 py-0.5 shadow-md pointer-events-none">
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+          <span className="text-[10px] font-semibold whitespace-nowrap">{remoteEditor.name} écrit…</span>
+        </div>
+      )}
       {/* ── Header band (colored for TEXT) + actions row ── */}
       <div
         className="shrink-0 flex justify-end items-center gap-1 px-2 pt-1.5 h-7 rounded-t-xl"

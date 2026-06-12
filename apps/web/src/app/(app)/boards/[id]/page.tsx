@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { MAX_FRAMES_PER_BOARD } from '@pouetpouet/shared'
 import { useBoard } from '@/hooks/useBoard'
 import type { Card, ClipboardCard } from '@/hooks/useBoard'
 import { useSession } from '@/hooks/useSession'
@@ -42,7 +43,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     setCardLayer, setFrameLayer, setLayerSelected,
     moveSelectedBy, arrangeSelected,
     updateBoardInfo,
-    addCard, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
+    addCard, consumeAutoEdit, remoteEditors, notifyEditing, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected, ungroupById, recolorGroup,
     addConnection, deleteConnection, updateConnection,
@@ -58,7 +59,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     emitCursor,
   } = useBoard(id)
   const {
-    session, participantCount, currentActivity, activityResponses, isLoading: sessionLoading,
+    session, participantCount, currentActivity, activityResponses, lastReport, clearLastReport, isLoading: sessionLoading,
     startSession, closeSession, launchActivity, closeActivity,
   } = useSession(id)
 
@@ -233,8 +234,20 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     return () => clearInterval(id)
   }, [])
 
-  const timerSecondsLeft = timerEndsAt !== null ? Math.max(0, Math.ceil((timerEndsAt - now) / 1000)) : null
-  const timerExpired = timerEndsAt !== null && now >= timerEndsAt
+  // Fermeture LOCALE de l'overlay de fin : chacun ferme chez soi (avant, le
+  // bouton émettait timer:stopped et fermait l'overlay de tout le monde).
+  const [timerDismissed, setTimerDismissed] = useState(false)
+  const timerSecondsLeft = timerEndsAt !== null && !timerDismissed ? Math.max(0, Math.ceil((timerEndsAt - now) / 1000)) : null
+  const timerExpired = timerEndsAt !== null && !timerDismissed && now >= timerEndsAt
+
+  // Un nouveau timer (ou un stop) réarme l'affichage local
+  const lastTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (timerEndsAt !== lastTimerRef.current) {
+      lastTimerRef.current = timerEndsAt
+      setTimerDismissed(false)
+    }
+  }, [timerEndsAt])
 
   const voteTimerEndsAt = activeVoteSession?.timerEndsAt ? new Date(activeVoteSession.timerEndsAt).getTime() : null
   const voteTimerSecondsLeft = voteTimerEndsAt !== null ? Math.max(0, Math.ceil((voteTimerEndsAt - now) / 1000)) : null
@@ -254,6 +267,19 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       voteTimerWasExpiredRef.current = false
     }
   }, [voteTimerExpired, activeVoteSession])
+
+  // Clôture du vote (par l'hôte ou le timer) → les résultats s'ouvrent chez
+  // TOUS les participants de la session, pas seulement chez celui qui clôt.
+  const watchedVoteIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (activeVoteSession) {
+      watchedVoteIdRef.current = activeVoteSession.id
+    } else if (watchedVoteIdRef.current && lastVoteSession?.id === watchedVoteIdRef.current) {
+      watchedVoteIdRef.current = null
+      setShowVoteEnd(false)
+      setShowLastVote(true)
+    }
+  }, [activeVoteSession, lastVoteSession])
 
   useEffect(() => {
     if (!showVoteMenu) return
@@ -896,6 +922,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             participantCount={participantCount}
             currentActivity={currentActivity}
             activityResponses={activityResponses}
+            lastReport={lastReport}
+            onClearReport={clearLastReport}
             onLaunchActivity={launchActivity}
             onCloseActivity={closeActivity}
             onCloseSession={closeSession}
@@ -955,6 +983,9 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onCastVote={castVote}
           onUncastVote={uncastVote}
           onSetCardLocked={(id, locked) => lockCards([id], locked)}
+          consumeAutoEdit={consumeAutoEdit}
+          remoteEditors={remoteEditors}
+          onEditingChange={notifyEditing}
           onSetFrameLayer={setFrameLayer}
           highlightedGroupId={highlightedGroupId}
           cursors={cursors}
@@ -971,7 +1002,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         )}
 
         {timerExpired && (
-          <TimerOverlay onDismiss={stopTimer} />
+          <TimerOverlay onDismiss={() => setTimerDismissed(true)} />
         )}
 
         {showVoteEnd && activeVoteSession && (
@@ -990,6 +1021,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             minTop={templateDraftOf ? 170 : 120}
             onToolChange={handleToolChange}
             onAddFrame={() => addFrame(200, 200)}
+            frameLimitReached={frames.length >= MAX_FRAMES_PER_BOARD}
           />
         )}
 

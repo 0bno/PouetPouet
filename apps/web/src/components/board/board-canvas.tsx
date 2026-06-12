@@ -60,6 +60,9 @@ interface Props {
   onCastVote?: (cardId: string) => void
   onUncastVote?: (cardId: string) => void
   onSetCardLocked?: (id: string, locked: boolean) => void
+  consumeAutoEdit?: (cardId: string) => boolean
+  remoteEditors?: Map<string, { userId: string; name: string }>
+  onEditingChange?: (cardId: string, editing: boolean) => void
   onSetFrameLayer?: (id: string, layer: number) => void
   boardName?: string
   highlightedGroupId?: string | null
@@ -110,7 +113,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   onResizeFrameBox, onStartResizeFrame, onCommitResizeFrame,
   onUpdateFrame, onSetFrameActive, onDeleteFrame,
   onSetFieldValue, onClearFieldValue, onExitLinkCardsMode, onPasteCards,
-  voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked,
+  voteSession, voteCanVote = true, currentUserId, onCastVote, onUncastVote, onSetCardLocked, consumeAutoEdit, remoteEditors, onEditingChange,
   onSetFrameLayer,
   boardName, highlightedGroupId,
   cursors, onCursorMove,
@@ -899,6 +902,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
             linkCardsMode={toolMode === 'link-cards'}
             isLinkSource={linkSourceId === card.id}
             onLinkCardsClick={toolMode === 'link-cards' ? hLinkCardsClick : undefined}
+            consumeAutoEdit={consumeAutoEdit}
+            remoteEditor={remoteEditors?.get(card.id) ?? null}
+            onEditingChange={onEditingChange}
           />
         </div>
       )
@@ -1025,7 +1031,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
           {renderCardsForLayer(2)}
 
           {/* Vote badges overlay */}
-          {voteSession && cards.filter((c) => c.type !== 'DRAW' && (visibleIds === null || visibleIds.has(c.id))).map((card) => {
+          {/* Formes et dessins exclus du vote : décoratifs, pas du contenu votable */}
+          {voteSession && cards.filter((c) => c.type !== 'DRAW' && c.type !== 'SHAPE' && (visibleIds === null || visibleIds.has(c.id))).map((card) => {
             const cardVotes = voteSession.votes.filter((v) => v.cardId === card.id)
             const myVotesOnCard = cardVotes.filter((v) => v.userId === currentUserId).length
             const totalVotes = cardVotes.length

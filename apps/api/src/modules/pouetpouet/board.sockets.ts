@@ -1,5 +1,6 @@
 ﻿import { randomUUID } from 'crypto'
 import type { Server, Socket } from 'socket.io'
+import { MAX_FRAMES_PER_BOARD } from '@pouetpouet/shared'
 import { prisma } from '../../lib/prisma.js'
 import { redis } from '../../lib/redis.js'
 
@@ -132,6 +133,22 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
       prisma.boardField.findMany({ where: { boardId }, orderBy: { order: 'asc' } }),
     ])
     socket.emit('board:state', { cards, connections, frames, fields, role })
+    // Rejouer les verrous d'édition en cours au nouvel arrivant (sinon il ne
+    // verrait que les éditions démarrées après son join).
+    const roomSockets = await io.in(`board:${boardId}`).fetchSockets()
+    for (const s of roomSockets) {
+      if (s.id === socket.id) continue
+      // Record (pas Map) : socket.data des sockets distants transite en JSON
+      // via l'adapter Redis — une Map ne survivrait pas à la sérialisation.
+      const editing = s.data.editingCards as Record<string, string> | undefined
+      const editorInfo = s.data.userInfo as { id: string; name: string } | undefined
+      if (!editing || !editorInfo) continue
+      for (const [cardId, bid] of Object.entries(editing)) {
+        if (bid === boardId) {
+          socket.emit('card:editing', { cardId, userId: editorInfo.id, name: editorInfo.name, editing: true })
+        }
+      }
+    }
     if (socket.data.userInfo) await addPresence(boardId, socket.data.userInfo as { id: string; name: string; avatar: string | null })
     await broadcastPresence(io, boardId)
   })
@@ -147,10 +164,31 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     const boardRoles = socket.data.boardRoles as Record<string, string> | undefined
     if (!boardRoles) return
     const info = socket.data.userInfo as { id: string } | undefined
+    // Libérer les verrous d'édition de ce socket (crash, fermeture d'onglet…)
+    const editing = socket.data.editingCards as Record<string, string> | undefined
+    if (editing && info) {
+      for (const [cardId, boardId] of Object.entries(editing)) {
+        io.to(`board:${boardId}`).emit('card:editing', { cardId, userId: info.id, editing: false })
+      }
+    }
     for (const boardId of Object.keys(boardRoles)) {
       if (info) await removePresence(boardId, info.id)
       await broadcastPresence(io, boardId)
     }
+  })
+
+  // Verrou doux d'édition : pendant qu'un utilisateur écrit dans une carte, les
+  // autres voient "Untel écrit…" et ne peuvent pas entrer en édition dessus.
+  // Purement éphémère (aucune persistance) ; libéré au blur, au leave et au disconnect.
+  socket.on('card:editing', (data: { boardId: string; cardId: string; editing: boolean }) => {
+    const info = socket.data.userInfo as { id: string; name: string } | undefined
+    if (!info || !socket.data.boardRoles?.[data.boardId]) return
+    const editing = (socket.data.editingCards ??= {}) as Record<string, string>
+    if (data.editing) editing[data.cardId] = data.boardId
+    else delete editing[data.cardId]
+    socket.to(`board:${data.boardId}`).emit('card:editing', {
+      cardId: data.cardId, userId: info.id, name: info.name, editing: data.editing,
+    })
   })
 
   // Cursor presence — coalesced server-side.
@@ -166,10 +204,13 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
   })
 
   // â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  socket.on('card:create', async (data: { boardId: string; content: string; posX: number; posY: number; color?: string; type?: string; width?: number; height?: number; layer?: number }) => {
+  socket.on('card:create', async (data: { boardId: string; content: string; posX: number; posY: number; color?: string; type?: string; width?: number; height?: number; layer?: number; clientTag?: string }) => {
     if (!canWrite(socket, data.boardId)) return
-    const card = await prisma.card.create({ data: data as never, include: { fieldValues: true } })
-    io.to(`board:${data.boardId}`).emit('card:created', card)
+    // clientTag : écho non persisté — permet au créateur (et lui seul) de
+    // reconnaître sa carte dans le broadcast pour l'ouvrir en édition.
+    const { clientTag, ...cardData } = data
+    const card = await prisma.card.create({ data: cardData as never, include: { fieldValues: true } })
+    io.to(`board:${data.boardId}`).emit('card:created', clientTag ? { ...card, clientTag } : card)
   })
 
   socket.on('card:move', async (data: { id: string; boardId: string; posX: number; posY: number }) => {
@@ -286,8 +327,23 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
   // â”€â”€ Frames â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   socket.on('frame:create', async (data: { boardId: string; posX: number; posY: number; title?: string; color?: string; width?: number; height?: number }) => {
     if (!canWrite(socket, data.boardId)) return
+    // Limite par board — le bouton est désactivé côté client, ceci est la garde dure.
+    const count = await prisma.frame.count({ where: { boardId: data.boardId } })
+    if (count >= MAX_FRAMES_PER_BOARD) return
     const frame = await prisma.frame.create({ data })
     io.to(`board:${data.boardId}`).emit('frame:created', frame)
+  })
+
+  // Reset atomique : une transaction serveur au lieu d'un déluge d'événements
+  // de suppression unitaires côté client (pertes possibles, état partiel).
+  socket.on('board:reset', async (data: { boardId: string }) => {
+    if (!canWrite(socket, data.boardId)) return
+    await prisma.$transaction([
+      prisma.cardConnection.deleteMany({ where: { boardId: data.boardId } }),
+      prisma.card.deleteMany({ where: { boardId: data.boardId } }),
+      prisma.frame.deleteMany({ where: { boardId: data.boardId } }),
+    ])
+    io.to(`board:${data.boardId}`).emit('board:resetted')
   })
 
   socket.on('frame:move', async (data: { id: string; boardId: string; posX: number; posY: number }) => {

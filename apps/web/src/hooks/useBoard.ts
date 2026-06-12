@@ -50,6 +50,8 @@ export function useBoard(boardId: string) {
   const [presence, setPresence] = useState<PresenceUser[]>([])
   const [members, setMembers] = useState<BoardMember[]>([])
   const [cursors, setCursors] = useState<Map<string, { name: string; avatar: string | null; x: number; y: number; ts: number }>>(new Map())
+  // cardId → utilisateur distant en train d'éditer la carte (verrou doux)
+  const [remoteEditors, setRemoteEditors] = useState<Map<string, { userId: string; name: string }>>(new Map())
   const [timerEndsAt, setTimerEndsAt] = useState<number | null>(null)
   const [activeVoteSession, setActiveVoteSession] = useState<VoteSession | null>(null)
   const [lastVoteSession, setLastVoteSession] = useState<VoteSession | null>(null)
@@ -67,6 +69,10 @@ export function useBoard(boardId: string) {
   const undoStackRef = useRef<HistoryEntry[]>([])
   const redoStackRef = useRef<HistoryEntry[]>([])
   const [, setHistoryVersion] = useState(0)
+  // Tags des créations locales en attente : seule la carte créée par CE client
+  // s'ouvre en édition au montage (sinon une création distante vole le focus).
+  const pendingLocalTagsRef = useRef<Set<string>>(new Set())
+  const autoEditCardIdRef = useRef<string | null>(null)
   // Queues for async server-assigned IDs (card:created / frame:created)
   const pendingCardHistoryRef = useRef<Array<(card: Card) => void>>([])
   const pendingConnHistoryRef = useRef<Array<(conn: Connection) => void>>([])
@@ -166,8 +172,36 @@ export function useBoard(boardId: string) {
       if (msg === 'Accès refusé') setAccessDenied(true)
     })
 
+    // Reset atomique : l'état local est vidé d'un coup chez tous les clients.
+    socket.on('board:resetted', () => {
+      setCards([])
+      setConnections([])
+      setFrames([])
+      setSelectedIds(new Set())
+    })
+
+    // Verrou doux : qui édite quelle carte en ce moment (cartes des autres).
+    socket.on('card:editing', (data: { cardId: string; userId: string; name?: string; editing: boolean }) => {
+      setRemoteEditors((prev) => {
+        const next = new Map(prev)
+        if (data.editing && data.name) next.set(data.cardId, { userId: data.userId, name: data.name })
+        else next.delete(data.cardId)
+        return next
+      })
+    })
+
     socket.on('board:presence', (users: PresenceUser[]) => {
       setPresence(users)
+      // Quelqu'un de connecté mais absent de la liste des membres (premier accès
+      // via lien de partage : la BoardShare vient d'être créée) → recharger la
+      // liste, sinon le compteur affiche "2/1".
+      setMembers((prevMembers) => {
+        const known = new Set(prevMembers.map((m) => m.id))
+        if (users.some((u) => !known.has(u.id))) {
+          api.get<BoardMember[]>(`/api/boards/${boardId}/members`).then(setMembers).catch(() => {})
+        }
+        return prevMembers
+      })
       // Remove cursors for users who left the board
       const activeIds = new Set(users.map((u) => u.id))
       setCursors((prev) => {
@@ -213,7 +247,11 @@ export function useBoard(boardId: string) {
     })
 
     // Cards — process pending history callback before updating state
-    socket.on('card:created', (card) => {
+    socket.on('card:created', (payload) => {
+      const { clientTag, ...card } = payload as Card & { clientTag?: string }
+      if (clientTag && pendingLocalTagsRef.current.delete(clientTag)) {
+        autoEditCardIdRef.current = card.id
+      }
       const cb = pendingCardHistoryRef.current.shift()
       cb?.(card as Card)
       setCards((prev) => [...prev, { ...(card as Card), fieldValues: [] }])
@@ -294,10 +332,10 @@ export function useBoard(boardId: string) {
     return () => {
       socket.io.off('reconnect', handleReconnect)
       socket.emit('board:leave', boardId)
-      ;['board:state', 'board:error', 'board:presence', 'board:cursors', 'timer:started', 'timer:stopped',
+      ;['board:state', 'board:error', 'board:resetted', 'board:presence', 'board:cursors', 'timer:started', 'timer:stopped',
         'vote:session:started', 'vote:updated', 'vote:session:closed',
         'cards:locked', 'card:layered', 'frame:layered',
-        'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored',
+        'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored', 'card:editing',
         'cards:grouped', 'cards:ungrouped', 'cards:group-colored',
         'connection:created', 'connection:deleted', 'connection:updated',
         'frame:created', 'frame:moved', 'frame:resized', 'frame:updated', 'frame:deleted',
@@ -328,8 +366,27 @@ export function useBoard(boardId: string) {
       })
     })
 
-    socketRef.current.emit('card:create', emitParams)
+    // Tag local : la carte s'ouvrira en édition uniquement chez son créateur
+    // (le redo réutilise emitParams sans tag — pas de ré-édition au redo).
+    const clientTag = crypto.randomUUID()
+    pendingLocalTagsRef.current.add(clientTag)
+    socketRef.current.emit('card:create', { ...emitParams, clientTag })
   }
+
+  // Consommation one-shot par BoardCard à son montage : true une seule fois
+  // pour la carte fraîchement créée localement.
+  const consumeAutoEdit = useCallback((cardId: string) => {
+    if (autoEditCardIdRef.current === cardId) {
+      autoEditCardIdRef.current = null
+      return true
+    }
+    return false
+  }, [])
+
+  // Signale aux autres clients l'entrée/sortie d'édition d'une carte.
+  const notifyEditing = useCallback((cardId: string, editing: boolean) => {
+    socketRef.current.emit('card:editing', { boardId, cardId, editing })
+  }, [boardId])
 
   // Flushes the coalesced card:move emits (one socket message per moving card).
   function flushMoveEmits() {
@@ -865,15 +922,49 @@ export function useBoard(boardId: string) {
   }
 
   // ── Reset ─────────────────────────────────────────────────────────────────────
+  // Recrée le contenu d'un snapshot pris avant reset. Les IDs serveur changent :
+  // on mappe ancien → nouveau via la file pendingCardHistory pour rebrancher les
+  // connexions. (Les styles de connexions et valeurs de champs ne sont pas restaurés.)
+  function restoreSnapshot(cards: Card[], conns: Connection[], frames: Frame[]) {
+    const idMap = new Map<string, string>()
+    let remaining = cards.length
+    cards.forEach((c) => {
+      pendingCardHistoryRef.current.push((newCard: Card) => {
+        idMap.set(c.id, newCard.id)
+        remaining--
+        if (remaining === 0) {
+          conns.forEach((cn) => {
+            const fromId = idMap.get(cn.fromId)
+            const toId = idMap.get(cn.toId)
+            if (fromId && toId) socketRef.current.emit('connection:create', { boardId, fromId, toId })
+          })
+        }
+      })
+      socketRef.current.emit('card:create', {
+        boardId, content: c.content, posX: c.posX, posY: c.posY, color: c.color,
+        type: c.type, width: c.width, height: c.height, layer: c.layer,
+        groupId: c.groupId, groupColor: c.groupColor, locked: c.locked,
+      })
+    })
+    frames.forEach((f) => socketRef.current.emit('frame:create', {
+      boardId, posX: f.posX, posY: f.posY, title: f.title, color: f.color, width: f.width, height: f.height,
+    }))
+  }
+
+  // Reset atomique côté serveur (board:reset) + snapshot dans l'historique :
+  // Ctrl+Z après un reset restaure cartes, connexions et cadres.
   function resetBoard() {
-    cardsRef.current.forEach((c) => socketRef.current.emit('card:delete', { id: c.id, boardId }))
-    connectionsRef.current.forEach((c) => socketRef.current.emit('connection:delete', { id: c.id, boardId }))
-    framesRef.current.forEach((f) => socketRef.current.emit('frame:delete', { id: f.id, boardId }))
+    const snapCards = cardsRef.current.map((c) => ({ ...c }))
+    const snapConns = connectionsRef.current.map((c) => ({ ...c }))
+    const snapFrames = framesRef.current.map((f) => ({ ...f }))
+    if (snapCards.length > 0 || snapConns.length > 0 || snapFrames.length > 0) {
+      pushHistory({
+        undo: () => restoreSnapshot(snapCards, snapConns, snapFrames),
+        redo: () => socketRef.current.emit('board:reset', { boardId }),
+      })
+    }
+    socketRef.current.emit('board:reset', { boardId })
     setSelectedIds(new Set())
-    // Clear history — post-reset state is the new baseline
-    undoStackRef.current = []
-    redoStackRef.current = []
-    bumpHistory()
   }
 
   // ── Board fields ──────────────────────────────────────────────────────────────
@@ -1177,13 +1268,14 @@ export function useBoard(boardId: string) {
 
   return {
     board, cards, connections, frames, fields, selectedIds, isLoading, userRole, isReadonly, accessDenied, presence, members, cursors,
+    remoteEditors, notifyEditing,
     timerEndsAt, startTimer, stopTimer,
     activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote, extendVote,
     lockCards, lockSelected,
     setCardLayer, setFrameLayer, setLayerSelected,
     moveSelectedBy, arrangeSelected,
     updateBoardInfo,
-    addCard, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
+    addCard, consumeAutoEdit, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected, ungroupById, recolorGroup,
     addConnection, deleteConnection, updateConnection,
