@@ -20,6 +20,32 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.8.0',
+    date: '2026-06-12',
+    title: 'Collaboration board — retours de recette',
+    summary: 'Le travail à plusieurs sur un board devient fiable : plus de vol de focus, verrou d\'édition visible, reset annulable, résultats de vote et d\'activité montrés à tous.',
+    sections: [
+      {
+        heading: '🤝 Collaboration',
+        items: [
+          'Verrou d\'édition : quand quelqu\'un écrit dans une carte, les autres voient "Untel écrit…" et ne peuvent pas l\'ouvrir en même temps.',
+          'Plus de vol de focus : une carte créée par un collègue ne capture plus votre curseur pendant que vous écrivez.',
+          'Compteur de participants fiable : la liste des membres se met à jour quand quelqu\'un rejoint via un lien de partage (fini le "2/1").',
+        ],
+      },
+      {
+        heading: '✨ Améliorations',
+        items: [
+          'Reset du board : suppression atomique (plus d\'éléments fantômes) et Ctrl+Z restaure le contenu effacé.',
+          'Votes : à la clôture, les résultats s\'affichent chez tous les participants ; les formes ne sont plus votables.',
+          'Activités de session : à la clôture d\'un sondage, quiz ou brainstorm, le rapport de résultats reste affiché pour l\'animateur et les participants.',
+          'Timer : fermer l\'écran de fin ne coupe plus le timer des autres.',
+          'Cadres : limite de 2 par board pour préserver la lisibilité.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.7.0',
     date: '2026-06-12',
     title: 'Performance temps réel & accessibilité',
