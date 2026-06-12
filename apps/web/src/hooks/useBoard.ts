@@ -50,6 +50,8 @@ export function useBoard(boardId: string) {
   const [presence, setPresence] = useState<PresenceUser[]>([])
   const [members, setMembers] = useState<BoardMember[]>([])
   const [cursors, setCursors] = useState<Map<string, { name: string; avatar: string | null; x: number; y: number; ts: number }>>(new Map())
+  // cardId → utilisateur distant en train d'éditer la carte (verrou doux)
+  const [remoteEditors, setRemoteEditors] = useState<Map<string, { userId: string; name: string }>>(new Map())
   const [timerEndsAt, setTimerEndsAt] = useState<number | null>(null)
   const [activeVoteSession, setActiveVoteSession] = useState<VoteSession | null>(null)
   const [lastVoteSession, setLastVoteSession] = useState<VoteSession | null>(null)
@@ -176,6 +178,16 @@ export function useBoard(boardId: string) {
       setConnections([])
       setFrames([])
       setSelectedIds(new Set())
+    })
+
+    // Verrou doux : qui édite quelle carte en ce moment (cartes des autres).
+    socket.on('card:editing', (data: { cardId: string; userId: string; name?: string; editing: boolean }) => {
+      setRemoteEditors((prev) => {
+        const next = new Map(prev)
+        if (data.editing && data.name) next.set(data.cardId, { userId: data.userId, name: data.name })
+        else next.delete(data.cardId)
+        return next
+      })
     })
 
     socket.on('board:presence', (users: PresenceUser[]) => {
@@ -323,7 +335,7 @@ export function useBoard(boardId: string) {
       ;['board:state', 'board:error', 'board:resetted', 'board:presence', 'board:cursors', 'timer:started', 'timer:stopped',
         'vote:session:started', 'vote:updated', 'vote:session:closed',
         'cards:locked', 'card:layered', 'frame:layered',
-        'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored',
+        'card:created', 'card:moved', 'card:resized', 'card:updated', 'card:deleted', 'card:recolored', 'card:editing',
         'cards:grouped', 'cards:ungrouped', 'cards:group-colored',
         'connection:created', 'connection:deleted', 'connection:updated',
         'frame:created', 'frame:moved', 'frame:resized', 'frame:updated', 'frame:deleted',
@@ -370,6 +382,11 @@ export function useBoard(boardId: string) {
     }
     return false
   }, [])
+
+  // Signale aux autres clients l'entrée/sortie d'édition d'une carte.
+  const notifyEditing = useCallback((cardId: string, editing: boolean) => {
+    socketRef.current.emit('card:editing', { boardId, cardId, editing })
+  }, [boardId])
 
   // Flushes the coalesced card:move emits (one socket message per moving card).
   function flushMoveEmits() {
@@ -1251,6 +1268,7 @@ export function useBoard(boardId: string) {
 
   return {
     board, cards, connections, frames, fields, selectedIds, isLoading, userRole, isReadonly, accessDenied, presence, members, cursors,
+    remoteEditors, notifyEditing,
     timerEndsAt, startTimer, stopTimer,
     activeVoteSession, lastVoteSession, startVote, castVote, uncastVote, stopVote, extendVote,
     lockCards, lockSelected,
