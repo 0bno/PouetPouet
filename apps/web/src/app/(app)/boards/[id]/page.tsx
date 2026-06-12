@@ -255,6 +255,19 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     }
   }, [voteTimerExpired, activeVoteSession])
 
+  // Clôture du vote (par l'hôte ou le timer) → les résultats s'ouvrent chez
+  // TOUS les participants de la session, pas seulement chez celui qui clôt.
+  const watchedVoteIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (activeVoteSession) {
+      watchedVoteIdRef.current = activeVoteSession.id
+    } else if (watchedVoteIdRef.current && lastVoteSession?.id === watchedVoteIdRef.current) {
+      watchedVoteIdRef.current = null
+      setShowVoteEnd(false)
+      setShowLastVote(true)
+    }
+  }, [activeVoteSession, lastVoteSession])
+
   useEffect(() => {
     if (!showVoteMenu) return
     function handleClick(e: MouseEvent) {
