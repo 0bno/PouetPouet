@@ -43,7 +43,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     setCardLayer, setFrameLayer, setLayerSelected,
     moveSelectedBy, arrangeSelected,
     updateBoardInfo,
-    addCard, consumeAutoEdit, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
+    addCard, consumeAutoEdit, remoteEditors, notifyEditing, moveCard, resizeCard, resizeCardBox, updateCard, deleteCard, deleteSelected, recolorCard, recolorSelected,
     startDragCard, commitDragCard, startResizeCard, commitResizeCard,
     groupSelected, ungroupById, recolorGroup,
     addConnection, deleteConnection, updateConnection,
@@ -982,6 +982,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           onUncastVote={uncastVote}
           onSetCardLocked={(id, locked) => lockCards([id], locked)}
           consumeAutoEdit={consumeAutoEdit}
+          remoteEditors={remoteEditors}
+          onEditingChange={notifyEditing}
           onSetFrameLayer={setFrameLayer}
           highlightedGroupId={highlightedGroupId}
           cursors={cursors}

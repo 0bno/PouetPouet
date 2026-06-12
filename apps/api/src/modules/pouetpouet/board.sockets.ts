@@ -133,6 +133,22 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
       prisma.boardField.findMany({ where: { boardId }, orderBy: { order: 'asc' } }),
     ])
     socket.emit('board:state', { cards, connections, frames, fields, role })
+    // Rejouer les verrous d'édition en cours au nouvel arrivant (sinon il ne
+    // verrait que les éditions démarrées après son join).
+    const roomSockets = await io.in(`board:${boardId}`).fetchSockets()
+    for (const s of roomSockets) {
+      if (s.id === socket.id) continue
+      // Record (pas Map) : socket.data des sockets distants transite en JSON
+      // via l'adapter Redis — une Map ne survivrait pas à la sérialisation.
+      const editing = s.data.editingCards as Record<string, string> | undefined
+      const editorInfo = s.data.userInfo as { id: string; name: string } | undefined
+      if (!editing || !editorInfo) continue
+      for (const [cardId, bid] of Object.entries(editing)) {
+        if (bid === boardId) {
+          socket.emit('card:editing', { cardId, userId: editorInfo.id, name: editorInfo.name, editing: true })
+        }
+      }
+    }
     if (socket.data.userInfo) await addPresence(boardId, socket.data.userInfo as { id: string; name: string; avatar: string | null })
     await broadcastPresence(io, boardId)
   })
@@ -148,10 +164,31 @@ export function boardSocketHandlers(io: Server, socket: Socket) {
     const boardRoles = socket.data.boardRoles as Record<string, string> | undefined
     if (!boardRoles) return
     const info = socket.data.userInfo as { id: string } | undefined
+    // Libérer les verrous d'édition de ce socket (crash, fermeture d'onglet…)
+    const editing = socket.data.editingCards as Record<string, string> | undefined
+    if (editing && info) {
+      for (const [cardId, boardId] of Object.entries(editing)) {
+        io.to(`board:${boardId}`).emit('card:editing', { cardId, userId: info.id, editing: false })
+      }
+    }
     for (const boardId of Object.keys(boardRoles)) {
       if (info) await removePresence(boardId, info.id)
       await broadcastPresence(io, boardId)
     }
+  })
+
+  // Verrou doux d'édition : pendant qu'un utilisateur écrit dans une carte, les
+  // autres voient "Untel écrit…" et ne peuvent pas entrer en édition dessus.
+  // Purement éphémère (aucune persistance) ; libéré au blur, au leave et au disconnect.
+  socket.on('card:editing', (data: { boardId: string; cardId: string; editing: boolean }) => {
+    const info = socket.data.userInfo as { id: string; name: string } | undefined
+    if (!info || !socket.data.boardRoles?.[data.boardId]) return
+    const editing = (socket.data.editingCards ??= {}) as Record<string, string>
+    if (data.editing) editing[data.cardId] = data.boardId
+    else delete editing[data.cardId]
+    socket.to(`board:${data.boardId}`).emit('card:editing', {
+      cardId: data.cardId, userId: info.id, name: info.name, editing: data.editing,
+    })
   })
 
   // Cursor presence — coalesced server-side.
