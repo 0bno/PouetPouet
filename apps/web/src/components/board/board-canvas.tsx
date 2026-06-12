@@ -1027,7 +1027,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
           {renderCardsForLayer(2)}
 
           {/* Vote badges overlay */}
-          {voteSession && cards.filter((c) => c.type !== 'DRAW' && (visibleIds === null || visibleIds.has(c.id))).map((card) => {
+          {/* Formes et dessins exclus du vote : décoratifs, pas du contenu votable */}
+          {voteSession && cards.filter((c) => c.type !== 'DRAW' && c.type !== 'SHAPE' && (visibleIds === null || visibleIds.has(c.id))).map((card) => {
             const cardVotes = voteSession.votes.filter((v) => v.cardId === card.id)
             const myVotesOnCard = cardVotes.filter((v) => v.userId === currentUserId).length
             const totalVotes = cardVotes.length
