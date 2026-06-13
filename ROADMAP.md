@@ -1,6 +1,8 @@
-# Backlog Pivot — état au 2026-06-13
+# Roadmap Pivot — état au 2026-06-13
 
-> Version courante : **0.10.0** — branche en cours : `feat/rebrand-pivot`
+> Version courante : **0.10.0**
+>
+> Source unique de suivi : ce fichier centralise la roadmap et les chantiers ouverts.
 
 ---
 
@@ -38,12 +40,15 @@
 - [ ] Smoke test web post-déploiement
 - [ ] Validation post-déploiement automatisée en fin de deploy.yml
 
-### Protection des branches *(GitHub settings — non configurés)*
-- [ ] Bloquer les push directs sur `master`
-- [ ] Autoriser les merges uniquement via PR validée
-- [ ] Rendre obligatoires les checks CI avant merge
-- [ ] Exiger au moins une review
-- [ ] Activer la suppression automatique des branches après merge
+### Protection des branches *(réglages documentés, application GitHub admin restante)*
+- [x] Documenter les réglages admin attendus (`.github/admin-settings.md`)
+- [x] Définir les checks obligatoires cible : `Typecheck & Lint`, `Integration tests (PostgreSQL)`
+- [ ] Bloquer les push directs sur `master` *(à appliquer dans GitHub settings)*
+- [ ] Autoriser les merges uniquement via PR validée *(à appliquer dans GitHub settings)*
+- [ ] Rendre obligatoires les checks CI avant merge *(à appliquer dans GitHub settings)*
+- [ ] Exiger au moins une review sur `master` *(à appliquer dans GitHub settings)*
+- [ ] Activer la suppression automatique des branches après merge *(à appliquer dans GitHub settings)*
+- [ ] Vérifier l'activation effective de CODEOWNERS dans la protection de branche
 
 ---
 
@@ -66,12 +71,16 @@
 
 ## P1 - Gouvernance GitHub
 
-- [ ] Template de pull request
-- [ ] Templates d'issues (Bug / Feature / Tâche technique)
-- [ ] Backlog projet via GitHub Issues
-- [ ] Labels standards (`bug`, `feature`, `tech`, `security`, `ux`, `good first issue`)
-- [ ] Milestones
-- [ ] Workflow de triage
+- [x] Template de pull request
+- [x] Templates d'issues (Bug / Feature / Tâche technique)
+- [x] CODEOWNERS
+- [x] Workflow de triage automatique (`needs triage` à l'ouverture/réouverture)
+- [x] Documentation des réglages admin GitHub (`.github/admin-settings.md`)
+- [ ] Roadmap projet via GitHub Issues *(roadmap Markdown présente, issues non matérialisées)*
+- [ ] Labels standards complets (`bug`, `feature`, `tech`, `security`, `ux`, `good first issue`, `needs triage`)
+  - [x] Labels consommés par les templates/workflow : `bug`, `feature`, `tech`, `needs triage`
+  - [ ] Créer/normaliser dans GitHub : `security`, `ux`, `good first issue`
+- [ ] Milestones GitHub
 
 ---
 
@@ -79,7 +88,7 @@
 
 ### Hub / Pivot
 - [x] Application en mode Hub
-- [x] Rebrand FORGE → **PIVOT** *(feat/rebrand-pivot, à merger)*
+- [x] Rebrand FORGE → **PIVOT** côté produit visible
 - [x] Parcours principaux du Hub (récents + modules + à venir)
 - [x] Navigation shell depuis les manifests modules
 - [ ] Renommer les identifiants internes `ForgeEvent` / `FORGE_MODULES` / métriques `forge_*` → `pivot` *(optionnel, non visible utilisateur)*
@@ -143,8 +152,9 @@
 - [x] Checklist release (CLAUDE.md)
 - [x] Commandes de dev/test/build (CLAUDE.md)
 - [x] Variables d'environnement (.env.example)
-- [ ] Documenter l'installation locale
-- [ ] Documenter l'architecture applicative
+- [x] README projet à jour
+- [x] Documenter l'installation locale (README.md)
+- [x] Documenter l'architecture applicative (README.md)
 - [ ] Documenter les décisions structurantes via ADR
 - [ ] Checklist d'incident
 
@@ -157,6 +167,9 @@
 - [x] RGPD minimal : export + suppression + rétention + pages légales
 
 ## Points encore ouverts
+- [ ] Appliquer réellement les réglages `.github/admin-settings.md` dans l'interface GitHub
+- [ ] Créer les milestones GitHub et rattacher les issues
+- [ ] Créer/normaliser les labels manquants dans GitHub
 - [ ] Environnement de référence avant prod : staging ou preview PR ?
 - [ ] Niveau de conformité RGPD cible pour la v1 exploitable
 - [ ] SMTP en prod (secrets deploy.yml à configurer)
