@@ -14,13 +14,14 @@ build
 .claude/
 
 # Local-only docs & backups (never merge)
-*.md
 *.pdf
 !apps/web/public/aide/*.pdf
 backup.sql
 ideatank.txt
 /scripts/
-/docs/
+
+# Specs et roadmap versionnées — les fichiers .md à la racine et docs/ sont publics.
+# Exclure uniquement les notes personnelles si besoin (ex: NOTES.md).
 
 apps/web/src/lib/klx-import/samples/
 
