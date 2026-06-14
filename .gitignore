@@ -16,6 +16,7 @@ coverage/
 
 # Local-only docs & backups (never merge)
 *.pdf
+!.github/**/*.md
 !apps/web/public/aide/*.pdf
 backup.sql
 ideatank.txt
