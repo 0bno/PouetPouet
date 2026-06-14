@@ -82,7 +82,7 @@
 - [x] Rebrand FORGE → **PIVOT** *(feat/rebrand-pivot, à merger)*
 - [x] Parcours principaux du Hub (récents + modules + à venir)
 - [x] Navigation shell depuis les manifests modules
-- [ ] Renommer les identifiants internes `ForgeEvent` / `FORGE_MODULES` / métriques `forge_*` → `pivot` *(optionnel, non visible utilisateur)*
+- [x] Renommer les identifiants internes `ForgeEvent` / `FORGE_MODULES` / métriques `forge_*` → `pivot` *(optionnel, non visible utilisateur)*
 
 ### Plugins
 - [ ] Architecture plugins

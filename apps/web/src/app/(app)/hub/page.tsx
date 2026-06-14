@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { FORGE_MODULES } from '@pouetpouet/shared'
+import { PIVOT_MODULES } from '@pouetpouet/shared'
 import { useAuthStore } from '@/store/auth'
 import { api } from '@/lib/api'
 
@@ -101,7 +101,7 @@ export default function HubPage() {
 
   const favorites = new Set(user?.favoriteModules ?? [])
 
-  const sortedModules = [...FORGE_MODULES].sort((a, b) => {
+  const sortedModules = [...PIVOT_MODULES].sort((a, b) => {
     const aFav = favorites.has(a.id) ? 0 : 1
     const bFav = favorites.has(b.id) ? 0 : 1
     return aFav - bFav
