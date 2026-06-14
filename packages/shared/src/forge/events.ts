@@ -2,7 +2,7 @@
 // Le type transite par le bus (in-process aujourd'hui, Redis pub/sub demain) ;
 // il est dans shared pour que producteurs et consommateurs partagent le contrat.
 
-export interface ForgeEvent<T = unknown> {
+export interface PivotEvent<T = unknown> {
   /** '<module>.<entité>.<action>' — ex. 'scrum.ticket.estimated'. */
   type: string
   /** Id du module émetteur (cf. ModuleManifest.id, 'core' pour le socle). */

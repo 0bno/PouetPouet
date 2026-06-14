@@ -1,15 +1,15 @@
 import { EventEmitter } from 'node:events'
-import type { ForgeEvent } from '@pouetpouet/shared'
+import type { PivotEvent } from '@pouetpouet/shared'
 
 // Bus d'événements FORGE.
 // Implémentation in-process (le modular monolith tourne en instance unique) ;
 // l'interface est le contrat : une implémentation Redis pub/sub pourra la
 // remplacer à l'identique quand le scaling horizontal arrivera (F4).
 
-type Handler<T> = (event: ForgeEvent<T>) => void | Promise<void>
+type Handler<T> = (event: PivotEvent<T>) => void | Promise<void>
 
 export interface EventBus {
-  publish<T>(event: Omit<ForgeEvent<T>, 'at'>): void
+  publish<T>(event: Omit<PivotEvent<T>, 'at'>): void
   /** Retourne la fonction de désabonnement. `'*'` reçoit tous les événements. */
   subscribe<T>(type: string, handler: Handler<T>): () => void
 }
@@ -22,8 +22,8 @@ class InProcessBus implements EventBus {
     this.emitter.setMaxListeners(100)
   }
 
-  publish<T>(event: Omit<ForgeEvent<T>, 'at'>): void {
-    const full: ForgeEvent<T> = { ...event, at: new Date().toISOString() }
+  publish<T>(event: Omit<PivotEvent<T>, 'at'>): void {
+    const full: PivotEvent<T> = { ...event, at: new Date().toISOString() }
     // Un handler qui jette ne doit jamais faire tomber le producteur.
     for (const channel of [event.type, '*']) {
       for (const listener of this.emitter.listeners(channel)) {
