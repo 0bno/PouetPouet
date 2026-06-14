@@ -431,6 +431,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
       const tableRows = parseClipboardTable(html, rawText)
       if (tableRows) {
         e.preventDefault()
+        // Si une (et une seule) carte TABLE est sélectionnée → on la remplit au
+        // lieu d'en créer une nouvelle.
+        if (selectedIds.size === 1) {
+          const id = [...selectedIds][0]
+          const target = cards.find((c) => c.id === id)
+          if (target?.type === 'TABLE') {
+            onUpdateCard(id, serializeTable(tableRows))
+            return
+          }
+        }
         const cols = tableRows[0].length
         const w = Math.min(720, Math.max(180, cols * 120))
         const h = Math.min(600, 16 + tableRows.length * 30)
@@ -448,7 +458,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [isReadonly, onAddCard, clipboard])
+  }, [isReadonly, onAddCard, clipboard, selectedIds, cards, onUpdateCard])
 
   // ── Freehand draw (called from canvas or card bubble) ────────────────────────
   function startFreehandDraw(clientX: number, clientY: number) {
