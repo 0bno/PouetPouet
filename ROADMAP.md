@@ -11,8 +11,8 @@
 ### CI
 - [x] Tests unitaires Vitest dans la CI
 - [x] Tests d'intégration API avec vraie DB PostgreSQL dans la CI
-- [ ] Ajouter les tests E2E Playwright dans la CI *(specs existent localement, pas encore dans ci.yml)*
-- [ ] Ajouter l'audit accessibilité Playwright + axe-core dans la CI *(a11y.spec.ts local seulement)*
+- [x] Ajouter les tests E2E Playwright dans la CI *(job `e2e`, serveurs prod + Postgres/Redis)*
+- [x] Ajouter l'audit accessibilité Playwright + axe-core dans la CI *(`a11y.spec.ts` tourne dans le job `e2e`)*
 - [ ] Ajouter des tests de performance
   - [ ] Lighthouse sur la landing page
   - [ ] Définir les budgets de performance par page critique
@@ -23,12 +23,12 @@
 - [x] Ajouter Dependabot
   - [x] Mises à jour npm
   - [x] Mises à jour GitHub Actions
-  - [ ] Règles d'auto-merge pour les patchs non critiques
+  - [x] Règles d'auto-merge pour les patchs non critiques *(`dependabot-auto-merge.yml` : semver-patch ; requiert `Allow auto-merge` côté GitHub)*
 
 ### Release
 - [x] Versioning sémantique 0.x.y en place
 - [x] Images Docker taguées `:sha` et `:latest`
-- [ ] Tag Docker `:version` (ex: `:0.10.0`)
+- [x] Tag Docker `:version` (ex: `:0.10.0`) — lu depuis `package.json` racine, api + web (`deploy.yml`)
 - [x] Automatiser les tags git de release *(`release.yml` : tag `v<version>` au push master, idempotent)*
 - [x] Générer automatiquement les release notes *(extraites de `patch-notes.ts` → GitHub Release)*
 
@@ -36,7 +36,7 @@
 - [x] Healthcheck API `/health` (DB + Redis + version)
 - [x] Vérification migrations Prisma au démarrage container
 - [ ] Environnement éphémère pour chaque PR validée
-- [ ] Stratégie de rollback documentée
+- [x] Stratégie de rollback documentée *(runbook `docs/ops/backup-restore-rollback.md`)*
 - [x] Smoke test web post-déploiement
 - [x] Validation post-déploiement automatisée en fin de deploy.yml
 
@@ -62,7 +62,7 @@
 - [ ] Formaliser le chantier sécurité avec Valentine
 - [ ] Auditer les secrets GitHub Actions et GCP
 - [x] Scan de dépendances vulnérables (npm audit / Snyk) *(npm audit critique en CI, seuil high à traiter après xlsx)*
-- [ ] Scan de secrets dans le code (truffleHog / gitleaks)
+- [x] Scan de secrets dans le code (gitleaks dans `security.yml`, config `.gitleaks.toml`)
 - [x] Scan d'images Docker
 - [ ] Politique de rotation des secrets
 - [x] Durcir les permissions GitHub Actions
@@ -130,9 +130,9 @@
 
 - [x] Migrations Prisma en production (`prisma migrate deploy` au démarrage)
 - [x] DB de test représentative pour les tests d'intégration
-- [ ] Stratégie de backup PostgreSQL
-- [ ] Tester la restauration des backups
-- [ ] Procédure de rollback migration documentée
+- [x] Stratégie de backup PostgreSQL *(Cloud SQL auto + PITR — runbook `docs/ops/backup-restore-rollback.md`)*
+- [ ] Tester la restauration des backups *(procédure + cadence trimestrielle documentées ; test réel à exécuter)*
+- [x] Procédure de rollback migration documentée *(runbook `docs/ops/backup-restore-rollback.md`)*
 
 ---
 
@@ -140,7 +140,8 @@
 
 - [x] Bug viewport board corrigé — `overflow-hidden` (BFC) + double `requestAnimationFrame` dans `board-canvas.tsx`
 - [x] Import Klaxoon fonctionnel — tuile active, assignation des groupes (`klx-import/converter.ts`)
-- [ ] Audit robustesse multi-utilisateur : déconnexion pendant un vote Scrum, late-joiner sur timer Daily, reconnexion en session live ; reproduire/corriger les races au-delà de ~5 users (via E2E)
+- [x] Audit robustesse multi-utilisateur *(doc `docs/audits/multi-user-resilience.md` : déconnexion Scrum, late-joiner Daily, reconnexion session — déjà couverts ; correctif comptage participants session cross-instance)*
+  - [ ] Reproduire/corriger les races au-delà de ~5 users simultanés *(→ load test, cf. P2)*
 
 ---
 
@@ -152,6 +153,7 @@
 - [x] Présence boards en cache Redis — plus de loop O(n) (`board.sockets.ts`)
 - [x] Curseurs coalescés côté serveur
 - [x] Rate limiting (`@fastify/rate-limit`)
+- [x] Comptage participants session cross-instance (`fetchSockets`, plus de lecture locale) — prérequis multi-instance
 - [ ] Provisionner Redis/Memorystore en prod + passer `--max-instances` > 1 (`deploy.yml` : aujourd'hui `=1`, `REDIS_HOST` non défini)
 
 ### Performance & charge restantes
