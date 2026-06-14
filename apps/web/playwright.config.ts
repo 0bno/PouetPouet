@@ -3,10 +3,10 @@ import { defineConfig } from '@playwright/test'
 // Prérequis local : PostgreSQL + Redis lancés (docker compose up -d à la racine).
 // Les deux serveurs dev (api:4000, web:3000) sont démarrés automatiquement si absents.
 //
-// En CI (process.env.CI) : on lance les serveurs en mode production (déjà buildés +
-// migrations appliquées par le workflow) plutôt que `next dev`/`tsx watch` — plus
-// rapide et stable que les compilations à froid de next dev. Playwright gère leur
-// cycle de vie (démarrage avant les tests, arrêt après).
+// En CI (process.env.CI) : l'API tourne via `tsx` (comme en dev mais sans --watch) —
+// `@pouetpouet/shared` est consommé en TS source, que `node dist` ne sait pas résoudre.
+// Le web tourne en mode production (`next start`), car `next build` bundle déjà shared.
+// Playwright gère le cycle de vie des serveurs (démarrage avant les tests, arrêt après).
 const isCI = !!process.env.CI
 
 export default defineConfig({
@@ -22,7 +22,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: isCI ? 'node dist/index.js' : 'npm run dev',
+      command: isCI ? 'npx tsx src/index.ts' : 'npm run dev',
       cwd: '../api',
       url: 'http://localhost:4000/health',
       reuseExistingServer: !isCI,

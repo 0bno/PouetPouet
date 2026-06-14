@@ -174,9 +174,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build API
+      - name: Generate Prisma client
         working-directory: apps/api
-        run: npm run build
+        run: npx prisma generate
 
       - name: Apply database migrations
         working-directory: apps/api
