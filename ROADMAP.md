@@ -136,6 +136,32 @@
 
 ---
 
+## P1 - Stabilisation produit (bugs & import)
+
+- [x] Bug viewport board corrigé — `overflow-hidden` (BFC) + double `requestAnimationFrame` dans `board-canvas.tsx`
+- [x] Import Klaxoon fonctionnel — tuile active, assignation des groupes (`klx-import/converter.ts`)
+- [ ] Audit robustesse multi-utilisateur : déconnexion pendant un vote Scrum, late-joiner sur timer Daily, reconnexion en session live ; reproduire/corriger les races au-delà de ~5 users (via E2E)
+
+---
+
+## P2 - Scalabilité & performance *(objectif : ~100 utilisateurs simultanés)*
+
+### Socle temps réel *(code prêt — provisionnement prod à finaliser)*
+- [x] Adapter Redis Socket.io branché (`@socket.io/redis-adapter`, `apps/api/src/index.ts`)
+- [x] Registry participants Scrum en Redis hash + fallback mémoire (`scrum.sockets.ts`)
+- [x] Présence boards en cache Redis — plus de loop O(n) (`board.sockets.ts`)
+- [x] Curseurs coalescés côté serveur
+- [x] Rate limiting (`@fastify/rate-limit`)
+- [ ] Provisionner Redis/Memorystore en prod + passer `--max-instances` > 1 (`deploy.yml` : aujourd'hui `=1`, `REDIS_HOST` non défini)
+
+### Performance & charge restantes
+- [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
+- [ ] Pool de connexions DB (PgBouncer ou `connection_limit`) pour tenir les pics
+- [ ] Load test 100 VUs (k6 / Artillery) : p99 < 500 ms, 0 erreur socket
+- [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
+
+---
+
 ## P2 - UI/UX
 
 - [x] Audit accessibilité WCAG AA sur les 10 pages principales (axe-core)
@@ -172,5 +198,5 @@
 - [ ] Créer/normaliser les labels manquants dans GitHub
 - [ ] Environnement de référence avant prod : staging ou preview PR ?
 - [ ] Niveau de conformité RGPD cible pour la v1 exploitable
-- [ ] SMTP en prod (secrets deploy.yml à configurer)
+- [ ] SMTP en prod : câblé dans `deploy.yml` (Gmail) — reste à garnir les secrets GCP Secret Manager (`SMTP_USER`, `SMTP_PASS`, `FRONTEND_URL`)
 - [ ] Redis/Memorystore en prod (max-instances bloqué à 1 sans lui)
