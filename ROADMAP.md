@@ -138,39 +138,25 @@
 
 ## P1 - Stabilisation produit (bugs & import)
 
-### Bug viewport board *(non résolu)*
-- [ ] Corriger le décalage des connexions au chargement (`apps/web/src/components/board/board-canvas.tsx`)
-  - Racine : le SVG des connexions (`left/top: -100000`, `200000×200000`) fait scroller le document → `getBoundingClientRect()` renvoie des coords négatives → `toCanvas()`, zoom molette, suivi souris et toolbar de connexion décalés
-  - Pistes : `overflow: hidden` sur le conteneur board + différer `fitToContent()` (double `requestAnimationFrame`)
-
-### Import Klaxoon *(implémenté mais désactivé)*
-- [ ] Réassigner les groupes pendant la conversion (`klx-import/converter.ts` — `groupKey` hardcodé à `null`)
-- [ ] Réactiver la tuile (retirer `disabled` + badge « Bêta » dans `import-hub-modal.tsx`)
-- [ ] Valider les shapes/arrows des connexions à l'import (enum côté API)
-- [ ] Tester avec les samples `apps/web/src/lib/klx-import/samples/`
-
-### Robustesse multi-utilisateur
-- [ ] Auditer les edge cases socket : déconnexion pendant un vote Scrum, late-joiner sur timer Daily actif, reconnexion en session live
-- [ ] Reproduire et corriger les race conditions au-delà de ~5 utilisateurs simultanés (via E2E)
+- [x] Bug viewport board corrigé — `overflow-hidden` (BFC) + double `requestAnimationFrame` dans `board-canvas.tsx`
+- [x] Import Klaxoon fonctionnel — tuile active, assignation des groupes (`klx-import/converter.ts`)
+- [ ] Audit robustesse multi-utilisateur : déconnexion pendant un vote Scrum, late-joiner sur timer Daily, reconnexion en session live ; reproduire/corriger les races au-delà de ~5 users (via E2E)
 
 ---
 
 ## P2 - Scalabilité & performance *(objectif : ~100 utilisateurs simultanés)*
 
-### Socket.io horizontal
-- [ ] Activer le client Redis (`apps/api/src/lib/redis.ts` — configuré mais `lazyConnect`, non utilisé)
-- [ ] Brancher `@socket.io/redis-adapter` dans `apps/api/src/index.ts`
-- [ ] Migrer le registry participants Scrum (Map mémoire → Redis hash + TTL)
-- [ ] Passer `--max-instances` > 1 dans `deploy.yml` après validation
-- [ ] Rate limiting par route (`@fastify/rate-limit` : auth, import)
+### Socle temps réel *(code prêt — provisionnement prod à finaliser)*
+- [x] Adapter Redis Socket.io branché (`@socket.io/redis-adapter`, `apps/api/src/index.ts`)
+- [x] Registry participants Scrum en Redis hash + fallback mémoire (`scrum.sockets.ts`)
+- [x] Présence boards en cache Redis — plus de loop O(n) (`board.sockets.ts`)
+- [x] Curseurs coalescés côté serveur
+- [x] Rate limiting (`@fastify/rate-limit`)
+- [ ] Provisionner Redis/Memorystore en prod + passer `--max-instances` > 1 (`deploy.yml` : aujourd'hui `=1`, `REDIS_HOST` non défini)
 
-### Performance boards
-- [ ] Présence : remplacer le loop O(n) sur les sockets (`broadcastPresence()`) par un cache Redis + TTL
-- [ ] Throttle/debounce des curseurs côté client (émis à chaque mousemove)
+### Performance & charge restantes
 - [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
 - [ ] Pool de connexions DB (PgBouncer ou `connection_limit`) pour tenir les pics
-
-### Charge & jobs async
 - [ ] Load test 100 VUs (k6 / Artillery) : p99 < 500 ms, 0 erreur socket
 - [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
 
@@ -212,5 +198,5 @@
 - [ ] Créer/normaliser les labels manquants dans GitHub
 - [ ] Environnement de référence avant prod : staging ou preview PR ?
 - [ ] Niveau de conformité RGPD cible pour la v1 exploitable
-- [ ] SMTP en prod (secrets deploy.yml à configurer)
+- [ ] SMTP en prod : câblé dans `deploy.yml` (Gmail) — reste à garnir les secrets GCP Secret Manager (`SMTP_USER`, `SMTP_PASS`, `FRONTEND_URL`)
 - [ ] Redis/Memorystore en prod (max-instances bloqué à 1 sans lui)

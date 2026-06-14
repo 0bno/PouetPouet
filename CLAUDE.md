@@ -69,7 +69,7 @@ feature/fix → develop → master (sur demande explicite uniquement)
 ## Gotchas importants
 - **Ne jamais committer** les fichiers `apps/web/src/lib/klx-import/samples/` (données Klaxoon, gitignorées)
 - `DATABASE_URL` n'est pas chargé automatiquement par `tsx` — toujours utiliser `--env-file=.env` (déjà en place dans `apps/api/package.json`)
-- En prod GCP : le SMTP n'est pas configuré dans le workflow CI → les emails de vérification sont seulement loggés. Voir les variables d'env à ajouter dans la memory `project-email-verification`.
+- En prod GCP : le SMTP est câblé dans `deploy.yml` (Gmail), mais les secrets GCP Secret Manager (`SMTP_USER`, `SMTP_PASS`, `FRONTEND_URL`) doivent être garnis pour que les emails partent réellement. Détails dans la memory `project-email-verification`.
 
 # Guideline
 
