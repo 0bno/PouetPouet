@@ -36,7 +36,7 @@
 - [x] Healthcheck API `/health` (DB + Redis + version)
 - [x] Vérification migrations Prisma au démarrage container
 - [ ] Environnement éphémère pour chaque PR validée
-- [ ] Stratégie de rollback documentée
+- [x] Stratégie de rollback documentée *(runbook `docs/ops/backup-restore-rollback.md`)*
 - [x] Smoke test web post-déploiement
 - [x] Validation post-déploiement automatisée en fin de deploy.yml
 
@@ -130,9 +130,9 @@
 
 - [x] Migrations Prisma en production (`prisma migrate deploy` au démarrage)
 - [x] DB de test représentative pour les tests d'intégration
-- [ ] Stratégie de backup PostgreSQL
-- [ ] Tester la restauration des backups
-- [ ] Procédure de rollback migration documentée
+- [x] Stratégie de backup PostgreSQL *(Cloud SQL auto + PITR — runbook `docs/ops/backup-restore-rollback.md`)*
+- [ ] Tester la restauration des backups *(procédure + cadence trimestrielle documentées ; test réel à exécuter)*
+- [x] Procédure de rollback migration documentée *(runbook `docs/ops/backup-restore-rollback.md`)*
 
 ---
 
