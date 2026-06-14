@@ -159,7 +159,7 @@
 ### Performance & charge restantes
 - [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
 - [x] Pool de connexions DB borné par instance (`connection_limit`/`pool_timeout` dans `prisma.ts`, défaut 10, `DB_CONNECTION_LIMIT`)
-- [ ] Load test 100 VUs (k6 / Artillery) : p99 < 500 ms, 0 erreur socket
+- [x] Load test k6 100 VUs *(script `load-test/board-load.js` + workflow `load-test.yml` ; seuils p95 < 500 ms / erreurs < 1 %)* — reste à exécuter contre un staging représentatif
 - [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
 
 ---

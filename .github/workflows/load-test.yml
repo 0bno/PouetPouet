@@ -1,0 +1,40 @@
+name: Load test
+
+# Test de charge k6 a la demande. Cibler de preference un environnement de type
+# staging/prod : un runner CI ephemere mono-instance n'est pas representatif.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'URL de base de l API a tester (ex: https://api.example.com)'
+        required: true
+      vus:
+        description: 'Nombre d utilisateurs virtuels'
+        required: false
+        default: '100'
+      duration:
+        description: 'Duree du palier (ex: 1m, 2m)'
+        required: false
+        default: '1m'
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: k6 load test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6
+        run: k6 run load-test/board-load.js
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          VUS: ${{ inputs.vus }}
+          DURATION: ${{ inputs.duration }}
