@@ -154,11 +154,11 @@
 - [x] Curseurs coalescés côté serveur
 - [x] Rate limiting (`@fastify/rate-limit`)
 - [x] Comptage participants session cross-instance (`fetchSockets`, plus de lecture locale) — prérequis multi-instance
-- [ ] Provisionner Redis/Memorystore en prod + passer `--max-instances` > 1 (`deploy.yml` : aujourd'hui `=1`, `REDIS_HOST` non défini)
+- [ ] Activer le multi-instance en prod *(`deploy.yml` prêt et paramétré — vars `MAX_INSTANCES`/`REDIS_HOST`/`VPC_CONNECTOR`, défauts mono-instance ; reste à provisionner Memorystore : guide `docs/ops/scaling-multi-instance.md`)*
 
 ### Performance & charge restantes
 - [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
-- [ ] Pool de connexions DB (PgBouncer ou `connection_limit`) pour tenir les pics
+- [x] Pool de connexions DB borné par instance (`connection_limit`/`pool_timeout` dans `prisma.ts`, défaut 10, `DB_CONNECTION_LIMIT`)
 - [x] Load test k6 100 VUs *(script `load-test/board-load.js` + workflow `load-test.yml` ; seuils p95 < 500 ms / erreurs < 1 %)* — reste à exécuter contre un staging représentatif
 - [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
 
