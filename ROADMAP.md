@@ -16,13 +16,13 @@
 - [ ] Ajouter des tests de performance
   - [ ] Lighthouse sur la landing page
   - [ ] Définir les budgets de performance par page critique
-- [ ] Ajouter SonarQube
+- [x] Ajouter SonarQube / SonarCloud public *(workflow + configuration de base)*
   - [ ] Quality gate tests unitaires : objectif 90%
   - [ ] Quality gate tests d'intégration : objectif 90%
   - [ ] Quality gate E2E Playwright : objectif 95%
-- [ ] Ajouter Dependabot
-  - [ ] Mises à jour npm
-  - [ ] Mises à jour GitHub Actions
+- [x] Ajouter Dependabot
+  - [x] Mises à jour npm
+  - [x] Mises à jour GitHub Actions
   - [ ] Règles d'auto-merge pour les patchs non critiques
 
 ### Release
@@ -37,8 +37,8 @@
 - [x] Vérification migrations Prisma au démarrage container
 - [ ] Environnement éphémère pour chaque PR validée
 - [ ] Stratégie de rollback documentée
-- [ ] Smoke test web post-déploiement
-- [ ] Validation post-déploiement automatisée en fin de deploy.yml
+- [x] Smoke test web post-déploiement
+- [x] Validation post-déploiement automatisée en fin de deploy.yml
 
 ### Protection des branches *(réglages documentés, application GitHub admin restante)*
 - [x] Documenter les réglages admin attendus (`.github/admin-settings.md`)
@@ -61,11 +61,11 @@
 - [x] Mentions légales, confidentialité, CGU
 - [ ] Formaliser le chantier sécurité avec Valentine
 - [ ] Auditer les secrets GitHub Actions et GCP
-- [ ] Scan de dépendances vulnérables (npm audit / Snyk)
+- [x] Scan de dépendances vulnérables (npm audit / Snyk) *(npm audit critique en CI, seuil high à traiter après xlsx)*
 - [ ] Scan de secrets dans le code (truffleHog / gitleaks)
-- [ ] Scan d'images Docker
+- [x] Scan d'images Docker
 - [ ] Politique de rotation des secrets
-- [ ] Durcir les permissions GitHub Actions
+- [x] Durcir les permissions GitHub Actions
 
 ---
 
@@ -91,7 +91,7 @@
 - [x] Rebrand FORGE → **PIVOT** côté produit visible
 - [x] Parcours principaux du Hub (récents + modules + à venir)
 - [x] Navigation shell depuis les manifests modules
-- [ ] Renommer les identifiants internes `ForgeEvent` / `FORGE_MODULES` / métriques `forge_*` → `pivot` *(optionnel, non visible utilisateur)*
+- [x] Renommer les identifiants internes `ForgeEvent` / `FORGE_MODULES` / métriques `forge_*` → `pivot` *(optionnel, non visible utilisateur)*
 
 ### Plugins
 - [ ] Architecture plugins
@@ -154,6 +154,7 @@
 - [x] Variables d'environnement (.env.example)
 - [x] README projet à jour
 - [x] Documenter l'installation locale (README.md)
+- [x] Documenter les CI/CD en place
 - [x] Documenter l'architecture applicative (README.md)
 - [ ] Documenter les décisions structurantes via ADR
 - [ ] Checklist d'incident

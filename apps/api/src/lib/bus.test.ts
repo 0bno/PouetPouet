@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import type { ForgeEvent } from '@pouetpouet/shared'
+import type { PivotEvent } from '@pouetpouet/shared'
 import type { EventBus } from './bus.js'
 
 // Re-create a fresh InProcessBus per test (avoid sharing the singleton).
@@ -8,15 +8,15 @@ function makeBus(): EventBus {
   const emitter = new EventEmitter()
   emitter.setMaxListeners(100)
   return {
-    publish<T>(event: Omit<ForgeEvent<T>, 'at'>) {
-      const full: ForgeEvent<T> = { ...event, at: new Date().toISOString() }
+    publish<T>(event: Omit<PivotEvent<T>, 'at'>) {
+      const full: PivotEvent<T> = { ...event, at: new Date().toISOString() }
       for (const channel of [event.type, '*']) {
         for (const listener of emitter.listeners(channel)) {
-          try { void (listener as (e: ForgeEvent<T>) => void)(full) } catch {}
+          try { void (listener as (e: PivotEvent<T>) => void)(full) } catch {}
         }
       }
     },
-    subscribe<T>(type: string, handler: (e: ForgeEvent<T>) => void) {
+    subscribe<T>(type: string, handler: (e: PivotEvent<T>) => void) {
       emitter.on(type, handler as (...args: unknown[]) => void)
       return () => emitter.off(type, handler as (...args: unknown[]) => void)
     },
@@ -26,7 +26,7 @@ function makeBus(): EventBus {
 describe('InProcessBus', () => {
   it('delivers events to typed subscribers', () => {
     const bus = makeBus()
-    const received: ForgeEvent<{ x: number }>[] = []
+    const received: PivotEvent<{ x: number }>[] = []
     bus.subscribe<{ x: number }>('test.event', (e) => { received.push(e) })
     bus.publish({ type: 'test.event', module: 'test', payload: { x: 42 } })
     expect(received).toHaveLength(1)
@@ -36,7 +36,7 @@ describe('InProcessBus', () => {
 
   it('adds an `at` timestamp on publish', () => {
     const bus = makeBus()
-    let captured: ForgeEvent<unknown> | undefined
+    let captured: PivotEvent<unknown> | undefined
     bus.subscribe('ts.test', (e) => { captured = e })
     const before = Date.now()
     bus.publish({ type: 'ts.test', module: 'test', payload: null })

@@ -12,7 +12,7 @@ import { SessionCountdown } from '@/components/session-countdown'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { useNotificationsStore } from '@/store/notifications'
 import { APP_VERSION } from '@/lib/version'
-import { FORGE_MODULES } from '@pouetpouet/shared'
+import { PIVOT_MODULES } from '@pouetpouet/shared'
 
 function Avatar({ name, src }: { name: string; src?: string | null }) {
   if (src) {
@@ -140,7 +140,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z" />
                 </svg>
               </Link>
-              {FORGE_MODULES.flatMap((m) => m.nav).map((link) => {
+              {PIVOT_MODULES.flatMap((m) => m.nav).map((link) => {
                 const active = link.match === 'exact' ? pathname === link.href : pathname.startsWith(link.match)
                 return (
                   <Link

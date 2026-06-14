@@ -5,6 +5,7 @@ node_modules
 dist
 .next
 build
+coverage/
 *.log
 
 # TypeScript incremental build cache
@@ -20,7 +21,13 @@ build
 backup.sql
 ideatank.txt
 /scripts/
-/docs/
+
+# Specs et roadmap versionnées — les fichiers .md à la racine et docs/ sont publics.
+# Exclure uniquement les notes personnelles si besoin (ex: NOTES.md).
+
+# Versioned project documentation
+!docs/
+!docs/ci-cd.md
 
 apps/web/src/lib/klx-import/samples/
 

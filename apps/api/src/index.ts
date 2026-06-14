@@ -276,18 +276,18 @@ app.get('/metrics', async (request, reply) => {
   const rooms = io ? io.sockets.adapter.rooms.size : 0
   const mem = process.memoryUsage()
   const lines = [
-    '# HELP forge_socket_connections_active Active WebSocket connections',
-    '# TYPE forge_socket_connections_active gauge',
-    `forge_socket_connections_active ${connections}`,
-    '# HELP forge_socket_rooms_active Active socket rooms (boards + users + sessions)',
-    '# TYPE forge_socket_rooms_active gauge',
-    `forge_socket_rooms_active ${rooms}`,
-    '# HELP forge_process_heap_bytes Node.js heap used (bytes)',
-    '# TYPE forge_process_heap_bytes gauge',
-    `forge_process_heap_bytes ${mem.heapUsed}`,
-    '# HELP forge_process_rss_bytes Node.js RSS memory (bytes)',
-    '# TYPE forge_process_rss_bytes gauge',
-    `forge_process_rss_bytes ${mem.rss}`,
+    '# HELP pivot_socket_connections_active Active WebSocket connections',
+    '# TYPE pivot_socket_connections_active gauge',
+    `pivot_socket_connections_active ${connections}`,
+    '# HELP pivot_socket_rooms_active Active socket rooms (boards + users + sessions)',
+    '# TYPE pivot_socket_rooms_active gauge',
+    `pivot_socket_rooms_active ${rooms}`,
+    '# HELP pivot_process_heap_bytes Node.js heap used (bytes)',
+    '# TYPE pivot_process_heap_bytes gauge',
+    `pivot_process_heap_bytes ${mem.heapUsed}`,
+    '# HELP pivot_process_rss_bytes Node.js RSS memory (bytes)',
+    '# TYPE pivot_process_rss_bytes gauge',
+    `pivot_process_rss_bytes ${mem.rss}`,
   ]
   reply.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n')
 })

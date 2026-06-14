@@ -16,8 +16,11 @@ Ces reglages doivent etre appliques par un compte admin du depot.
 - Require status checks to pass before merging: active.
 - Require branches to be up to date before merging: active.
 - Required checks:
-  - `Typecheck & Lint`
-  - `Integration tests (PostgreSQL)`
+  - `Quality gates`
+  - `API integration tests`
+  - `Runtime dependency audit`
+  - `Container scan (api)`
+  - `Container scan (web)`
 - Include administrators: active.
 - Allow force pushes: desactive.
 - Allow deletions: desactive.
@@ -30,8 +33,11 @@ Ces reglages doivent etre appliques par un compte admin du depot.
 - Require status checks to pass before merging: active.
 - Require branches to be up to date before merging: active.
 - Required checks:
-  - `Typecheck & Lint`
-  - `Integration tests (PostgreSQL)`
+  - `Quality gates`
+  - `API integration tests`
+  - `Runtime dependency audit`
+  - `Container scan (api)`
+  - `Container scan (web)`
 - Include administrators: active.
 - Allow force pushes: desactive.
 - Allow deletions: desactive.
