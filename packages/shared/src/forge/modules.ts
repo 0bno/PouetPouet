@@ -78,7 +78,7 @@ export const CAPACITY_MODULE: ModuleManifest = {
 }
 
 /** Modules actifs, dans l'ordre d'affichage de la navigation. */
-export const FORGE_MODULES: ModuleManifest[] = [
+export const PIVOT_MODULES: ModuleManifest[] = [
   POUETPOUET_MODULE,
   DAILY_MODULE,
   SCRUM_MODULE,
