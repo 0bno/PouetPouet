@@ -1,5 +1,5 @@
 // MeetOps — types partagés côté web + libellés d'affichage.
-// Socle CRUD : événements → séries → réunions → participants.
+// Socle CRUD : événements → réunions → participants (liste à plat).
 
 export type MeetEventType = 'VERSION' | 'SPRINT' | 'COPIL' | 'COMOP' | 'RELEASE' | 'ONBOARDING' | 'CUSTOM'
 export type MeetEventStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED'
@@ -17,28 +17,21 @@ export interface MeetingParticipant {
 
 export interface Meeting {
   id: string
-  seriesId: string
+  eventId: string
   title: string
+  label: string | null
+  order: number
   startAt: string
   durationMin: number
   location: string | null
   agenda: string | null
   status: MeetingStatus
+  externalId: string | null
+  teamsUrl: string | null
+  sendError: string | null
   participants: MeetingParticipant[]
   createdAt: string
   updatedAt: string
-}
-
-export interface MeetSeries {
-  id: string
-  eventId: string
-  title: string
-  recurrence: unknown | null
-  defaultDurationMin: number
-  defaultAgenda: string | null
-  order: number
-  meetings: Meeting[]
-  createdAt: string
 }
 
 export interface MeetEvent {
@@ -52,10 +45,102 @@ export interface MeetEvent {
   endDate: string | null
   color: string
   tags: string[]
-  series: MeetSeries[]
-  _count?: { series: number }
+  meetings: Meeting[]
+  _count?: { meetings: number }
   createdAt: string
   updatedAt: string
+}
+
+export interface MeetDistMember {
+  id: string
+  listId: string
+  email: string
+  name: string | null
+  role: string | null
+}
+
+export interface MeetDistList {
+  id: string
+  ownerId: string
+  eventId: string | null
+  name: string
+  members: MeetDistMember[]
+  _count?: { members: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MeetHistory {
+  id: string
+  eventId: string
+  meetingId: string | null
+  meetingTitle: string | null
+  userId: string | null
+  action: string
+  field: string | null
+  oldValue: string | null
+  newValue: string | null
+  createdAt: string
+}
+
+export interface MeetTemplateLine {
+  label: string | null
+  title: string
+  durationMin: number
+  dayOffset: number
+  time: string
+}
+
+export interface MeetTemplate {
+  id: string
+  ownerId: string
+  name: string
+  description: string | null
+  type: MeetEventType
+  color: string
+  lines: MeetTemplateLine[]
+  isShared: boolean
+  _count?: { events: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MeetCalendarMeeting {
+  id: string
+  title: string
+  label: string | null
+  startAt: string
+  durationMin: number
+  status: MeetingStatus
+}
+
+export interface MeetCalendarEvent {
+  id: string
+  name: string
+  color: string
+  type: MeetEventType
+  status: MeetEventStatus
+  meetings: MeetCalendarMeeting[]
+}
+
+export interface MeetSearchResult {
+  id: string
+  name: string
+  description: string | null
+  color: string
+  type: MeetEventType
+  status: MeetEventStatus
+  _count?: { meetings: number }
+  matched: { id: string; title: string; label: string | null }[]
+}
+
+export const HISTORY_ACTION_LABELS: Record<string, string> = {
+  created: 'Créée',
+  updated: 'Modifiée',
+  deleted: 'Supprimée',
+  sent: 'Envoyée',
+  reordered: 'Réorganisées',
+  bulk: 'Action de masse',
 }
 
 export const EVENT_TYPE_LABELS: Record<MeetEventType, string> = {
@@ -92,19 +177,23 @@ export const MEETING_STATUS_LABELS: Record<MeetingStatus, string> = {
   CANCELLED: 'Annulée',
 }
 
-/** Compte le total de réunions de toutes les séries d'un événement. */
+/** Compte le total de réunions d'un événement. */
 export function countMeetings(event: MeetEvent): number {
-  return event.series.reduce((sum, s) => sum + s.meetings.length, 0)
+  return event.meetings.length
 }
 
-// Les séries n'ont pas de couleur en base : on en dérive une depuis cette palette
-// par ordre d'apparition dans l'événement (déterministe, sans migration).
-export const SERIES_PALETTE = [
+// Palette de couleurs pour les étiquettes de réunion (calendrier + tableau).
+export const LABEL_PALETTE = [
   '#93C5FD', '#86EFAC', '#FDBA74', '#C4B5FD', '#F9A8D4', '#5EEAD4', '#FCA5A5', '#FCD34D',
 ]
 
-export function seriesColor(index: number): string {
-  return SERIES_PALETTE[index % SERIES_PALETTE.length]
+// Couleur déterministe dérivée du texte de l'étiquette (stable entre les rendus).
+// null/'' → gris neutre.
+export function labelColor(label: string | null | undefined): string {
+  if (!label) return '#CBD5E1'
+  let hash = 0
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0
+  return LABEL_PALETTE[Math.abs(hash) % LABEL_PALETTE.length]
 }
 
 /** Formate "12 juin 2026 · 14:30". */

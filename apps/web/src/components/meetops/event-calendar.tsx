@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import type { MeetEvent, Meeting } from '@/lib/meetops'
-import { seriesColor } from '@/lib/meetops'
+import { labelColor } from '@/lib/meetops'
 
 const WEEKDAY_HEADERS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 interface Placed {
   meeting: Meeting
-  seriesTitle: string
+  label: string | null
   color: string
 }
 
@@ -24,20 +24,17 @@ function mondayOffset(d: Date): number {
 }
 
 export function EventCalendar({ event }: { event: MeetEvent }) {
-  // Index des réunions par jour + couleur de série dérivée de l'ordre d'apparition.
+  // Index des réunions par jour + couleur dérivée de l'étiquette.
   const { byDay, firstMonth } = useMemo(() => {
     const map = new Map<string, Placed[]>()
     let earliest: Date | null = null
-    event.series.forEach((s, i) => {
-      const color = seriesColor(i)
-      for (const m of s.meetings) {
-        const d = new Date(m.startAt)
-        const key = dayKey(d)
-        if (!map.has(key)) map.set(key, [])
-        map.get(key)!.push({ meeting: m, seriesTitle: s.title, color })
-        if (!earliest || d < earliest) earliest = d
-      }
-    })
+    for (const m of event.meetings) {
+      const d = new Date(m.startAt)
+      const key = dayKey(d)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push({ meeting: m, label: m.label, color: labelColor(m.label) })
+      if (!earliest || d < earliest) earliest = d
+    }
     for (const list of map.values()) list.sort((a, b) => +new Date(a.meeting.startAt) - +new Date(b.meeting.startAt))
     const base = earliest ?? new Date()
     return { byDay: map, firstMonth: new Date(base.getFullYear(), base.getMonth(), 1) }
@@ -98,7 +95,7 @@ export function EventCalendar({ event }: { event: MeetEvent }) {
                   const cancelled = it.meeting.status === 'CANCELLED'
                   return (
                     <div key={it.meeting.id}
-                      title={`${it.seriesTitle} — ${it.meeting.title} (${time})`}
+                      title={`${it.label ? `${it.label} — ` : ''}${it.meeting.title} (${time})`}
                       className={`text-[10px] leading-tight rounded px-1 py-0.5 truncate ${cancelled ? 'line-through opacity-60' : ''}`}
                       style={{ background: it.color, color: '#1f2937' }}>
                       {time} {it.meeting.title}
@@ -114,17 +111,21 @@ export function EventCalendar({ event }: { event: MeetEvent }) {
         })}
       </div>
 
-      {/* Légende des séries */}
-      {event.series.length > 0 && (
-        <div className="flex flex-wrap gap-3 mt-4">
-          {event.series.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: seriesColor(i) }} />
-              {s.title}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Légende des étiquettes */}
+      {(() => {
+        const labels = Array.from(new Set(event.meetings.map((m) => m.label).filter((l): l is string => !!l)))
+        if (labels.length === 0) return null
+        return (
+          <div className="flex flex-wrap gap-3 mt-4">
+            {labels.map((l) => (
+              <div key={l} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: labelColor(l) }} />
+                {l}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
-import type { MeetEvent, MeetSeries, Meeting, MeetingParticipant, MeetEventType } from '@/lib/meetops'
+import type { MeetEvent, Meeting, MeetingParticipant, MeetEventType, MeetTemplate, MeetTemplateLine, MeetCalendarEvent, MeetHistory, MeetSearchResult } from '@/lib/meetops'
 
-export type { MeetEvent, MeetSeries, Meeting, MeetingParticipant, MeetEventType }
+export type { MeetEvent, Meeting, MeetingParticipant, MeetEventType, MeetTemplate, MeetTemplateLine, MeetCalendarEvent, MeetHistory, MeetSearchResult }
+
+export type BulkAction = 'setLabel' | 'setDuration' | 'shiftDays' | 'delete'
 
 // ── Liste des événements ────────────────────────────────────────────────────────
 
@@ -66,27 +68,16 @@ export function useMeetEvent(eventId: string) {
     return updated
   }, [eventId])
 
-  const addSeries = useCallback(async (input: { title: string; defaultDurationMin?: number; defaultAgenda?: string | null }) => {
-    await api.post<MeetSeries>(`/api/meetops/events/${eventId}/series`, input)
+  const addMeeting = useCallback(async (
+    input: { title?: string; label?: string | null; startAt: string; durationMin?: number; location?: string | null; agenda?: string | null },
+  ) => {
+    await api.post<Meeting>(`/api/meetops/events/${eventId}/meetings`, input)
     await reload()
   }, [eventId, reload])
 
-  const deleteSeries = useCallback(async (seriesId: string) => {
-    await api.delete(`/api/meetops/series/${seriesId}`)
-    await reload()
-  }, [reload])
-
-  const addMeeting = useCallback(async (
-    seriesId: string,
-    input: { title?: string; startAt: string; durationMin?: number; location?: string | null; agenda?: string | null },
-  ) => {
-    await api.post<Meeting>(`/api/meetops/series/${seriesId}/meetings`, input)
-    await reload()
-  }, [reload])
-
   const updateMeeting = useCallback(async (
     meetingId: string,
-    patch: Partial<{ title: string; startAt: string; durationMin: number; location: string | null; agenda: string | null; status: Meeting['status'] }>,
+    patch: Partial<{ title: string; label: string | null; startAt: string; durationMin: number; location: string | null; agenda: string | null; status: Meeting['status'] }>,
   ) => {
     await api.patch<Meeting>(`/api/meetops/meetings/${meetingId}`, patch)
     await reload()
@@ -97,23 +88,20 @@ export function useMeetEvent(eventId: string) {
     await reload()
   }, [reload])
 
-  const generateMeetings = useCallback(async (
-    seriesId: string,
-    input: {
-      freq: 'DAILY' | 'WEEKLY' | 'MONTHLY'
-      interval?: number
-      startDate: string
-      daysOfWeek?: number[]
-      until?: string | null
-      count?: number | null
-      durationMin?: number
-      location?: string | null
-    },
-  ) => {
-    const res = await api.post<{ created: number; skipped: number }>(`/api/meetops/series/${seriesId}/generate`, input)
+  const reorderMeetings = useCallback(async (ids: string[]) => {
+    await api.patch(`/api/meetops/events/${eventId}/meetings/reorder`, { ids })
+    await reload()
+  }, [eventId, reload])
+
+  const bulkUpdate = useCallback(async (action: BulkAction, ids: string[], value?: string | number) => {
+    const res = await api.patch<{ affected: number }>(`/api/meetops/events/${eventId}/meetings/bulk`, { ids, action, value })
     await reload()
     return res
-  }, [reload])
+  }, [eventId, reload])
+
+  const saveAsTemplate = useCallback(async (input: { name: string; description?: string | null }) => {
+    return api.post<MeetTemplate>(`/api/meetops/events/${eventId}/save-as-template`, input)
+  }, [eventId])
 
   const addParticipant = useCallback(async (meetingId: string, input: { email: string; name?: string | null; role?: string | null }) => {
     await api.post<MeetingParticipant>(`/api/meetops/meetings/${meetingId}/participants`, input)
@@ -125,10 +113,106 @@ export function useMeetEvent(eventId: string) {
     await reload()
   }, [reload])
 
+  const applyList = useCallback(async (meetingId: string, listId: string) => {
+    const res = await api.post<{ added: number; skipped: number }>(`/api/meetops/meetings/${meetingId}/apply-list/${listId}`, {})
+    await reload()
+    return res
+  }, [reload])
+
+  const sendMeeting = useCallback(async (meetingId: string) => {
+    await api.post<Meeting>(`/api/meetops/meetings/${meetingId}/send`, {})
+    await reload()
+  }, [reload])
+
+  const sendEvent = useCallback(async () => {
+    const res = await api.post<{ total: number; sent: number; failed: number }>(`/api/meetops/events/${eventId}/send`, {})
+    await reload()
+    return res
+  }, [eventId, reload])
+
   return {
     event, isLoading, error, reload,
-    updateEvent, addSeries, deleteSeries,
-    addMeeting, updateMeeting, deleteMeeting, generateMeetings,
-    addParticipant, removeParticipant,
+    updateEvent,
+    addMeeting, updateMeeting, deleteMeeting, reorderMeetings, bulkUpdate, saveAsTemplate,
+    addParticipant, removeParticipant, applyList,
+    sendMeeting, sendEvent,
   }
+}
+
+// ── Historique d'un événement ─────────────────────────────────────────────────────
+
+export function useMeetHistory(eventId: string, refreshKey?: unknown) {
+  const [history, setHistory] = useState<MeetHistory[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  useEffect(() => {
+    setIsLoading(true)
+    api.get<MeetHistory[]>(`/api/meetops/events/${eventId}/history`)
+      .then((h) => { setHistory(h); setIsLoading(false) })
+      .catch(() => setIsLoading(false))
+  }, [eventId, refreshKey])
+  return { history, isLoading }
+}
+
+// ── Calendrier multi-événements ───────────────────────────────────────────────────
+
+export function useMeetCalendar() {
+  const [events, setEvents] = useState<MeetCalendarEvent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  useEffect(() => {
+    api.get<MeetCalendarEvent[]>('/api/meetops/calendar')
+      .then((e) => { setEvents(e); setIsLoading(false) })
+      .catch(() => setIsLoading(false))
+  }, [])
+  return { events, isLoading }
+}
+
+// ── Templates ──────────────────────────────────────────────────────────────────────
+
+export function useMeetTemplates() {
+  const [templates, setTemplates] = useState<MeetTemplate[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    const t = await api.get<MeetTemplate[]>('/api/meetops/templates')
+    setTemplates(t); setIsLoading(false)
+  }, [])
+  useEffect(() => { reload().catch(() => setIsLoading(false)) }, [reload])
+
+  const createTemplate = useCallback(async (input: {
+    name: string; description?: string | null; type?: MeetEventType; color?: string; lines: MeetTemplateLine[]; isShared?: boolean
+  }) => {
+    await api.post<MeetTemplate>('/api/meetops/templates', input)
+    await reload()
+  }, [reload])
+
+  const deleteTemplate = useCallback(async (id: string) => {
+    await api.delete(`/api/meetops/templates/${id}`)
+    await reload()
+  }, [reload])
+
+  const instantiate = useCallback(async (id: string, input: { name: string; startDate: string }) => {
+    return api.post<MeetEvent>(`/api/meetops/templates/${id}/instantiate`, input)
+  }, [])
+
+  return { templates, isLoading, reload, createTemplate, deleteTemplate, instantiate }
+}
+
+// ── Recherche transverse d'événements ─────────────────────────────────────────────
+
+export function useMeetSearch(query: string) {
+  const [results, setResults] = useState<MeetSearchResult[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setResults([]); setIsSearching(false); return }
+    setIsSearching(true)
+    const t = setTimeout(() => {
+      api.get<MeetSearchResult[]>(`/api/meetops/search?q=${encodeURIComponent(q)}`)
+        .then((r) => setResults(r))
+        .catch(() => setResults([]))
+        .finally(() => setIsSearching(false))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [query])
+  return { results, isSearching }
 }
