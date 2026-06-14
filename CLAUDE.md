@@ -1,9 +1,9 @@
 # PouetPouet — Claude Code
 
 ## Projet
-Clone Klaxoon auto-hébergé : whiteboard collaboratif temps réel + ateliers d'équipe (Scrum Poker, Daily, Roue, Sessions live, Capacité).
+**Pivot** — suite collaborative auto-hébergée, data-centric : whiteboard collaboratif temps réel + ateliers d'équipe (Scrum Poker, Daily, La Roue, Sessions live, Capacité, MeetOps).
 
-**Vision :** ce repo est le POC de **FORGE** — suite collaborative data-centric : un graphe de données partagé dont les applications sont des vues, communiquant via bus d'événements et objets pivots. Nommage : la suite = FORGE ; le tableau blanc = PouetPouet ; les autres modules gardent leur nom (Scrum Poker, Daily, La Roue, Capacité). Le repo évoluera vers FORGE par restructuration incrémentale. Roadmaps : memories `project-roadmap` (module) et `project-forge-roadmap` (plateforme).
+**Vision :** ce repo est le POC de **Pivot** — suite collaborative data-centric : un graphe de données partagé dont les applications sont des vues, communiquant via bus d'événements et objets pivots. Nommage : la suite = **Pivot** ; le tableau blanc = PouetPouet ; les autres modules gardent leur nom (Scrum Poker, Daily, La Roue, Capacité, MeetOps). (« FORGE » était l'ancien nom de la suite : rebrand visible fait, identifiants internes renommés via #27/#47 ; il ne reste « forge » que côté infra — dossier `packages/shared/src/forge/`, realm Keycloak.) Le repo évoluera vers Pivot par restructuration incrémentale. Roadmap : `ROADMAP.md` (repo, source de vérité) + memories `project-roadmap` (module) et `project-forge-roadmap` (plateforme).
 
 ## Stack
 | Couche | Techno |

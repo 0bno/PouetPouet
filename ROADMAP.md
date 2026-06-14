@@ -136,6 +136,46 @@
 
 ---
 
+## P1 - Stabilisation produit (bugs & import)
+
+### Bug viewport board *(non résolu)*
+- [ ] Corriger le décalage des connexions au chargement (`apps/web/src/components/board/board-canvas.tsx`)
+  - Racine : le SVG des connexions (`left/top: -100000`, `200000×200000`) fait scroller le document → `getBoundingClientRect()` renvoie des coords négatives → `toCanvas()`, zoom molette, suivi souris et toolbar de connexion décalés
+  - Pistes : `overflow: hidden` sur le conteneur board + différer `fitToContent()` (double `requestAnimationFrame`)
+
+### Import Klaxoon *(implémenté mais désactivé)*
+- [ ] Réassigner les groupes pendant la conversion (`klx-import/converter.ts` — `groupKey` hardcodé à `null`)
+- [ ] Réactiver la tuile (retirer `disabled` + badge « Bêta » dans `import-hub-modal.tsx`)
+- [ ] Valider les shapes/arrows des connexions à l'import (enum côté API)
+- [ ] Tester avec les samples `apps/web/src/lib/klx-import/samples/`
+
+### Robustesse multi-utilisateur
+- [ ] Auditer les edge cases socket : déconnexion pendant un vote Scrum, late-joiner sur timer Daily actif, reconnexion en session live
+- [ ] Reproduire et corriger les race conditions au-delà de ~5 utilisateurs simultanés (via E2E)
+
+---
+
+## P2 - Scalabilité & performance *(objectif : ~100 utilisateurs simultanés)*
+
+### Socket.io horizontal
+- [ ] Activer le client Redis (`apps/api/src/lib/redis.ts` — configuré mais `lazyConnect`, non utilisé)
+- [ ] Brancher `@socket.io/redis-adapter` dans `apps/api/src/index.ts`
+- [ ] Migrer le registry participants Scrum (Map mémoire → Redis hash + TTL)
+- [ ] Passer `--max-instances` > 1 dans `deploy.yml` après validation
+- [ ] Rate limiting par route (`@fastify/rate-limit` : auth, import)
+
+### Performance boards
+- [ ] Présence : remplacer le loop O(n) sur les sockets (`broadcastPresence()`) par un cache Redis + TTL
+- [ ] Throttle/debounce des curseurs côté client (émis à chaque mousemove)
+- [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
+- [ ] Pool de connexions DB (PgBouncer ou `connection_limit`) pour tenir les pics
+
+### Charge & jobs async
+- [ ] Load test 100 VUs (k6 / Artillery) : p99 < 500 ms, 0 erreur socket
+- [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
+
+---
+
 ## P2 - UI/UX
 
 - [x] Audit accessibilité WCAG AA sur les 10 pages principales (axe-core)
