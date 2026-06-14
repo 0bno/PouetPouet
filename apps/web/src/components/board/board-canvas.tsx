@@ -390,6 +390,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   }, [clipboard, isReadonly, onPasteCards])
 
   // ── Paste from system clipboard (text or image) ─────────────────────────────
+  // Refs gardent les valeurs courantes sans ré-attacher le listener window à
+  // chaque rendu (sinon une mutation de carte ré-abonne 'paste' en permanence).
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
+  const cardsRef = useRef(cards)
+  cardsRef.current = cards
+  const onUpdateCardRef = useRef(onUpdateCard)
+  onUpdateCardRef.current = onUpdateCard
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
       if (isReadonly) return
@@ -433,11 +441,12 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
         e.preventDefault()
         // Si une (et une seule) carte TABLE est sélectionnée → on la remplit au
         // lieu d'en créer une nouvelle.
-        if (selectedIds.size === 1) {
-          const id = [...selectedIds][0]
-          const target = cards.find((c) => c.id === id)
+        const sel = selectedIdsRef.current
+        if (sel.size === 1) {
+          const id = [...sel][0]
+          const target = cardsRef.current.find((c) => c.id === id)
           if (target?.type === 'TABLE') {
-            onUpdateCard(id, serializeTable(tableRows))
+            onUpdateCardRef.current(id, serializeTable(tableRows))
             return
           }
         }
@@ -458,7 +467,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [isReadonly, onAddCard, clipboard, selectedIds, cards, onUpdateCard])
+  }, [isReadonly, onAddCard, clipboard])
 
   // ── Freehand draw (called from canvas or card bubble) ────────────────────────
   function startFreehandDraw(clientX: number, clientY: number) {
