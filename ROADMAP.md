@@ -1,4 +1,4 @@
-# Roadmap Pivot — état au 2026-06-13
+# Roadmap Pivot — état au 2026-06-14
 
 > Version courante : **0.10.0**
 >
@@ -76,11 +76,11 @@
 - [x] CODEOWNERS
 - [x] Workflow de triage automatique (`needs triage` à l'ouverture/réouverture)
 - [x] Documentation des réglages admin GitHub (`.github/admin-settings.md`)
-- [ ] Roadmap projet via GitHub Issues *(roadmap Markdown présente, issues non matérialisées)*
+- [x] Roadmap projet via GitHub Issues *(35 issues réparties sur 2 milestones)*
 - [ ] Labels standards complets (`bug`, `feature`, `tech`, `security`, `ux`, `good first issue`, `needs triage`)
   - [x] Labels consommés par les templates/workflow : `bug`, `feature`, `tech`, `needs triage`
   - [ ] Créer/normaliser dans GitHub : `security`, `ux`, `good first issue`
-- [ ] Milestones GitHub
+- [x] Milestones GitHub *(`0.10.1 - Hardening`, `1.0.0 - Exploitable`)*
 
 ---
 
@@ -163,13 +163,12 @@
 
 ## Points clarifiés
 - [x] Branche principale : `master`
-- [x] Modules Hub prioritaires : PouetPouet, Daily, Scrum Poker, La Roue, Capacité
+- [x] Modules Hub : PouetPouet, Daily, Scrum Poker, La Roue, Capacité, **MeetOps** *(MeetOps livré — cf. docs/specs/meetops.md v0.4)*
 - [x] Rôles : Propriétaire / Éditeur / Lecteur (+ co-propriétaire)
 - [x] RGPD minimal : export + suppression + rétention + pages légales
 
 ## Points encore ouverts
 - [ ] Appliquer réellement les réglages `.github/admin-settings.md` dans l'interface GitHub
-- [ ] Créer les milestones GitHub et rattacher les issues
 - [ ] Créer/normaliser les labels manquants dans GitHub
 - [ ] Environnement de référence avant prod : staging ou preview PR ?
 - [ ] Niveau de conformité RGPD cible pour la v1 exploitable
