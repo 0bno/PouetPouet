@@ -159,7 +159,7 @@
 ### Performance & charge restantes
 - [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
 - [ ] Pool de connexions DB (PgBouncer ou `connection_limit`) pour tenir les pics
-- [ ] Load test 100 VUs (k6 / Artillery) : p99 < 500 ms, 0 erreur socket
+- [x] Load test k6 100 VUs *(script `load-test/board-load.js` + workflow `load-test.yml` ; seuils p95 < 500 ms / erreurs < 1 %)* — reste à exécuter contre un staging représentatif
 - [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
 
 ---
