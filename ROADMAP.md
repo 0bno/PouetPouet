@@ -158,7 +158,7 @@
 
 ### Performance & charge restantes
 - [ ] Lazy-loading des éléments hors viewport (boards > 500 éléments)
-- [ ] Pool de connexions DB (PgBouncer ou `connection_limit`) pour tenir les pics
+- [x] Pool de connexions DB borné par instance (`connection_limit`/`pool_timeout` dans `prisma.ts`, défaut 10, `DB_CONNECTION_LIMIT`)
 - [ ] Load test 100 VUs (k6 / Artillery) : p99 < 500 ms, 0 erreur socket
 - [ ] Jobs async (BullMQ sur Redis) : exports, emails, webhooks hors du request cycle
 
