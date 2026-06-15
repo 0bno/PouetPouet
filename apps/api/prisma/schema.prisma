@@ -346,6 +346,22 @@ model AuditLog {
   @@index([userId, createdAt])
 }
 
+// Feature flags — surcharges runtime par environnement. Le catalogue des clés
+// connues + leurs défauts vivent dans le code (packages/shared FLAG_DEFINITIONS) ;
+// une ligne ici ne stocke que l'état modifié par un admin.
+model FeatureFlag {
+  id             String   @id @default(cuid())
+  key            String
+  environment    String // development | production | test
+  enabled        Boolean  @default(false)
+  rolloutPercent Int      @default(100) // 0-100, appliqué uniquement si enabled
+  whitelist      String[] @default([]) // userIds toujours actifs (override du rollout)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([key, environment])
+}
+
 enum BoardRole {
   VIEWER
   EDITOR

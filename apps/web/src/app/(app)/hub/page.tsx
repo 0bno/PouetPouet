@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { PIVOT_MODULES } from '@pouetpouet/shared'
 import { useAuthStore } from '@/store/auth'
+import { useFlags } from '@/store/flags'
 import { api } from '@/lib/api'
 
 interface HubStats {
@@ -100,12 +101,16 @@ export default function HubPage() {
   }, [])
 
   const favorites = new Set(user?.favoriteModules ?? [])
+  const flags = useFlags()
 
-  const sortedModules = [...PIVOT_MODULES].sort((a, b) => {
-    const aFav = favorites.has(a.id) ? 0 : 1
-    const bFav = favorites.has(b.id) ? 0 : 1
-    return aFav - bFav
-  })
+  const sortedModules = [...PIVOT_MODULES]
+    // Gating : un module masqué via le flag `module.<id>` n'apparaît pas dans le Hub.
+    .filter((m) => flags[`module.${m.id}`] !== false)
+    .sort((a, b) => {
+      const aFav = favorites.has(a.id) ? 0 : 1
+      const bFav = favorites.has(b.id) ? 0 : 1
+      return aFav - bFav
+    })
 
   // Tous les éléments récents à plat, triés du plus frais au plus ancien.
   const recentItems = recent
