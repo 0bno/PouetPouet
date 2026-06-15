@@ -16,6 +16,7 @@ export interface User {
   palette: Palette
   emailVerified: boolean
   favoriteModules: string[]
+  isAdmin?: boolean
   createdAt: string
 }
 

@@ -11,8 +11,9 @@ import { SessionExpiredModal } from '@/components/session-expired-modal'
 import { SessionCountdown } from '@/components/session-countdown'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { useNotificationsStore } from '@/store/notifications'
+import { useFlagsStore } from '@/store/flags'
 import { APP_VERSION } from '@/lib/version'
-import { FORGE_MODULES } from '@pouetpouet/shared'
+import { PIVOT_MODULES } from '@pouetpouet/shared'
 
 function Avatar({ name, src }: { name: string; src?: string | null }) {
   if (src) {
@@ -35,6 +36,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated && !token) router.replace('/login')
   }, [hydrated, token, router])
+
+  // Charge les feature flags évalués pour l'utilisateur courant (gating UI).
+  useEffect(() => {
+    if (token) void useFlagsStore.getState().loadFlags()
+  }, [token])
 
   // Fire the session-expired state exactly when the JWT's `exp` is reached.
   // If the stored token is already dead on load, clear it so the guard bounces to /login.
@@ -140,7 +146,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z" />
                 </svg>
               </Link>
-              {FORGE_MODULES.flatMap((m) => m.nav).map((link) => {
+              {PIVOT_MODULES.flatMap((m) => m.nav).map((link) => {
                 const active = link.match === 'exact' ? pathname === link.href : pathname.startsWith(link.match)
                 return (
                   <Link
@@ -171,6 +177,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             >
               ?
             </Link>
+            {user.isAdmin && (
+              <Link
+                href="/admin/flags"
+                title="Feature flags (admin)"
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
+                  pathname.startsWith('/admin')
+                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
+                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-200 dark:hover:bg-gray-800'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M3 4v6l7 4v6l4-2v-4l7-4V4" />
+                </svg>
+              </Link>
+            )}
             <NotificationBell />
             <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">{user.name}</span>
             <Link href="/profile" title="Mon profil" className="hover:opacity-80 transition-opacity">
@@ -194,7 +215,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <footer className="border-t border-gray-100 dark:border-gray-800 mt-8">
           <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <span className="text-xs text-gray-500 dark:text-gray-500">
-              © {new Date().getFullYear()} PouetPouet · v{APP_VERSION}
+              © {new Date().getFullYear()} PIVOT · v{APP_VERSION}
             </span>
             <nav className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500">
               <Link href="/mentions-legales" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">

@@ -76,9 +76,28 @@ const SECTIONS = [
     ],
   },
   {
-    title: '7. Thème sombre',
+    title: '7. File d\'estimation',
     tests: [
-      { num: '7.1', action: 'Basculer en thème sombre (Profil -> Thème) et recharger /scrum', expected: 'Tous les éléments respectent le thème sombre. Cartes de vote lisibles. Aucun texte illisible.' },
+      { num: '7.1', action: 'Créer une file en sélectionnant plusieurs tickets dans l\'ordre souhaité', expected: 'Chaque ticket sélectionné reçoit un badge d\'ordre (1, 2, 3…).' },
+      { num: '7.2', action: 'Démarrer la file', expected: 'Le premier ticket de la file passe automatiquement en vote.' },
+      { num: '7.3', action: 'Estimer le ticket en cours (saisir l\'estimation finale)', expected: 'La file bascule automatiquement sur le ticket suivant, ouvert au vote.' },
+      { num: '7.4', action: 'Observer le panneau de progression de la file', expected: 'La progression (estimés / total) est affichée et se met à jour.' },
+      { num: '7.5', action: 'Cliquer sur "Arrêter" la file', expected: 'La file est interrompue ; aucun ticket n\'est plus avancé automatiquement.' },
+      { num: '7.6', action: 'Supprimer un ticket présent dans la file', expected: 'Le ticket est retiré de la file sans casser l\'ordre des autres.' },
+    ],
+  },
+  {
+    title: '8. Liaison Capacité & équipe',
+    tests: [
+      { num: '8.1', action: 'Lier une salle Scrum à une équipe', expected: 'L\'équipe est associée à la salle et visible dans ses paramètres.' },
+      { num: '8.2', action: 'Rechercher une salle par équipe dans la liste', expected: 'Seules les salles de l\'équipe recherchée s\'affichent.' },
+      { num: '8.3', action: 'Estimer tous les tickets d\'une salle liée à une équipe', expected: 'Le total de points remplit automatiquement le sprint en planification (Capacité) ; notification "Scrum terminé".' },
+    ],
+  },
+  {
+    title: '9. Thème sombre',
+    tests: [
+      { num: '9.1', action: 'Basculer en thème sombre (Profil -> Thème) et recharger /scrum', expected: 'Tous les éléments respectent le thème sombre. Cartes de vote lisibles. Aucun texte illisible.' },
     ],
   },
 ]
@@ -153,7 +172,7 @@ async function generate() {
   }
   function addTextField(name, x, yTop, w, h, multiline = false) {
     const tf = form.createTextField(name)
-    tf.addToPage(page, { x, y: rectBottom(yTop + h - PAD, h - 2 * PAD), width: w - 2 * PAD, height: h - 2 * PAD, borderColor: rgb(0.88, 0.88, 0.93), borderWidth: 0.4, backgroundColor: cl.white })
+    tf.addToPage(page, { x, y: rectBottom(yTop + PAD, h - 2 * PAD), width: w - 2 * PAD, height: h - 2 * PAD, borderColor: rgb(0.88, 0.88, 0.93), borderWidth: 0.4, backgroundColor: cl.white })
     tf.setFontSize(FS - 0.5)
     if (multiline) tf.enableMultiline()
   }
@@ -161,7 +180,7 @@ async function generate() {
   newPage()
   drawRect(M, currentY, CW, 42, cl.indigo, null)
   drawText('CAHIER DE TESTS — SCRUM POKER', M + 12, currentY + 12 + 14, fB, 15, cl.white)
-  drawText(`PouetPouet v0.3.0  ·  ${TOTAL} tests à exécuter`, M + 12, currentY + 30 + FS, fR, 8, rgb(0.82, 0.80, 1.0))
+  drawText(`PouetPouet v0.15.1  ·  ${TOTAL} tests à exécuter`, M + 12, currentY + 30 + FS, fR, 8, rgb(0.82, 0.80, 1.0))
   currentY += 42 + 8
 
   const META_H = 21, META_COL = CW / 2
@@ -172,7 +191,7 @@ async function generate() {
     const labelW = fR.widthOfTextAtSize(label + ' : ', FS)
     drawText(label + ' :', xBase, yBlock + PAD + FS, fR, FS, cl.gray)
     const tf = form.createTextField(name)
-    tf.addToPage(page, { x: xBase + labelW + 2, y: rectBottom(yBlock + META_H - 3, META_H - 6), width: META_COL - labelW - 20, height: META_H - 6, borderColor: cl.border, borderWidth: 0.5, backgroundColor: cl.white })
+    tf.addToPage(page, { x: xBase + labelW + 2, y: rectBottom(yBlock + 3, META_H - 6), width: META_COL - labelW - 20, height: META_H - 6, borderColor: cl.border, borderWidth: 0.5, backgroundColor: cl.white })
     tf.setFontSize(FS)
   })
   currentY += META_H * 2 + 8 + 6
@@ -219,7 +238,7 @@ async function generate() {
     const lw = fR.widthOfTextAtSize(label + ' : ', FS)
     drawText(label + ' :', xBase + PAD, currentY + PAD + FS + 1, fR, FS, cl.gray)
     const tf = form.createTextField(name)
-    tf.addToPage(page, { x: xBase + PAD + lw + 2, y: rectBottom(currentY + BRH - 3, BRH - 6), width: 40, height: BRH - 6, borderColor: cl.border, borderWidth: 0.5, backgroundColor: cl.white })
+    tf.addToPage(page, { x: xBase + PAD + lw + 2, y: rectBottom(currentY + 3, BRH - 6), width: 40, height: BRH - 6, borderColor: cl.border, borderWidth: 0.5, backgroundColor: cl.white })
     tf.setFontSize(FS)
     tf.setText(`/ ${TOTAL}`)
   })
@@ -236,11 +255,11 @@ async function generate() {
   const sigLw = fR.widthOfTextAtSize('Signature : ', FS)
   drawText('Signature :', M + PAD, currentY + PAD + FS + 2, fR, FS, cl.gray)
   const tfSig = form.createTextField('signature')
-  tfSig.addToPage(page, { x: M + PAD + sigLw + 2, y: rectBottom(currentY + 22 - 3, 16), width: 190, height: 16, borderColor: cl.border, borderWidth: 0.5, backgroundColor: cl.white })
+  tfSig.addToPage(page, { x: M + PAD + sigLw + 2, y: rectBottom(currentY + 3, 16), width: 190, height: 16, borderColor: cl.border, borderWidth: 0.5, backgroundColor: cl.white })
   tfSig.setFontSize(FS)
 
   const bytes = await doc.save()
-  const outPath = 'docs/cahiers-tests/CT-v0.3.0-scrum.pdf'
+  const outPath = 'apps/web/public/aide/CT-v0.15.1-scrum.pdf'
   writeFileSync(outPath, bytes)
   console.log(`✓  ${outPath}  (${TOTAL} tests · ${doc.getPageCount()} page${doc.getPageCount() > 1 ? 's' : ''})`)
 }

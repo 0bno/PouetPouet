@@ -77,11 +77,27 @@ export const CAPACITY_MODULE: ModuleManifest = {
   listensTo: ['scrum.ticket.estimated'],
 }
 
+export const MEETOPS_MODULE: ModuleManifest = {
+  id: 'meetops',
+  name: 'MeetOps',
+  description: 'Gestion industrielle de réunions (événements, invitations Outlook/Teams, listes de diffusion)',
+  icon: '🗓️',
+  color: '#475569',
+  nav: [{ label: 'MeetOps', href: '/meetops', match: '/meetops' }],
+  apiPrefix: '/api/meetops',
+  ownedEntities: ['MeetEvent', 'Meeting', 'MeetingParticipant', 'MeetDistList', 'MeetDistMember', 'MeetTemplate', 'MeetHistory'],
+  referencedPivots: ['User'],
+  // L'envoi/annulation des invitations alimentera Notifications et Audit (v2)
+  emits: [],
+  listensTo: [],
+}
+
 /** Modules actifs, dans l'ordre d'affichage de la navigation. */
-export const FORGE_MODULES: ModuleManifest[] = [
+export const PIVOT_MODULES: ModuleManifest[] = [
   POUETPOUET_MODULE,
   DAILY_MODULE,
   SCRUM_MODULE,
   WHEEL_MODULE,
   CAPACITY_MODULE,
+  MEETOPS_MODULE,
 ]

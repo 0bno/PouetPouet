@@ -5,10 +5,16 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/mailer.js'
 import { audit } from '../lib/audit.js'
+import { isAdminEmail } from '../lib/feature-flags.js'
 
 const USER_SELECT = {
   id: true, email: true, name: true, avatar: true, bio: true, theme: true, palette: true, emailVerified: true, favoriteModules: true, createdAt: true,
 } as const
+
+// Enrichit l'objet user renvoyé au client avec `isAdmin` (allowlist ADMIN_EMAILS, non persisté).
+function withAdmin<T extends { email: string }>(u: T): T & { isAdmin: boolean } {
+  return { ...u, isAdmin: isAdminEmail(u.email) }
+}
 
 // Test-only shortcut, controlled by env, so the email step can be skipped while building.
 // Set ALLOW_EMAIL_BYPASS=false (or leave unset) in production to disable it entirely.
@@ -85,7 +91,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         select: USER_SELECT,
       })
       const token = app.jwt.sign({ id: user.id, email: user.email })
-      return reply.send({ user, token })
+      return reply.send({ user: withAdmin(user), token })
     }
 
     const user = await prisma.user.create({
@@ -117,7 +123,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const token = app.jwt.sign({ id: user.id, email: user.email })
     audit(user.id, 'auth.login', request)
     const { password: _, verifyToken: __, verifyTokenExpires: ___, ...safeUser } = user
-    return reply.send({ user: safeUser, token })
+    return reply.send({ user: withAdmin(safeUser), token })
   })
 
   app.post('/verify-email', async (request, reply) => {
@@ -133,7 +139,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     })
     // Verifying also logs the user in for a seamless first experience.
     const jwt = app.jwt.sign({ id: updated.id, email: updated.email })
-    return reply.send({ user: updated, token: jwt })
+    return reply.send({ user: withAdmin(updated), token: jwt })
   })
 
   app.post('/resend-verification', { config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (request, reply) => {
@@ -157,7 +163,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.user as { id: string }
     const user = await prisma.user.findUnique({ where: { id }, select: USER_SELECT })
     if (!user) return reply.status(404).send({ error: 'Utilisateur introuvable' })
-    return reply.send(user)
+    return reply.send(withAdmin(user))
   })
 
   app.patch('/profile', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -168,14 +174,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       ...(body.bio !== undefined ? { bio: body.bio?.trim() || null } : {}),
     }
     const user = await prisma.user.update({ where: { id }, data, select: USER_SELECT })
-    return reply.send(user)
+    return reply.send(withAdmin(user))
   })
 
   app.post('/avatar', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { id } = request.user as { id: string }
     const { avatar } = avatarSchema.parse(request.body)
     const user = await prisma.user.update({ where: { id }, data: { avatar }, select: USER_SELECT })
-    return reply.send(user)
+    return reply.send(withAdmin(user))
   })
 
   app.patch('/password', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -327,6 +333,6 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       ? user.favoriteModules.filter((m) => m !== moduleId)
       : [...user.favoriteModules, moduleId]
     const updated = await prisma.user.update({ where: { id }, data: { favoriteModules: next }, select: USER_SELECT })
-    return reply.send(updated)
+    return reply.send(withAdmin(updated))
   })
 }

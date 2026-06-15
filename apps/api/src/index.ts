@@ -20,11 +20,11 @@ import { notificationRoutes } from './routes/notifications.js'
 import { hubRoutes } from './routes/hub.js'
 import { teamRoutes } from './routes/teams.js'
 import { webhookRoutes, deliverWebhooks } from './routes/webhooks.js'
+import { flagRoutes } from './routes/flags.js'
 import { registerModuleRoutes } from './modules/registry.js'
 import { registerSocketHandlers } from './sockets/index.js'
 import { setIO, getIO } from './lib/io.js'
 import { bus } from './lib/bus.js'
-import { notify } from './lib/notify.js'
 import { prisma } from './lib/prisma.js'
 import { redis } from './lib/redis.js'
 import { scheduleRetention } from './lib/retention.js'
@@ -149,6 +149,7 @@ app.register(notificationRoutes, { prefix: '/api/notifications' })
 app.register(hubRoutes, { prefix: '/api/hub' })
 app.register(teamRoutes, { prefix: '/api/teams' })
 app.register(webhookRoutes, { prefix: '/api/webhooks' })
+app.register(flagRoutes, { prefix: '/api' })
 
 // Modules FORGE : montés depuis le registre (cf. modules/registry.ts)
 registerModuleRoutes(app)
@@ -160,24 +161,13 @@ bus.subscribe('*', (e) => {
 
 // F3.2 — liaisons événementielles : les modules notifient leurs propriétaires via le bus.
 bus.subscribe('daily.session.ended', async (e) => {
-  const { sessionId, participantCount, durationSeconds } = e.payload as { sessionId: string; participantCount?: number; durationSeconds?: number | null }
+  const { sessionId } = e.payload as { sessionId: string }
   const session = await prisma.dailySession.findUnique({
     where: { id: sessionId },
-    select: { ownerId: true, name: true },
+    select: { ownerId: true },
   })
   if (session) {
-    const parts: string[] = []
-    if (participantCount) parts.push(`${participantCount} participant${participantCount > 1 ? 's' : ''}`)
-    if (durationSeconds) {
-      const m = Math.floor(durationSeconds / 60)
-      const s = durationSeconds % 60
-      parts.push(m > 0 ? `${m}m${s > 0 ? `${s}s` : ''}` : `${s}s`)
-    }
-    const body = `"${session.name}" est terminé${parts.length > 0 ? ` — ${parts.join(', ')}` : ''}.`
-    await Promise.all([
-      notify({ userId: session.ownerId, type: 'DAILY_SESSION_ENDED', title: 'Daily terminé', body, link: '/daily' }),
-      deliverWebhooks('daily.session.ended', session.ownerId, e.payload as Record<string, unknown>),
-    ])
+    await deliverWebhooks('daily.session.ended', session.ownerId, e.payload as Record<string, unknown>)
   }
 })
 
@@ -196,11 +186,9 @@ bus.subscribe('scrum.ticket.estimated', async (e) => {
     }, 0)
     const room = await prisma.scrumRoom.findUnique({
       where: { id: roomId },
-      select: { ownerId: true, name: true, teamId: true },
+      select: { ownerId: true, teamId: true },
     })
     if (room) {
-      const pointsStr = totalPoints > 0 ? ` · ${totalPoints} pts` : ''
-
       // F3.2 — Scrum→Capacity: si la salle est liée à une équipe et qu'il existe un sprint
       // en phase PLANNING sans committedPoints définis, on y remonte la vélocité estimée.
       if (room.teamId && totalPoints > 0) {
@@ -216,51 +204,19 @@ bus.subscribe('scrum.ticket.estimated', async (e) => {
         }
       }
 
-      await Promise.all([
-        notify({
-          userId: room.ownerId,
-          type: 'SCRUM_ALL_ESTIMATED',
-          title: 'Tous les tickets estimés',
-          body: `"${room.name}" — ${tickets.length} ticket${tickets.length > 1 ? 's' : ''}${pointsStr}.`,
-          link: `/scrum`,
-        }),
-        deliverWebhooks('scrum.ticket.estimated', room.ownerId, { ...e.payload as Record<string, unknown>, totalPoints }),
-      ])
+      await deliverWebhooks('scrum.ticket.estimated', room.ownerId, { ...e.payload as Record<string, unknown>, totalPoints })
     }
   }
 })
 
 bus.subscribe('pouetpouet.board.imported', async (e) => {
   if (!e.actorId) return
-  const { boardId, cards, connections } = e.payload as { boardId: string; cards: number; connections: number }
-  const board = await prisma.board.findUnique({ where: { id: boardId }, select: { name: true } })
-  if (!board) return
-  await Promise.all([
-    notify({
-      userId: e.actorId,
-      type: 'BOARD_IMPORTED',
-      title: 'Import terminé',
-      body: `"${board.name}" — ${cards} carte${cards !== 1 ? 's' : ''}${connections > 0 ? `, ${connections} connexion${connections !== 1 ? 's' : ''}` : ''}.`,
-      link: `/dashboard`,
-    }),
-    deliverWebhooks('board.imported', e.actorId, e.payload as Record<string, unknown>),
-  ])
+  await deliverWebhooks('board.imported', e.actorId, e.payload as Record<string, unknown>)
 })
 
 bus.subscribe('wheel.draw.completed', async (e) => {
-  const { teamName, results } = e.payload as { teamName: string; results: string[]; count: number }
   if (!e.actorId) return
-  const label = results.length === 1 ? results[0] : `${results.slice(0, 2).join(', ')}${results.length > 2 ? '…' : ''}`
-  await Promise.all([
-    notify({
-      userId: e.actorId,
-      type: 'WHEEL_DRAW',
-      title: 'Tirage effectué',
-      body: `${teamName} → ${label}`,
-      link: '/wheel',
-    }),
-    deliverWebhooks('wheel.draw.completed', e.actorId, e.payload as Record<string, unknown>),
-  ])
+  await deliverWebhooks('wheel.draw.completed', e.actorId, e.payload as Record<string, unknown>)
 })
 
 // Prometheus-compatible metrics — only exposed when METRICS_TOKEN is set in env.
@@ -276,18 +232,18 @@ app.get('/metrics', async (request, reply) => {
   const rooms = io ? io.sockets.adapter.rooms.size : 0
   const mem = process.memoryUsage()
   const lines = [
-    '# HELP forge_socket_connections_active Active WebSocket connections',
-    '# TYPE forge_socket_connections_active gauge',
-    `forge_socket_connections_active ${connections}`,
-    '# HELP forge_socket_rooms_active Active socket rooms (boards + users + sessions)',
-    '# TYPE forge_socket_rooms_active gauge',
-    `forge_socket_rooms_active ${rooms}`,
-    '# HELP forge_process_heap_bytes Node.js heap used (bytes)',
-    '# TYPE forge_process_heap_bytes gauge',
-    `forge_process_heap_bytes ${mem.heapUsed}`,
-    '# HELP forge_process_rss_bytes Node.js RSS memory (bytes)',
-    '# TYPE forge_process_rss_bytes gauge',
-    `forge_process_rss_bytes ${mem.rss}`,
+    '# HELP pivot_socket_connections_active Active WebSocket connections',
+    '# TYPE pivot_socket_connections_active gauge',
+    `pivot_socket_connections_active ${connections}`,
+    '# HELP pivot_socket_rooms_active Active socket rooms (boards + users + sessions)',
+    '# TYPE pivot_socket_rooms_active gauge',
+    `pivot_socket_rooms_active ${rooms}`,
+    '# HELP pivot_process_heap_bytes Node.js heap used (bytes)',
+    '# TYPE pivot_process_heap_bytes gauge',
+    `pivot_process_heap_bytes ${mem.heapUsed}`,
+    '# HELP pivot_process_rss_bytes Node.js RSS memory (bytes)',
+    '# TYPE pivot_process_rss_bytes gauge',
+    `pivot_process_rss_bytes ${mem.rss}`,
   ]
   reply.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n')
 })
