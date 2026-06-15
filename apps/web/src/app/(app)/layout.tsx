@@ -11,6 +11,7 @@ import { SessionExpiredModal } from '@/components/session-expired-modal'
 import { SessionCountdown } from '@/components/session-countdown'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { useNotificationsStore } from '@/store/notifications'
+import { useFlagsStore } from '@/store/flags'
 import { APP_VERSION } from '@/lib/version'
 import { PIVOT_MODULES } from '@pouetpouet/shared'
 
@@ -35,6 +36,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated && !token) router.replace('/login')
   }, [hydrated, token, router])
+
+  // Charge les feature flags évalués pour l'utilisateur courant (gating UI).
+  useEffect(() => {
+    if (token) void useFlagsStore.getState().loadFlags()
+  }, [token])
 
   // Fire the session-expired state exactly when the JWT's `exp` is reached.
   // If the stored token is already dead on load, clear it so the guard bounces to /login.
@@ -171,6 +177,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             >
               ?
             </Link>
+            {user.isAdmin && (
+              <Link
+                href="/admin/flags"
+                title="Feature flags (admin)"
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
+                  pathname.startsWith('/admin')
+                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
+                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-200 dark:hover:bg-gray-800'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M3 4v6l7 4v6l4-2v-4l7-4V4" />
+                </svg>
+              </Link>
+            )}
             <NotificationBell />
             <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">{user.name}</span>
             <Link href="/profile" title="Mon profil" className="hover:opacity-80 transition-opacity">

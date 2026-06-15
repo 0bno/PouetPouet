@@ -20,6 +20,22 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.11.0',
+    date: '2026-06-15',
+    title: 'Feature flags',
+    summary: 'Les administrateurs peuvent activer, désactiver ou déployer progressivement des fonctionnalités sans redéploiement, depuis une page dédiée.',
+    sections: [
+      {
+        heading: '🚩 Feature flags',
+        items: [
+          'Nouvelle page d\'administration (réservée aux admins) pour piloter les fonctionnalités : activation/désactivation et déploiement progressif par pourcentage.',
+          'Les valeurs sont propres à chaque environnement (dev / prod) et prennent effet immédiatement, sans redéploiement.',
+          'Premiers usages : masquer un module du Hub (Daily, Scrum, La Roue, Capacité, MeetOps) ou désactiver l\'outil Tableau des boards.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-06-12',
     title: 'Palettes de couleurs & hub repensé',
