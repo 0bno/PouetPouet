@@ -16,11 +16,11 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.8",
-    "prettier": "^3.5.3",
-    "prisma": "6.19.0",
-    "turbo": "^2.5.3",
-    "typescript": "^5.8.3"
+    "@vitest/coverage-v8": "^4.1.9",
+    "prettier": "^3.8.4",
+    "prisma": "6.19.3",
+    "turbo": "^2.9.18",
+    "typescript": "^6.0.3"
   },
   "packageManager": "npm@11.13.0",
   "engines": {
