@@ -10,18 +10,15 @@ import { PrismaPg } from '@prisma/adapter-pg'
 // max_connections de Postgres. Le défaut est ici 10/instance, surchargeable via
 // DB_CONNECTION_LIMIT. `connectionTimeoutMillis` borne l'attente d'une connexion
 // libre avant erreur (équivalent de l'ancien `pool_timeout`, en millisecondes).
-function buildAdapter(): PrismaPg | undefined {
-  const connectionString = process.env.DATABASE_URL
-  if (!connectionString) return undefined
-  return new PrismaPg({
-    connectionString,
-    max: Number(process.env.DB_CONNECTION_LIMIT) || 10,
-    connectionTimeoutMillis: 10_000,
-  })
-}
+//
+// Le Pool `pg` n'ouvre aucune connexion tant qu'aucune requête n'est exécutée :
+// construire le client sans DATABASE_URL (ex. tests unitaires qui importent ce
+// module sans toucher la base) est donc sans danger — seule une vraie requête
+// échouerait alors, ce qui est le comportement attendu.
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.DB_CONNECTION_LIMIT) || 10,
+  connectionTimeoutMillis: 10_000,
+})
 
-const adapter = buildAdapter()
-
-export const prisma = adapter
-  ? new PrismaClient({ adapter })
-  : new PrismaClient()
+export const prisma = new PrismaClient({ adapter })
