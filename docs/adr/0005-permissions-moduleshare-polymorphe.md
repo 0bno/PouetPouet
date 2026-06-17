@@ -1,8 +1,8 @@
 # ADR-0005 — Permissions par module via `ModuleShare` polymorphe
 
-> Statut : `En cours` · Date : 2026-06-17 · Remplace : — · Remplacé par : —
+> Statut : `Accepté` · Date : 2026-06-17 · Remplace : — · Remplacé par : —
 
-> Décision actée ; implémentation dans la PR #78 (fondation + Scrum & Daily).
+> Décision actée et livrée pour Scrum & Daily (#78, v0.16.0). Roue / Capacité / MeetOps suivront via le même patron.
 > Issues #36/#37, milestone *1.0.0 - Exploitable*.
 
 ## Contexte

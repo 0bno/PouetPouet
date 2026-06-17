@@ -115,8 +115,8 @@
 - [x] Matrice d'habilitation Propriétaire / Éditeur / Lecteur + co-propriétaire
 - [x] Rôles enforced sur les boards (reset, sessions, votes, export)
 - [ ] SAML 2.0
-- [ ] Permissions par module pour Daily, Scrum, Roue, Capacité
-- [ ] Tests d'autorisation systématiques *(couverture partielle)*
+- [~] Permissions par module *(Scrum & Daily livrés via `ModuleShare` polymorphe — cf. ADR-0005, #36/#78 ; reste Roue / Capacité / MeetOps sur le même patron)*
+- [~] Tests d'autorisation systématiques *(matrice owner/éditeur/lecteur/étranger en intégration pour Scrum & Daily — #37/#78 ; à étendre aux autres modules)*
 
 ---
 

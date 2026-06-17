@@ -6,6 +6,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le pr
 
 > Les notes de version **détaillées** (groupées par thème, orientées utilisateur) sont la source de vérité in-app : [`apps/api/src/lib/patch-notes.ts`](apps/api/src/lib/patch-notes.ts), affichées dans le panneau de notifications. Ce fichier en est l'index public condensé.
 
+## [0.16.0] — 2026-06-17
+Partage par rôles (Lecteur / Éditeur) des salles Scrum Poker et sessions Daily, sur le même modèle que les tableaux. *(Côté technique : migration Prisma 7 — cf. [ADR-0009](docs/adr/0009-migration-prisma-7.md).)*
+
 ## [0.15.1] — 2026-06-16
 Corrections : collage Excel dans un tableau existant, alignement des champs des cahiers de tests, allègement des notifications.
 
