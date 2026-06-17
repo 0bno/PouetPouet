@@ -55,7 +55,7 @@ Pas besoin d'ADR pour un choix local, réversible ou évident.
 | [0002](./0002-modele-de-branches.md) | Modèle de branches feature → develop → master | Accepté |
 | [0003](./0003-auth-socket-optionnelle.md) | Authentification Socket.io optionnelle | Accepté |
 | [0004](./0004-bus-evenements-registre-modules.md) | Bus d'événements + registre de modules | Accepté |
-| [0005](./0005-permissions-moduleshare-polymorphe.md) | Permissions par module via `ModuleShare` polymorphe | En cours |
+| [0005](./0005-permissions-moduleshare-polymorphe.md) | Permissions par module via `ModuleShare` polymorphe | Accepté |
 | [0006](./0006-adapter-redis-socketio.md) | Adapter Redis Socket.io avec fallback mémoire | Accepté |
 | [0007](./0007-epinglage-prisma.md) | Épinglage exact de Prisma à 6.19.0 | Remplacé par [0009](./0009-migration-prisma-7.md) |
 | [0008](./0008-versioning-0x.md) | Versioning 0.x.y sans saut de majeur | Accepté |

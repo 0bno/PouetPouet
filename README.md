@@ -2,13 +2,13 @@
 
 Suite collaborative temps réel pour animer des ateliers, organiser les rituels d'équipe et centraliser les outils de facilitation dans un hub unique.
 
-Le projet est actuellement en version **0.15.0**. Le produit historique **PouetPouet** devient le premier module d'un socle plus large nommé **PIVOT**.
+Le projet est actuellement en version **0.16.0**. Le produit historique **PouetPouet** devient le premier module d'un socle plus large nommé **PIVOT**.
 
 ## Modules disponibles
 
 - **PouetPouet** : tableau blanc collaboratif temps réel avec cartes, cadres, groupes, connexions, votes, templates, import/export et partage par rôles.
-- **Daily** : stand-up minuté avec tour de parole équitable, participants et sessions d'équipe.
-- **Scrum Poker** : estimation d'équipe en temps réel avec tickets, votes et salles partageables.
+- **Daily** : stand-up minuté avec tour de parole équitable, participants, sessions d'équipe et partage par rôles (Lecteur / Éditeur).
+- **Scrum Poker** : estimation d'équipe en temps réel avec tickets, votes, salles partageables et partage par rôles (Lecteur / Éditeur).
 - **La Roue** : tirage au sort animé, lié aux équipes.
 - **Capacité** : planification de capacité d'équipe pour sprint, PI ou release.
 
