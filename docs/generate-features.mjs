@@ -102,6 +102,97 @@ function rule() {
   space(8)
 }
 
+// Découpe une liste de runs en lignes qui tiennent dans maxW (sans dessiner).
+function wrapRuns(runs, maxW, size) {
+  const words = []
+  for (const r of runs) {
+    const parts = r.text.split(/(\s+)/)
+    for (const p of parts) if (p.length) words.push({ text: p, style: r.style, space: /^\s+$/.test(p) })
+  }
+  const lines = [[]]
+  let lineW = 0
+  for (const w of words) {
+    const cur = lines[lines.length - 1]
+    if (w.space && cur.length === 0) continue // pas d'espace en début de ligne
+    const ww = fontFor(w.style).widthOfTextAtSize(w.text, size)
+    if (!w.space && lineW + ww > maxW && cur.length) {
+      lines.push([w])
+      lineW = ww
+    } else {
+      cur.push(w)
+      lineW += ww
+    }
+  }
+  return lines.map((l) => {
+    while (l.length && l[l.length - 1].space) l.pop()
+    return l
+  })
+}
+
+// Dessine des lignes pré-wrappées à partir de topY, sans toucher au y global.
+function drawWrappedLines(wrapped, x, topY, size, lineH, color) {
+  let yy = topY
+  for (const line of wrapped) {
+    let lx = x
+    for (const w of line) {
+      const fnt = fontFor(w.style)
+      page.drawText(w.text, { x: lx, y: yy, size, font: fnt, color: w.style === 'code' ? cl.accentSoft : color })
+      lx += fnt.widthOfTextAtSize(w.text, size)
+    }
+    yy -= lineH
+  }
+}
+
+// Rend un tableau markdown (tableau de lignes, chaque ligne = tableau de cellules)
+// en colonnes alignées : en-tête en gras + filet, wrapping interne par cellule.
+function renderTable(rows) {
+  if (!rows.length) return
+  const ncols = Math.max(...rows.map((r) => r.length))
+  const size = 9
+  const lineH = 12
+  const gutter = 12
+  const padY = 6
+
+  // Largeur "naturelle" (sur une ligne) de chaque colonne pour répartir l'espace.
+  const natural = new Array(ncols).fill(0)
+  rows.forEach((r, ri) => {
+    for (let c = 0; c < ncols; c++) {
+      const runs = parseInline(r[c] || '')
+      let w = 0
+      for (const run of runs) w += fontFor(ri === 0 ? 'bold' : run.style).widthOfTextAtSize(run.text, size)
+      natural[c] = Math.max(natural[c], w)
+    }
+  })
+  const avail = CW - gutter * (ncols - 1)
+  const sum = natural.reduce((a, b) => a + b, 0) || 1
+  let widths = natural.map((n) => Math.max(48, (n / sum) * avail))
+  const wsum = widths.reduce((a, b) => a + b, 0)
+  if (wsum > avail) widths = widths.map((w) => (w * avail) / wsum)
+  const xs = []
+  let cx = M
+  for (let c = 0; c < ncols; c++) { xs.push(cx); cx += widths[c] + gutter }
+
+  rows.forEach((r, ri) => {
+    const isHeader = ri === 0
+    const cellLines = []
+    let maxLines = 1
+    for (let c = 0; c < ncols; c++) {
+      let runs = parseInline(r[c] || '')
+      if (isHeader) runs = runs.map((x) => ({ ...x, style: 'bold' }))
+      const wl = wrapRuns(runs, widths[c], size)
+      cellLines.push(wl)
+      maxLines = Math.max(maxLines, wl.length)
+    }
+    const rowH = maxLines * lineH + padY
+    if (y - rowH < M) newPage()
+    const topY = y
+    for (let c = 0; c < ncols; c++) drawWrappedLines(cellLines[c], xs[c], topY, size, lineH, cl.text)
+    y = topY - rowH
+    if (isHeader) page.drawLine({ start: { x: M, y: y + padY * 0.6 }, end: { x: PW - M, y: y + padY * 0.6 }, thickness: 0.5, color: cl.rule })
+  })
+  space(4)
+}
+
 // ---- Cover ----
 newPage()
 y = PH - 150
@@ -125,15 +216,20 @@ for (let i = 0; i < lines.length; i++) {
   if (line === '---') { rule(); continue }
   if (line.trim() === '') { space(6); continue }
 
-  // Tableaux markdown : on saute les lignes séparatrices (|---|---|) et on rend
-  // les lignes de données en monospace pour un alignement approximatif.
+  // Tableaux markdown : on rassemble tout le bloc (lignes |...|, en sautant la
+  // ligne séparatrice |---|---|) puis on le rend en colonnes alignées.
   if (/^\s*\|.*\|\s*$/.test(line)) {
-    if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue // séparateur
-    const cells = line.trim().replace(/^\||\|$/g, '').split('|').map((c) => san(c.trim()))
-    const txt = cells.join('  |  ')
-    if (y - 13 < M) newPage()
-    page.drawText(txt.slice(0, 110), { x: M, y, size: 8.5, font: FC, color: cl.text })
-    y -= 13
+    const rows = []
+    let j = i
+    while (j < lines.length && /^\s*\|.*\|\s*$/.test(lines[j].replace(/\s+$/, ''))) {
+      const l = lines[j].replace(/\s+$/, '')
+      if (!/^\s*\|[\s:|-]+\|\s*$/.test(l)) {
+        rows.push(l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()))
+      }
+      j++
+    }
+    i = j - 1
+    renderTable(rows)
     continue
   }
 
