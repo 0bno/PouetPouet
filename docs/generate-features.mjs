@@ -125,6 +125,18 @@ for (let i = 0; i < lines.length; i++) {
   if (line === '---') { rule(); continue }
   if (line.trim() === '') { space(6); continue }
 
+  // Tableaux markdown : on saute les lignes séparatrices (|---|---|) et on rend
+  // les lignes de données en monospace pour un alignement approximatif.
+  if (/^\s*\|.*\|\s*$/.test(line)) {
+    if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue // séparateur
+    const cells = line.trim().replace(/^\||\|$/g, '').split('|').map((c) => san(c.trim()))
+    const txt = cells.join('  |  ')
+    if (y - 13 < M) newPage()
+    page.drawText(txt.slice(0, 110), { x: M, y, size: 8.5, font: FC, color: cl.text })
+    y -= 13
+    continue
+  }
+
   if (line.startsWith('### ')) {
     space(16)
     drawRuns(parseInline(line.slice(4)), M, CW, 12.5, cl.text, 16)
