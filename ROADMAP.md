@@ -186,7 +186,7 @@
 - [x] Documenter les CI/CD en place
 - [x] Documenter l'architecture applicative (README.md)
 - [x] Documenter les décisions structurantes via ADR *(journal `docs/adr/` : process + 8 ADR rétroactives)*
-- [ ] Checklist d'incident
+- [x] Checklist d'incident *(runbook `docs/ops/incident-response.md` : gravité, boucle de réponse, post-mortem)*
 
 ---
 
