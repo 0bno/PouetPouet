@@ -31,6 +31,7 @@
 - [x] Tag Docker `:version` (ex: `:0.15.0`) — lu depuis `package.json` racine, api + web (`deploy.yml`)
 - [x] Automatiser les tags git de release *(`release.yml` : tag `v<version>` au push master, idempotent)*
 - [x] Générer automatiquement les release notes *(extraites de `patch-notes.ts` → GitHub Release)*
+- [ ] `CHANGELOG.md` public à la racine *(optionnel — `patch-notes.ts` sert déjà de changelog in-app)*
 
 ### Déploiement
 - [x] Healthcheck API `/health` (DB + Redis + version)
@@ -59,6 +60,7 @@
 - [x] Suppression de compte (`POST /api/auth/delete-account`)
 - [x] Rétention des données (cleanup automatique via retention.ts)
 - [x] Mentions légales, confidentialité, CGU
+- [ ] Politique de divulgation de vulnérabilités (`SECURITY.md` à la racine — absent aujourd'hui)
 - [ ] Formaliser le chantier sécurité avec Valentine
 - [ ] Auditer les secrets GitHub Actions et GCP
 - [x] Scan de dépendances vulnérables (npm audit / Snyk) *(npm audit critique en CI, seuil high à traiter après xlsx)*
@@ -81,6 +83,9 @@
   - [x] Labels consommés par les templates/workflow : `bug`, `feature`, `tech`, `needs triage`
   - [x] Créer/normaliser dans GitHub : `security`, `ux`, `good first issue`
 - [x] Milestones GitHub *(`0.10.1 - Hardening`, `1.0.0 - Exploitable`)*
+- [ ] `LICENSE` à la racine du dépôt *(absent — choix de licence à acter ; bloquant pour l'écosystème de plugins)*
+- [ ] Guide de contribution `CONTRIBUTING.md` *(absent — workflow git, conventions, setup local)*
+- [ ] `CODE_OF_CONDUCT.md` *(optionnel — standard communauté, pertinent à l'ouverture aux contributeurs/plugins)*
 
 ---
 
@@ -134,6 +139,7 @@
 - [x] Stratégie de backup PostgreSQL *(Cloud SQL auto + PITR — runbook `docs/ops/backup-restore-rollback.md`)*
 - [ ] Tester la restauration des backups *(procédure + cadence trimestrielle documentées ; test réel à exécuter)*
 - [x] Procédure de rollback migration documentée *(runbook `docs/ops/backup-restore-rollback.md`)*
+- [ ] Migration Prisma v7 (retrait du `url` du schéma + `prisma.config.ts`) pour lever l'épinglage exact `6.19.0` — cf. #87 *(dette traçée, ADR-0007)*
 
 ---
 
