@@ -60,7 +60,7 @@
 - [x] Suppression de compte (`POST /api/auth/delete-account`)
 - [x] Rétention des données (cleanup automatique via retention.ts)
 - [x] Mentions légales, confidentialité, CGU
-- [ ] Politique de divulgation de vulnérabilités (`SECURITY.md` à la racine — absent aujourd'hui)
+- [x] Politique de divulgation de vulnérabilités (`SECURITY.md` à la racine, contact pouetpouetsupport@gmail.com)
 - [ ] Formaliser le chantier sécurité avec Valentine
 - [ ] Auditer les secrets GitHub Actions et GCP
 - [x] Scan de dépendances vulnérables (npm audit / Snyk) *(npm audit critique en CI, seuil high à traiter après xlsx)*
@@ -83,9 +83,9 @@
   - [x] Labels consommés par les templates/workflow : `bug`, `feature`, `tech`, `needs triage`
   - [x] Créer/normaliser dans GitHub : `security`, `ux`, `good first issue`
 - [x] Milestones GitHub *(`0.10.1 - Hardening`, `1.0.0 - Exploitable`)*
-- [ ] `LICENSE` à la racine du dépôt *(absent — choix de licence à acter ; bloquant pour l'écosystème de plugins)*
-- [ ] Guide de contribution `CONTRIBUTING.md` *(absent — workflow git, conventions, setup local)*
-- [ ] `CODE_OF_CONDUCT.md` *(optionnel — standard communauté, pertinent à l'ouverture aux contributeurs/plugins)*
+- [x] `LICENSE` à la racine du dépôt *(AGPL-3.0)*
+- [x] Guide de contribution `CONTRIBUTING.md` *(workflow git, conventions de commit, setup, règles d'isolation des modules)*
+- [x] `CODE_OF_CONDUCT.md` *(Contributor Covenant 2.1, contact pouetpouetsupport@gmail.com)*
 
 ---
 
