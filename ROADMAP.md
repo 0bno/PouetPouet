@@ -31,7 +31,7 @@
 - [x] Tag Docker `:version` (ex: `:0.15.0`) — lu depuis `package.json` racine, api + web (`deploy.yml`)
 - [x] Automatiser les tags git de release *(`release.yml` : tag `v<version>` au push master, idempotent)*
 - [x] Générer automatiquement les release notes *(extraites de `patch-notes.ts` → GitHub Release)*
-- [ ] `CHANGELOG.md` public à la racine *(optionnel — `patch-notes.ts` sert déjà de changelog in-app)*
+- [x] `CHANGELOG.md` public à la racine *(index condensé ; `patch-notes.ts` reste la source détaillée in-app)*
 
 ### Déploiement
 - [x] Healthcheck API `/health` (DB + Redis + version)
@@ -62,7 +62,7 @@
 - [x] Mentions légales, confidentialité, CGU
 - [x] Politique de divulgation de vulnérabilités (`SECURITY.md` à la racine, contact pouetpouetsupport@gmail.com)
 - [ ] Formaliser le chantier sécurité avec Valentine
-- [ ] Auditer les secrets GitHub Actions et GCP
+- [~] Auditer les secrets GitHub Actions et GCP *(GitHub : 6 secrets revus via `gh secret list`, tous attendus, aucune fuite dans l'historique git ; reste côté console GCP : valeurs Secret Manager + IAM + migration `GCP_SA_KEY` → Workload Identity Federation)*
 - [x] Scan de dépendances vulnérables (npm audit / Snyk) *(npm audit critique en CI, seuil high à traiter après xlsx)*
 - [x] Scan de secrets dans le code (gitleaks dans `security.yml`, config `.gitleaks.toml`)
 - [x] Scan d'images Docker
