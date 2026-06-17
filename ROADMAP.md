@@ -31,6 +31,7 @@
 - [x] Tag Docker `:version` (ex: `:0.15.0`) — lu depuis `package.json` racine, api + web (`deploy.yml`)
 - [x] Automatiser les tags git de release *(`release.yml` : tag `v<version>` au push master, idempotent)*
 - [x] Générer automatiquement les release notes *(extraites de `patch-notes.ts` → GitHub Release)*
+- [ ] `CHANGELOG.md` public à la racine *(optionnel — `patch-notes.ts` sert déjà de changelog in-app)*
 
 ### Déploiement
 - [x] Healthcheck API `/health` (DB + Redis + version)
@@ -84,6 +85,7 @@
 - [x] Milestones GitHub *(`0.10.1 - Hardening`, `1.0.0 - Exploitable`)*
 - [ ] `LICENSE` à la racine du dépôt *(absent — choix de licence à acter ; bloquant pour l'écosystème de plugins)*
 - [ ] Guide de contribution `CONTRIBUTING.md` *(absent — workflow git, conventions, setup local)*
+- [ ] `CODE_OF_CONDUCT.md` *(optionnel — standard communauté, pertinent à l'ouverture aux contributeurs/plugins)*
 
 ---
 
