@@ -55,6 +55,9 @@ export function ShapeCard({
     stroke: card.color,
     strokeWidth: sw,
     vectorEffect: 'non-scaling-stroke' as const,
+    // #115 — la hitbox épouse la géométrie (intérieur + contour), même sans remplissage,
+    // au lieu du rectangle englobant. Les coins vides ne captent plus le clic.
+    pointerEvents: 'all' as const,
   }
 
   // 5-point star centred in the box.
@@ -70,7 +73,11 @@ export function ShapeCard({
     <div
       data-card-id={card.id}
       className="absolute group select-none"
-      style={{ left: card.posX, top: card.posY, width: w, height: h, cursor: isReadonly ? 'default' : 'grab', outline, outlineOffset: '2px' }}
+      // #115 — pointer-events:none sur le conteneur : seuls la géométrie SVG (pointer-events:all)
+      // et les overlays interactifs (réactivés en auto) captent les clics ; les coins vides du
+      // bounding box laissent passer le clic vers le canvas. Le survol de groupe se déclenche via
+      // le survol de la forme (un descendant hover met aussi l'ancêtre en :hover).
+      style={{ left: card.posX, top: card.posY, width: w, height: h, cursor: isReadonly ? 'default' : 'grab', outline, outlineOffset: '2px', pointerEvents: 'none' }}
       onMouseDown={handleMouseDown}
       onClick={(e) => {
         if (isDragging.current) return
@@ -82,7 +89,7 @@ export function ShapeCard({
       {isSelected && !isReadonly && !isMultiSelect && !card.locked && (
         <div
           className="absolute bottom-full left-0 mb-2 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-xl shadow-xl px-2 py-1.5 whitespace-nowrap"
-          style={{ zIndex: 10 }}
+          style={{ zIndex: 10, pointerEvents: 'auto' }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
@@ -148,7 +155,7 @@ export function ShapeCard({
         </div>
       )}
 
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', pointerEvents: 'none' }}>
         {shapeType === 'rect' && <rect x={pad} y={pad} width={w - 2 * pad} height={h - 2 * pad} rx={8} {...shapeAttrs} />}
         {shapeType === 'circle' && <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) / 2 - pad} {...shapeAttrs} />}
         {shapeType === 'diamond' && <polygon points={`${w / 2},${pad} ${w - pad},${h / 2} ${w / 2},${h - pad} ${pad},${h / 2}`} {...shapeAttrs} />}
@@ -162,11 +169,21 @@ export function ShapeCard({
           const half = Math.max(0, chord / 2 - pad)
           return (
             <g transform={`rotate(${rotation}, ${w / 2}, ${h / 2})`}>
+              {/* #115 — hit-line transparente plus large : le trait reste cliquable
+                  sans capter tout le rectangle englobant. */}
+              <line
+                x1={w / 2 - half} y1={h / 2}
+                x2={w / 2 + half} y2={h / 2}
+                stroke="transparent" strokeWidth={Math.max(sw + 10, 14)}
+                strokeLinecap="round" vectorEffect="non-scaling-stroke"
+                style={{ pointerEvents: 'stroke' }}
+              />
               <line
                 x1={w / 2 - half} y1={h / 2}
                 x2={w / 2 + half} y2={h / 2}
                 stroke={shapeAttrs.stroke} strokeWidth={shapeAttrs.strokeWidth}
                 strokeLinecap="round" vectorEffect="non-scaling-stroke"
+                style={{ pointerEvents: 'none' }}
               />
             </g>
           )
@@ -175,7 +192,7 @@ export function ShapeCard({
       </svg>
 
       {!isReadonly && !card.locked && (
-        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ pointerEvents: 'auto' }}>
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onDelete(card.id) }}
