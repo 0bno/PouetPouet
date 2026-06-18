@@ -37,7 +37,7 @@ function persistViews(v: SavedView[]) { localStorage.setItem(LS_VIEWS, JSON.stri
 function loadDefaultId(): string | null { try { return localStorage.getItem(LS_DEFAULT) } catch { return null } }
 function persistDefaultId(id: string | null) { if (id) localStorage.setItem(LS_DEFAULT, id); else localStorage.removeItem(LS_DEFAULT) }
 
-interface Placed { eventId: string; eventName: string; color: string; title: string; label: string | null; startAt: string; cancelled: boolean }
+interface Placed { eventId: string; eventName: string; color: string; title: string; label: string | null; startAt: string; durationMin: number; cancelled: boolean }
 
 // ── Popup de recherche / sélection d'événements ──────────────────────────────────
 
@@ -158,6 +158,98 @@ function FilterPanel({
   )
 }
 
+// ── Grille horaire (vues jour / semaine) ─────────────────────────────────────────
+
+const HOUR_START = 7
+const HOUR_END = 21
+const TOTAL_MIN = (HOUR_END - HOUR_START) * 60
+const GRID_HEIGHT = 560 // px
+const PX_PER_MIN = GRID_HEIGHT / TOTAL_MIN
+const HOURS = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i)
+
+function timeToTop(startAt: string): number {
+  const d = new Date(startAt)
+  const minutesFromStart = (d.getHours() - HOUR_START) * 60 + d.getMinutes()
+  return Math.max(0, minutesFromStart * PX_PER_MIN)
+}
+
+function TimeGrid({ columnDays, byDay, todayKey, viewMode }: {
+  columnDays: Date[]
+  byDay: Map<string, Placed[]>
+  todayKey: string
+  viewMode: ViewMode
+}) {
+  const gridCols = viewMode === 'day' ? 'grid-cols-1' : viewMode === 'workweek' ? 'grid-cols-5' : 'grid-cols-7'
+
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
+      {/* Headers */}
+      <div className={`grid ${gridCols} border-b border-gray-100 dark:border-gray-800 ml-10`}>
+        {columnDays.map((d, i) => {
+          const key = dayKey(d)
+          return (
+            <div key={i} className={`text-center py-2 border-l border-gray-100 dark:border-gray-800 ${key === todayKey ? 'text-primary-600' : 'text-gray-500 dark:text-gray-400'}`}>
+              <div className="text-[11px] uppercase tracking-wide">{d.toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
+              <div className={`text-base ${key === todayKey ? 'font-bold' : 'font-semibold'}`}>{d.getDate()}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Corps avec grille horaire */}
+      <div className="flex">
+        {/* Étiquettes heures */}
+        <div className="w-10 shrink-0 relative" style={{ height: GRID_HEIGHT }}>
+          {HOURS.map((h) => (
+            <div key={h} className="absolute w-full text-right pr-2 text-[10px] text-gray-400 -translate-y-2"
+              style={{ top: (h - HOUR_START) * 60 * PX_PER_MIN }}>
+              {h}h
+            </div>
+          ))}
+        </div>
+
+        {/* Colonnes */}
+        <div className={`flex-1 grid ${gridCols}`}>
+          {columnDays.map((d, i) => {
+            const key = dayKey(d)
+            const items = byDay.get(key) ?? []
+            return (
+              <div key={i} className="relative border-l border-gray-100 dark:border-gray-800" style={{ height: GRID_HEIGHT }}>
+                {/* Lignes horaires */}
+                {HOURS.map((h) => (
+                  <div key={h} className="absolute w-full border-t border-gray-100 dark:border-gray-800"
+                    style={{ top: (h - HOUR_START) * 60 * PX_PER_MIN }} />
+                ))}
+                {/* Événements */}
+                {items.filter((it) => {
+                  const h = new Date(it.startAt).getHours()
+                  return h >= HOUR_START && h < HOUR_END
+                }).map((it, j) => {
+                  const top = timeToTop(it.startAt)
+                  const height = Math.max(18, it.durationMin * PX_PER_MIN)
+                  const time = new Date(it.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                  return (
+                    <div key={j}
+                      title={`${it.eventName} — ${it.title}${it.label ? ` [${it.label}]` : ''} (${time}, ${it.durationMin} min)`}
+                      className={`absolute left-0.5 right-0.5 rounded px-1 overflow-hidden text-white text-[10px] ${it.cancelled ? 'opacity-50 line-through' : ''}`}
+                      style={{ top, height, background: it.color }}>
+                      <div className="font-semibold leading-tight">{time}</div>
+                      {height > 28 && <div className="truncate leading-tight">{it.title}</div>}
+                    </div>
+                  )
+                })}
+                {items.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-200 dark:text-gray-700">—</div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────────
 
 export default function MeetopsCalendarPage() {
@@ -173,6 +265,8 @@ export default function MeetopsCalendarPage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [savedOpen, setSavedOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Chargement des préférences + application du filtre par défaut (une fois).
   useEffect(() => {
@@ -190,10 +284,14 @@ export default function MeetopsCalendarPage() {
     return [...set].sort()
   }, [events])
 
-  function meetingVisible(eventId: string, m: MeetCalendarEvent['meetings'][number]): boolean {
+  function meetingVisible(eventId: string, m: MeetCalendarEvent['meetings'][number], evName: string): boolean {
     if (filter.eventIds && !filter.eventIds.includes(eventId)) return false
     if (filter.statuses && !filter.statuses.includes(m.status)) return false
     if (filter.labels && !filter.labels.includes(m.label || NO_LABEL)) return false
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      if (!m.title.toLowerCase().includes(q) && !evName.toLowerCase().includes(q)) return false
+    }
     return true
   }
 
@@ -201,16 +299,16 @@ export default function MeetopsCalendarPage() {
     const map = new Map<string, Placed[]>()
     for (const ev of events) {
       for (const m of ev.meetings) {
-        if (!meetingVisible(ev.id, m)) continue
+        if (!meetingVisible(ev.id, m, ev.name)) continue
         const key = dayKey(new Date(m.startAt))
         if (!map.has(key)) map.set(key, [])
-        map.get(key)!.push({ eventId: ev.id, eventName: ev.name, color: ev.color, title: m.title, label: m.label, startAt: m.startAt, cancelled: m.status === 'CANCELLED' })
+        map.get(key)!.push({ eventId: ev.id, eventName: ev.name, color: ev.color, title: m.title, label: m.label, startAt: m.startAt, durationMin: m.durationMin, cancelled: m.status === 'CANCELLED' })
       }
     }
     for (const list of map.values()) list.sort((a, b) => +new Date(a.startAt) - +new Date(b.startAt))
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, filter])
+  }, [events, filter, searchQuery])
 
   const todayKey = dayKey(new Date())
 
@@ -318,6 +416,28 @@ export default function MeetopsCalendarPage() {
             <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{rangeLabel}</span>
 
             <div className="ml-auto flex items-center gap-2">
+              {searchOpen ? (
+                <div className="relative flex items-center gap-1">
+                  <svg className="absolute left-3 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+                  </svg>
+                  <input
+                    autoFocus value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Rechercher…"
+                    className="pl-9 pr-3 py-1.5 rounded-xl border border-primary-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 w-44 dark:bg-gray-900 dark:text-white dark:border-primary-700"
+                  />
+                  <button onClick={() => { setSearchOpen(false); setSearchQuery('') }} className="text-gray-400 hover:text-gray-600 px-1">✕</button>
+                </div>
+              ) : (
+                <button onClick={() => setSearchOpen(true)}
+                  className={`text-sm font-medium border rounded-lg px-3 py-1.5 ${searchQuery ? 'border-primary-400 text-primary-600' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                  title="Rechercher">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+                  </svg>
+                </button>
+              )}
+
               <button onClick={() => setPickerOpen(true)}
                 className="text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-3 py-1.5">
                 Événements{filter.eventIds ? ` (${filter.eventIds.length})` : ''}
@@ -400,38 +520,9 @@ export default function MeetopsCalendarPage() {
             </div>
           )}
 
-          {/* Vues Jour / Semaine / Semaine travail (colonnes par jour) */}
+          {/* Vues Jour / Semaine / Semaine travail — grille horaire */}
           {viewMode !== 'month' && (
-            <div className={`grid gap-2 ${viewMode === 'day' ? 'grid-cols-1' : viewMode === 'workweek' ? 'grid-cols-5' : 'grid-cols-7'}`}>
-              {columnDays.map((d, i) => {
-                const key = dayKey(d)
-                const items = byDay.get(key) ?? []
-                return (
-                  <div key={i} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-3 min-h-[16rem]">
-                    <div className={`text-center pb-2 mb-2 border-b border-gray-100 dark:border-gray-800 ${key === todayKey ? 'text-primary-600' : 'text-gray-500 dark:text-gray-400'}`}>
-                      <div className="text-[11px] uppercase tracking-wide">{d.toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
-                      <div className={`text-lg ${key === todayKey ? 'font-bold' : 'font-semibold'}`}>{d.getDate()}</div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      {items.length === 0
-                        ? <p className="text-xs text-gray-300 dark:text-gray-600 text-center py-2">—</p>
-                        : items.map((it, j) => {
-                          const time = new Date(it.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-                          return (
-                            <div key={j} title={`${it.eventName}${it.label ? ` [${it.label}]` : ''}`}
-                              className={`rounded-lg px-2 py-1.5 text-xs ${it.cancelled ? 'line-through opacity-60' : ''}`}
-                              style={{ background: it.color, color: '#fff' }}>
-                              <div className="font-semibold">{time}</div>
-                              <div className="truncate">{it.title}</div>
-                              <div className="truncate opacity-80 text-[10px]">{it.eventName}</div>
-                            </div>
-                          )
-                        })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            <TimeGrid columnDays={columnDays} byDay={byDay} todayKey={todayKey} viewMode={viewMode} />
           )}
         </>
       )}

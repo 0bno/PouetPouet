@@ -88,6 +88,11 @@ export function useMeetEvent(eventId: string) {
     await reload()
   }, [reload])
 
+  const clearMeetings = useCallback(async () => {
+    await api.delete(`/api/meetops/events/${eventId}/meetings`)
+    await reload()
+  }, [eventId, reload])
+
   const reorderMeetings = useCallback(async (ids: string[]) => {
     await api.patch(`/api/meetops/events/${eventId}/meetings/reorder`, { ids })
     await reload()
@@ -133,7 +138,7 @@ export function useMeetEvent(eventId: string) {
   return {
     event, isLoading, error, reload,
     updateEvent,
-    addMeeting, updateMeeting, deleteMeeting, reorderMeetings, bulkUpdate, saveAsTemplate,
+    addMeeting, updateMeeting, deleteMeeting, clearMeetings, reorderMeetings, bulkUpdate, saveAsTemplate,
     addParticipant, removeParticipant, applyList,
     sendMeeting, sendEvent,
   }
