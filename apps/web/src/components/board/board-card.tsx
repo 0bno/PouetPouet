@@ -261,6 +261,8 @@ export const BoardCard = memo(function BoardCard({
     if (card.type === 'TEXT') {
       editEntryPointRef.current = { x: e.clientX, y: e.clientY }
       setIsEditing(true)
+    } else if (card.type === 'LINK') {
+      setIsEditing(true)
     }
   }
 
@@ -561,6 +563,18 @@ export const BoardCard = memo(function BoardCard({
           </div>
         ) : (
           <>
+            {card.type === 'LINK' && !card.locked && (
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-gray-500/60 hover:text-primary-600 hover:bg-primary-100/60 transition-colors"
+                title="Modifier le lien"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            )}
             {card.type !== 'LINK' && !card.locked && (
               <button
                 onMouseDown={(e) => e.stopPropagation()}
@@ -607,23 +621,51 @@ export const BoardCard = memo(function BoardCard({
       <div className={`px-3 ${isEditing && card.type === 'TEXT' ? 'pb-2' : 'flex-1 min-h-0 overflow-hidden'}`}>
         {card.type === 'IMAGE' ? (
           <img src={card.content} alt="" className="w-full h-full object-contain rounded" draggable={false} />
+        ) : card.type === 'LINK' && isEditing ? (
+          <input
+            autoFocus
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() } else handleKeyDown(e) }}
+            placeholder="https://…"
+            className="w-full bg-transparent text-xs text-blue-600 dark:text-blue-400 focus:outline-none break-all"
+            onMouseDown={(e) => e.stopPropagation()}
+          />
         ) : card.type === 'LINK' ? (
           <a
             href={card.content}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-col items-center justify-center gap-2 h-full"
+            className="flex flex-col h-full overflow-hidden rounded"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={handleDoubleClick}
           >
-            <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-            </div>
-            <p className="text-[11px] text-blue-600 text-center break-all line-clamp-2 leading-tight font-medium">
-              {card.content}
-            </p>
+            {card.meta ? (
+              <>
+                {card.meta.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={card.meta.image} alt="" className="w-full flex-[2] min-h-0 object-cover" draggable={false} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                )}
+                <div className="flex-1 flex flex-col justify-center px-2.5 py-2 min-h-0 overflow-hidden">
+                  <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 leading-snug">{card.meta.title}</p>
+                  {card.meta.siteName && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{card.meta.siteName}</p>}
+                  {!card.meta.siteName && <p className="text-[10px] text-blue-400 mt-0.5 truncate">{card.content}</p>}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 h-full">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <p className="text-[11px] text-blue-600 text-center break-all line-clamp-2 leading-tight font-medium">
+                  {card.content}
+                </p>
+              </div>
+            )}
           </a>
         ) : isEditing ? (
           <textarea
