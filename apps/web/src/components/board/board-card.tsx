@@ -4,7 +4,7 @@ import { memo, useState, useRef, useEffect } from 'react'
 import type { Card, BoardField } from '@/hooks/useBoard'
 import { parseLabelFmt, parseTextFmt, serializeTextFmt, formatFieldValue, type LabelFmt, type TextFmt } from '@/lib/card-format'
 import { ConnectHandles, LinkCardsOverlay, FmtBtn, BorderResizeHandles, type ResizeDir } from './board-card-parts'
-import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
+import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN, MIN_LABEL_W } from './board-card-constants'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { headerTint } from '@/lib/colors'
 import { ShapeCard } from './board-card-shape'
@@ -170,7 +170,7 @@ export const BoardCard = memo(function BoardCard({
     window.addEventListener('mouseup', onMouseUp)
   }
 
-  const minW = card.type === 'SHAPE' || card.type === 'DRAW' ? SHAPE_MIN : isLabel ? 40 : MIN_W
+  const minW = card.type === 'SHAPE' || card.type === 'DRAW' ? SHAPE_MIN : isLabel ? MIN_LABEL_W : MIN_W
   const minH = card.type === 'SHAPE' || card.type === 'DRAW' ? SHAPE_MIN : isLabel ? 20 : MIN_H
 
   function handleResizeMouseDown(e: React.MouseEvent, dir: ResizeDir = 'se') {
@@ -402,9 +402,15 @@ export const BoardCard = memo(function BoardCard({
       <div
         data-card-id={card.id}
         className="absolute group select-none"
+        // #116 — boîte déterministe (largeur = card.width, hauteur mini = card.height) :
+        // le centre reste déplaçable, les points d'ancrage et poignées s'alignent sur une
+        // vraie boîte au lieu d'épouser un texte minuscule (où ils couvraient tout et
+        // interceptaient le glisser), et le redimensionnement devient visible.
         style={{
           left: card.posX,
           top: card.posY,
+          minWidth: Math.max(card.width, MIN_LABEL_W),
+          minHeight: card.height,
           cursor: isReadonly ? 'default' : (isEditing ? 'default' : 'grab'),
           outline: isSelected ? '1.5px dashed #818cf8' : 'none',
           outlineOffset: 6,
@@ -468,7 +474,7 @@ export const BoardCard = memo(function BoardCard({
             className="bg-transparent resize-none focus:outline-none"
             style={{
               ...textStyle,
-              width: Math.max(card.width, 80),
+              width: Math.max(card.width, MIN_LABEL_W),
               height: Math.max(card.height, 28),
               border: '1px dashed #cbd5e1',
               borderRadius: 4,
@@ -478,7 +484,7 @@ export const BoardCard = memo(function BoardCard({
             onMouseDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <p className="whitespace-pre-wrap px-1.5 py-0.5" style={{ ...textStyle, minWidth: 40, minHeight: 24 }}>
+          <p className="whitespace-pre-wrap px-1.5 py-0.5" style={{ ...textStyle, minHeight: 24 }}>
             {content || <span style={{ color: '#d1d5db', fontSize: 14, fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none' }}>Étiquette…</span>}
           </p>
         )}
@@ -502,7 +508,10 @@ export const BoardCard = memo(function BoardCard({
         {!isReadonly && !card.locked && !isMultiSelect && (
           <BorderResizeHandles onStart={handleResizeMouseDown} />
         )}
-        {!isSelected && <ConnectHandles cardId={card.id} onStart={isReadonly ? undefined : onStartConnect} />}
+        {/* #116 — sur un label, les points d'ancrage ne s'affichent qu'une fois sélectionné :
+            une étiquette au repos se déplace librement (sinon les ancrages couvraient le petit
+            texte et interceptaient le glisser). On relie en sélectionnant puis en tirant un bord. */}
+        {isSelected && <ConnectHandles cardId={card.id} onStart={isReadonly ? undefined : onStartConnect} />}
         {linkCardsMode && onLinkCardsClick && (
           <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
         )}
