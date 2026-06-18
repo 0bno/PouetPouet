@@ -66,6 +66,12 @@ export function HostPanel({
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Invalidate list when count changes so the panel stays in sync without F5
+  useEffect(() => {
+    if (showParticipants) setParticipants(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantCount])
+
   useEffect(() => {
     if (!showParticipants || participants !== null) return
     api.get<Participant[]>(`/api/sessions/${session.id}/participants`)
