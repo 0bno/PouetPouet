@@ -20,6 +20,55 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.17.0',
+    date: '2026-06-18',
+    title: 'Cahiers de tests, partage d\'équipes & ateliers enrichis',
+    summary: 'Un nouveau module interactif de Cahiers de tests, le partage d\'équipes et de salles, le retrait de participants et l\'import Excel dans Scrum Poker, des statistiques de Daily, une vraie gestion des activités en session, et un Hub aux icônes plus pro.',
+    sections: [
+      {
+        heading: '🧪 Nouveau module : Cahiers de tests',
+        items: [
+          'Créez des cahiers de tests structurés en sections et cas de test, directement dans l\'application.',
+          'Chaque cas porte un statut (À faire, OK, KO, Bloqué, Ignoré) ; une barre de progression multi-couleurs résume l\'avancement du cahier.',
+          'Déplier / replier chaque section ou tout le cahier d\'un clic, et faire évoluer le statut global (Brouillon, En revue, Approuvé, Archivé).',
+        ],
+      },
+      {
+        heading: '🤝 Partage & équipes',
+        items: [
+          'Partagez une équipe par e-mail en Lecteur (consultation) ou Éditeur (gestion du roster), comme pour les tableaux et sessions.',
+          'Partagez une salle Scrum Poker à une équipe entière enregistrée dans « Mes équipes » en une seule action.',
+        ],
+      },
+      {
+        heading: '🎯 Scrum Poker',
+        items: [
+          'Le propriétaire peut retirer un participant ou vider entièrement la salle.',
+          'Import de tickets en masse via un fichier Excel, avec un modèle téléchargeable pour démarrer.',
+        ],
+      },
+      {
+        heading: '📅 Daily',
+        items: [
+          'Nouveau panneau de statistiques : durée sur la période, intervenants les plus bavards, taux de participation.',
+          'Le nom de la session est désormais pré-rempli au format « Daily - JJ/MM/AAAA ».',
+        ],
+      },
+      {
+        heading: '🎬 Sessions & activités',
+        items: [
+          'Véritable interface de gestion des activités en session : liste des participants mise à jour en temps réel et suivi des résultats.',
+        ],
+      },
+      {
+        heading: '✨ Interface',
+        items: [
+          'Le Hub remplace les emoji décoratifs par un jeu d\'icônes homogène et plus professionnel (le 👋 de bienvenue reste).',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.16.0',
     date: '2026-06-17',
     title: 'Partage des sessions Scrum & Daily',
