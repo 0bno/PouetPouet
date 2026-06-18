@@ -163,19 +163,21 @@ function CaseRow({ tc, onUpdate, onDelete }: {
 
 // ── Section ──────────────────────────────────────────────────────────────────────
 
-function SectionBlock({ section, onUpdateSection, onDeleteSection, onAddCase, onUpdateCase, onDeleteCase }: {
+function SectionBlock({ section, collapsed, onToggleCollapse, onUpdateSection, onDeleteSection, onAddCase, onUpdateCase, onDeleteCase }: {
   section: TestSection
+  collapsed: boolean
+  onToggleCollapse: () => void
   onUpdateSection: (patch: Partial<TestSection>) => Promise<unknown>
   onDeleteSection: () => Promise<void>
   onAddCase: (input: { title: string }) => Promise<unknown>
   onUpdateCase: (caseId: string, patch: Partial<{ title: string; precondition: string | null; steps: string | null; expected: string | null; status: TestCaseStatus; order: number }>) => Promise<unknown>
   onDeleteCase: (caseId: string) => Promise<void>
 }) {
-  const [collapsed, setCollapsed] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [title, setTitle] = useState(section.title)
   const [addingCase, setAddingCase] = useState(false)
   const [newCaseTitle, setNewCaseTitle] = useState('')
+  const [savingCase, setSavingCase] = useState(false)
 
   async function saveTitle() {
     if (title.trim()) await onUpdateSection({ title: title.trim() })
@@ -184,10 +186,15 @@ function SectionBlock({ section, onUpdateSection, onDeleteSection, onAddCase, on
 
   async function submitCase(e: React.FormEvent) {
     e.preventDefault()
-    if (!newCaseTitle.trim()) return
-    await onAddCase({ title: newCaseTitle.trim() })
-    setNewCaseTitle('')
-    setAddingCase(false)
+    if (!newCaseTitle.trim() || savingCase) return
+    setSavingCase(true)
+    try {
+      await onAddCase({ title: newCaseTitle.trim() })
+      setNewCaseTitle('')
+      setAddingCase(false)
+    } finally {
+      setSavingCase(false)
+    }
   }
 
   const passCount = section.cases.filter((c) => c.status === 'PASS').length
@@ -198,7 +205,7 @@ function SectionBlock({ section, onUpdateSection, onDeleteSection, onAddCase, on
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden">
       {/* Header section */}
       <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800">
-        <button onClick={() => setCollapsed((v) => !v)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+        <button onClick={onToggleCollapse} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
           <svg className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
@@ -265,7 +272,7 @@ function SectionBlock({ section, onUpdateSection, onDeleteSection, onAddCase, on
                 className="flex-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
                 onKeyDown={(e) => { if (e.key === 'Escape') { setAddingCase(false); setNewCaseTitle('') } }}
               />
-              <button type="submit" disabled={!newCaseTitle.trim()} className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg">Ajouter</button>
+              <button type="submit" disabled={!newCaseTitle.trim() || savingCase} className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg">Ajouter</button>
               <button type="button" onClick={() => { setAddingCase(false); setNewCaseTitle('') }} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Annuler</button>
             </form>
           )}
@@ -286,6 +293,17 @@ export default function TestBookDetailPage({ params }: { params: Promise<{ id: s
   const [titleDraft, setTitleDraft] = useState('')
   const [addingSect, setAddingSect] = useState(false)
   const [newSectTitle, setNewSectTitle] = useState('')
+  const [savingSect, setSavingSect] = useState(false)
+  // Sections repliées (par id). Vide = tout déplié.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+
+  function toggleSection(id: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   async function saveTitle() {
     if (titleDraft.trim() && book) await updateBook({ title: titleDraft.trim() })
@@ -294,10 +312,15 @@ export default function TestBookDetailPage({ params }: { params: Promise<{ id: s
 
   async function submitSection(e: React.FormEvent) {
     e.preventDefault()
-    if (!newSectTitle.trim()) return
-    await addSection(newSectTitle.trim())
-    setNewSectTitle('')
-    setAddingSect(false)
+    if (!newSectTitle.trim() || savingSect) return
+    setSavingSect(true)
+    try {
+      await addSection(newSectTitle.trim())
+      setNewSectTitle('')
+      setAddingSect(false)
+    } finally {
+      setSavingSect(false)
+    }
   }
 
   if (isLoading) return <div className="text-sm text-gray-400 py-8 text-center">Chargement…</div>
@@ -309,8 +332,12 @@ export default function TestBookDetailPage({ params }: { params: Promise<{ id: s
   )
 
   const totalCases = book.sections.reduce((sum, s) => sum + s.cases.length, 0)
-  const passCases = book.sections.reduce((sum, s) => sum + s.cases.filter((c) => c.status === 'PASS').length, 0)
-  const failCases = book.sections.reduce((sum, s) => sum + s.cases.filter((c) => c.status === 'FAIL').length, 0)
+  const countBy = (st: TestCaseStatus) => book.sections.reduce((sum, s) => sum + s.cases.filter((c) => c.status === st).length, 0)
+  const passCases = countBy('PASS')
+  const failCases = countBy('FAIL')
+  const blockedCases = countBy('BLOCKED')
+  const skipCases = countBy('SKIP')
+  const pct = (n: number) => totalCases > 0 ? (n / totalCases) * 100 : 0
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl">
@@ -381,12 +408,17 @@ export default function TestBookDetailPage({ params }: { params: Promise<{ id: s
           <span className="text-gray-500 dark:text-gray-400">{totalCases} cas</span>
           {passCases > 0 && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="text-green-600 dark:text-green-400 font-medium">{passCases} OK</span></>}
           {failCases > 0 && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="text-red-600 dark:text-red-400 font-medium">{failCases} KO</span></>}
+          {blockedCases > 0 && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="text-amber-600 dark:text-amber-400 font-medium">{blockedCases} bloqué{blockedCases !== 1 ? 's' : ''}</span></>}
+          {skipCases > 0 && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="text-gray-500 dark:text-gray-400 font-medium">{skipCases} ignoré{skipCases !== 1 ? 's' : ''}</span></>}
           {totalCases > 0 && (
             <div className="ml-auto flex items-center gap-2">
-              <div className="w-32 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className="h-full bg-green-500 rounded-full" style={{ width: `${(passCases / totalCases) * 100}%` }} />
+              <div className="w-40 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex">
+                <div className="h-full bg-green-500" style={{ width: `${pct(passCases)}%` }} title={`${passCases} OK`} />
+                <div className="h-full bg-red-500" style={{ width: `${pct(failCases)}%` }} title={`${failCases} KO`} />
+                <div className="h-full bg-amber-500" style={{ width: `${pct(blockedCases)}%` }} title={`${blockedCases} bloqués`} />
+                <div className="h-full bg-gray-400" style={{ width: `${pct(skipCases)}%` }} title={`${skipCases} ignorés`} />
               </div>
-              <span className="text-gray-400 text-xs">{Math.round((passCases / totalCases) * 100)}%</span>
+              <span className="text-gray-400 text-xs">{Math.round(pct(passCases))}%</span>
             </div>
           )}
         </div>
@@ -394,10 +426,19 @@ export default function TestBookDetailPage({ params }: { params: Promise<{ id: s
 
       {/* Sections */}
       <div className="flex flex-col gap-4">
+        {book.sections.length > 1 && (
+          <div className="flex justify-end gap-3 -mb-1 text-xs">
+            <button onClick={() => setCollapsedSections(new Set())} className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Tout déplier</button>
+            <span className="text-gray-300 dark:text-gray-700">·</span>
+            <button onClick={() => setCollapsedSections(new Set(book.sections.map((s) => s.id)))} className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Tout replier</button>
+          </div>
+        )}
         {book.sections.map((section) => (
           <SectionBlock
             key={section.id}
             section={section}
+            collapsed={collapsedSections.has(section.id)}
+            onToggleCollapse={() => toggleSection(section.id)}
             onUpdateSection={(patch) => updateSection(section.id, patch)}
             onDeleteSection={() => deleteSection(section.id)}
             onAddCase={(input) => addCase(section.id, input)}
@@ -428,7 +469,7 @@ export default function TestBookDetailPage({ params }: { params: Promise<{ id: s
               className="flex-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
               onKeyDown={(e) => { if (e.key === 'Escape') { setAddingSect(false); setNewSectTitle('') } }}
             />
-            <button type="submit" disabled={!newSectTitle.trim()} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-xl">Ajouter</button>
+            <button type="submit" disabled={!newSectTitle.trim() || savingSect} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-xl">Ajouter</button>
             <button type="button" onClick={() => { setAddingSect(false); setNewSectTitle('') }} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl">Annuler</button>
           </form>
         ) : book.sections.length > 0 && (

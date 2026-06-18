@@ -90,8 +90,9 @@ export function useTestBook(id: string) {
   useEffect(() => { void reload() }, [reload])
 
   const updateBook = useCallback(async (patch: Partial<{ title: string; description: string | null; version: string | null; status: TestBookStatus }>) => {
-    const updated = await api.patch<TestBookDetail>(`/api/testbooks/${id}`, patch)
-    setBook(updated)
+    // La route PATCH renvoie le cahier sans ses sections → on fusionne pour les préserver.
+    const updated = await api.patch<TestBook>(`/api/testbooks/${id}`, patch)
+    setBook((prev) => prev ? { ...prev, ...updated } : prev)
     return updated
   }, [id])
 
