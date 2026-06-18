@@ -638,7 +638,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         )}
 
         {/* ── Group: activities (vote / last vote / timer) ────────────────── */}
-        <div className="w-px h-6 bg-gray-200 shrink-0" aria-hidden />
+        {(featureOn('voting') || featureOn('timer')) && <div className="w-px h-6 bg-gray-200 shrink-0" aria-hidden />}
         <div className="flex items-center gap-0.5 shrink-0">
 
         {/* Vote */}
