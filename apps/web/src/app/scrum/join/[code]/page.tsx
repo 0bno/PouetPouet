@@ -50,7 +50,7 @@ export default function ScrumJoinPage({ params }: { params: Promise<{ code: stri
   // ── Kicked screen ────────────────────────────────────────────────────────────
   if (isKicked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
         <div className="w-full max-w-sm text-center">
           <span className="text-5xl block mb-4">🚪</span>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Exclu de la salle</h1>
