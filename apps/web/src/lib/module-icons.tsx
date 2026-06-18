@@ -30,6 +30,7 @@ export const MODULE_ICONS: Record<string, LucideIcon> = {
   capacity:    BarChart2,
   meetops:     Calendar,
   teams:       Users,
+  testbooks:   FlaskConical,
 }
 
 // Icônes pour les activités de board (activity-launcher et boards).
@@ -44,7 +45,6 @@ export const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 export const UPCOMING_ICONS: Record<string, LucideIcon> = {
   Roadmap:                            Map,
   'Mes PIP':                          ClipboardList,
-  'Création de cahiers de tests':     FlaskConical,
   'Mes PDF':                          FileText,
   'Mes poses (PV de pose & label)':   Package,
   "Demande d'accès serveur":          KeyRound,
