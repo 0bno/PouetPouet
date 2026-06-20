@@ -234,6 +234,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedConnId])
+  // #111 — changer d'outil ferme la barre contextuelle de connexion (sa palette de
+  // couleur incluse), comme la sélection de cartes est vidée au changement d'outil.
+  useEffect(() => {
+    setSelectedConnId(null)
+  }, [toolMode])
 
   // Reset linkSourceId whenever we leave link-cards mode
   useEffect(() => {
@@ -589,17 +594,20 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     if (toolMode === 'select' || toolMode === 'draw' || toolMode === 'link-cards') return
 
     const p = toCanvas(e.clientX, e.clientY)
+    // #114 — taille écran constante quel que soit le zoom : on convertit la taille
+    // souhaitée à l'écran en taille « monde » (÷ zoom). Offsets de centrage scalés d'autant.
+    const s = 1 / zoom
 
     if (toolMode === 'text') {
-      onAddCard(p.x - 80, p.y - 14, 'LABEL', '', '#374151', 160, 28)
+      onAddCard(p.x - 50 * s, p.y - 14 * s, 'LABEL', '', '#374151', 100 * s, 28 * s)
     } else if (toolMode === 'sticky') {
-      onAddCard(p.x - 96, p.y - 64, 'TEXT', '', toolColor)
+      onAddCard(p.x - 96 * s, p.y - 64 * s, 'TEXT', '', toolColor, 192 * s, 128 * s)
     } else if (toolMode === 'table') {
-      onAddCard(p.x - 180, p.y - 60, 'TABLE', serializeTable([['', '', ''], ['', '', ''], ['', '', '']]), '#E0E7FF', 360, 124)
+      onAddCard(p.x - 180 * s, p.y - 60 * s, 'TABLE', serializeTable([['', '', ''], ['', '', ''], ['', '', '']]), '#E0E7FF', 360 * s, 124 * s)
     } else if (toolMode === 'rect' || toolMode === 'circle' || toolMode === 'diamond' || toolMode === 'triangle' || toolMode === 'line' || toolMode === 'star') {
-      onAddCard(p.x - 75, p.y - 75, 'SHAPE', `${toolMode}|${toolStroke}|${toolFill}|${toolOpacity}`, toolColor, 150, 150)
+      onAddCard(p.x - 75 * s, p.y - 75 * s, 'SHAPE', `${toolMode}|${toolStroke}|${toolFill}|${toolOpacity}`, toolColor, 150 * s, 150 * s)
     } else if (toolMode === 'link') {
-      setLinkPopover({ screenX: e.clientX, screenY: e.clientY, canvasX: p.x - 100, canvasY: p.y - 36 })
+      setLinkPopover({ screenX: e.clientX, screenY: e.clientY, canvasX: p.x - 100 * s, canvasY: p.y - 40 * s })
     }
   }
 
@@ -609,7 +617,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     if (toolMode !== 'select') return
     if ((e.target as HTMLElement) !== e.currentTarget) return
     const p = toCanvas(e.clientX, e.clientY)
-    onAddCard(p.x - 96, p.y - 64)
+    const s = 1 / zoom // #114 — taille écran constante quel que soit le zoom
+    onAddCard(p.x - 96 * s, p.y - 64 * s, 'TEXT', '', undefined, 192 * s, 128 * s)
   }
 
   // ── Button zoom (toward canvas center) ──────────────────────────────────────
@@ -821,7 +830,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   function confirmLink() {
     if (!linkPopover || !linkUrl.trim()) { setLinkPopover(null); setLinkUrl(''); return }
     const url = linkUrl.trim().startsWith('http') ? linkUrl.trim() : `https://${linkUrl.trim()}`
-    onAddCard(linkPopover.canvasX, linkPopover.canvasY, 'LINK', url, '#EFF6FF', 200, 80)
+    const s = 1 / zoom // #114 — taille écran constante quel que soit le zoom (offset de centrage déjà scalé à l'ouverture du popover)
+    onAddCard(linkPopover.canvasX, linkPopover.canvasY, 'LINK', url, '#EFF6FF', 200 * s, 80 * s)
     setLinkPopover(null)
     setLinkUrl('')
   }
@@ -1003,8 +1013,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     ]
     return pool.map((card) => {
       const dimmed = !!highlightedGroupId && card.groupId !== highlightedGroupId
+      // #110 — isolation: confine les z-index internes (points d'ancrage z:40, barres)
+      // à la carte, sinon ils se peignent au-dessus du corps des autres cartes (z:auto).
       return (
-        <div key={card.id} style={{ opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
+        <div key={card.id} style={{ isolation: 'isolate', opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
           <BoardCard
             card={card}
             fields={fields}
