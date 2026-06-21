@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { useGameLeaderboard } from '@/hooks/useGameLeaderboard'
 
 const QUESTION_TIME = 15
 const QUESTIONS_PER_GAME = 10
@@ -38,6 +39,10 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+function initials(name: string) {
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
 type Answer = { questionIndex: number; chosen: number; correct: boolean }
 type Phase = 'idle' | 'playing' | 'done'
 
@@ -55,9 +60,13 @@ export default function TriviaPage() {
   const currentRef = useRef(0)
   const answersRef = useRef<Answer[]>([])
 
+  const { scores, myBest, fetchLeaderboard, submitScore } = useGameLeaderboard('trivia')
+
   useEffect(() => { phaseRef.current = phase }, [phase])
   useEffect(() => { currentRef.current = current }, [current])
   useEffect(() => { answersRef.current = answers }, [answers])
+
+  useEffect(() => { void fetchLeaderboard() }, [fetchLeaderboard])
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -69,6 +78,9 @@ export default function TriviaPage() {
       stopTimer()
       setPhase('done')
       phaseRef.current = 'done'
+      const finalAnswers = answersRef.current
+      const correct = finalAnswers.filter((a) => a.correct).length
+      void submitScore(correct * 100, { correctAnswers: correct, totalQuestions: QUESTIONS_PER_GAME })
       return
     }
     setCurrent(next)
@@ -76,7 +88,7 @@ export default function TriviaPage() {
     setChosen(null)
     setShowFeedback(false)
     setTimeLeft(QUESTION_TIME)
-  }, [stopTimer])
+  }, [stopTimer, submitScore])
 
   const handleAnswer = useCallback((optIdx: number, qs: typeof ALL_QUESTIONS) => {
     if (chosen !== null) return
@@ -105,7 +117,6 @@ export default function TriviaPage() {
       setTimeLeft(t)
       if (t <= 0) {
         stopTimer()
-        // timeout = wrong
         handleAnswer(-1, qs)
       }
     }, 1000)
@@ -126,8 +137,6 @@ export default function TriviaPage() {
     setTimeout(() => startTimer(picked), 50)
   }, [startTimer])
 
-  // When current question changes during play, restart the timer
-  // (but not on initial mount — startGame already handles first question)
   const isFirstRender = useRef(true)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
@@ -141,7 +150,6 @@ export default function TriviaPage() {
 
   const score = answers.filter((a) => a.correct).length
   const timerProgress = (timeLeft / QUESTION_TIME) * 100
-
   const q = questions[current]
 
   return (
@@ -170,6 +178,11 @@ export default function TriviaPage() {
           <div className="text-center space-y-1">
             <p className="font-semibold text-gray-900 dark:text-white">Testez vos connaissances Agile</p>
             <p className="text-sm text-gray-500 dark:text-gray-400">10 questions tirées au hasard parmi 20</p>
+            {myBest !== null && (
+              <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">
+                Votre record : {myBest / 100} / {QUESTIONS_PER_GAME}
+              </p>
+            )}
           </div>
           <button
             onClick={startGame}
@@ -183,7 +196,6 @@ export default function TriviaPage() {
       {/* Playing */}
       {phase === 'playing' && q && (
         <div className="space-y-4">
-          {/* Progress */}
           <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
             <span>Question {current + 1} / {QUESTIONS_PER_GAME}</span>
             <span className={`font-mono font-bold ${timeLeft <= 5 ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -191,7 +203,6 @@ export default function TriviaPage() {
             </span>
           </div>
 
-          {/* Timer bar */}
           <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-1000 ${
@@ -201,12 +212,10 @@ export default function TriviaPage() {
             />
           </div>
 
-          {/* Question */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
             <p className="font-semibold text-gray-900 dark:text-white text-sm leading-relaxed">{q.q}</p>
           </div>
 
-          {/* Options */}
           <div className="grid grid-cols-1 gap-2.5">
             {q.options.map((opt, i) => {
               let style = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/30 cursor-pointer'
@@ -245,6 +254,9 @@ export default function TriviaPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {score >= 8 ? 'Expert Agile !' : score >= 5 ? 'Bon niveau !' : 'Continuez à apprendre !'}
             </p>
+            {myBest !== null && score * 100 >= myBest && score > 0 && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Nouveau record !</p>
+            )}
             <button
               onClick={startGame}
               className="mt-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors text-sm"
@@ -253,7 +265,6 @@ export default function TriviaPage() {
             </button>
           </div>
 
-          {/* Summary */}
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Résumé</p>
             {answers.map((ans, idx) => {
@@ -272,7 +283,7 @@ export default function TriviaPage() {
                   </span>
                   <div className="min-w-0">
                     <p className="font-medium text-gray-800 dark:text-gray-200 leading-snug">{qData.q}</p>
-                    {!ans.correct && (
+                    {!ans.correct && ans.chosen !== -1 && (
                       <p className="text-emerald-600 dark:text-emerald-400 mt-0.5">
                         Réponse : {qData.options[qData.correct]}
                       </p>
@@ -284,6 +295,41 @@ export default function TriviaPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard */}
+      {scores.length > 0 && phase !== 'playing' && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Classement</h2>
+          <div className="space-y-2">
+            {scores.slice(0, 10).map((s) => (
+              <div
+                key={s.rank}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                  s.isMe
+                    ? 'bg-primary-50 dark:bg-primary-950/40 border border-primary-100 dark:border-primary-900'
+                    : 'bg-gray-50 dark:bg-gray-800/50'
+                }`}
+              >
+                <span className="w-5 text-right text-xs font-mono text-gray-400 dark:text-gray-500 shrink-0">
+                  {s.rank <= 3 ? ['🥇', '🥈', '🥉'][s.rank - 1] : `${s.rank}.`}
+                </span>
+                <div className="w-7 h-7 rounded-full bg-primary-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 overflow-hidden">
+                  {s.avatar
+                    ? <img src={s.avatar} alt={s.name} className="w-full h-full object-cover" />
+                    : initials(s.name)
+                  }
+                </div>
+                <span className={`flex-1 truncate font-medium ${s.isMe ? 'text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {s.name}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                  {(s.metadata?.correctAnswers as number ?? Math.round(s.score / 100))} / {QUESTIONS_PER_GAME}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

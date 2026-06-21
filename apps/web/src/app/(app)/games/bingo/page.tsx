@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { useGameLeaderboard } from '@/hooks/useGameLeaderboard'
 
 const ALL_PHRASES = [
   "Vous êtes en sourdine",
@@ -60,7 +61,11 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-const FREE_INDEX = 12 // center of 5x5
+function initials(name: string) {
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
+const FREE_INDEX = 12
 
 function generateGrid(): string[] {
   const picked = shuffle(ALL_PHRASES).slice(0, 24)
@@ -71,25 +76,18 @@ function generateGrid(): string[] {
 
 function checkBingo(checked: Set<number>): number[][] {
   const wins: number[][] = []
-
-  // Rows
   for (let r = 0; r < 5; r++) {
     const row = [r * 5, r * 5 + 1, r * 5 + 2, r * 5 + 3, r * 5 + 4]
     if (row.every((i) => checked.has(i))) wins.push(row)
   }
-
-  // Cols
   for (let c = 0; c < 5; c++) {
     const col = [c, c + 5, c + 10, c + 15, c + 20]
     if (col.every((i) => checked.has(i))) wins.push(col)
   }
-
-  // Diagonals
   const d1 = [0, 6, 12, 18, 24]
   const d2 = [4, 8, 12, 16, 20]
   if (d1.every((i) => checked.has(i))) wins.push(d1)
   if (d2.every((i) => checked.has(i))) wins.push(d2)
-
   return wins
 }
 
@@ -97,6 +95,21 @@ export default function BingoPage() {
   const [grid, setGrid] = useState<string[]>(() => generateGrid())
   const [checked, setChecked] = useState<Set<number>>(() => new Set([FREE_INDEX]))
   const [wins, setWins] = useState<number[][]>([])
+
+  const { scores, fetchLeaderboard, submitScore } = useGameLeaderboard('bingo')
+  const submittedWinsRef = useRef(0)
+
+  useEffect(() => { void fetchLeaderboard() }, [fetchLeaderboard])
+
+  // Soumettre automatiquement quand le nombre de bingos augmente
+  useEffect(() => {
+    if (wins.length > submittedWinsRef.current) {
+      submittedWinsRef.current = wins.length
+      void submitScore(wins.length * 100, { bingos: wins.length, phrases: checked.size })
+    }
+  // checked.size intentionally omitted — we only trigger on wins change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wins.length, submitScore])
 
   const winCells = new Set(wins.flat())
 
@@ -118,6 +131,7 @@ export default function BingoPage() {
     setGrid(generateGrid())
     setChecked(new Set([FREE_INDEX]))
     setWins([])
+    submittedWinsRef.current = 0
   }, [])
 
   const hasBingo = wins.length > 0
@@ -159,14 +173,12 @@ export default function BingoPage() {
 
       {/* Grid */}
       <div className="grid grid-cols-5 gap-1.5">
-        {/* Column headers */}
         {['B', 'I', 'N', 'G', 'O'].map((l) => (
           <div key={l} className="text-center font-bold text-primary-600 dark:text-primary-400 text-sm py-1">
             {l}
           </div>
         ))}
 
-        {/* Cells */}
         {grid.map((phrase, i) => {
           const isFree = i === FREE_INDEX
           const isChecked = checked.has(i)
@@ -197,6 +209,43 @@ export default function BingoPage() {
       <p className="text-center text-xs text-gray-400 dark:text-gray-600">
         Cliquez sur une case pour la cocher · Ligne, colonne ou diagonale = Bingo
       </p>
+
+      {/* Leaderboard */}
+      {scores.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">
+            Hall of fame — meilleurs bingos
+          </h2>
+          <div className="space-y-2">
+            {scores.slice(0, 10).map((s) => (
+              <div
+                key={s.rank}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                  s.isMe
+                    ? 'bg-primary-50 dark:bg-primary-950/40 border border-primary-100 dark:border-primary-900'
+                    : 'bg-gray-50 dark:bg-gray-800/50'
+                }`}
+              >
+                <span className="w-5 text-right text-xs font-mono text-gray-400 dark:text-gray-500 shrink-0">
+                  {s.rank <= 3 ? ['🥇', '🥈', '🥉'][s.rank - 1] : `${s.rank}.`}
+                </span>
+                <div className="w-7 h-7 rounded-full bg-primary-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 overflow-hidden">
+                  {s.avatar
+                    ? <img src={s.avatar} alt={s.name} className="w-full h-full object-cover" />
+                    : initials(s.name)
+                  }
+                </div>
+                <span className={`flex-1 truncate font-medium ${s.isMe ? 'text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {s.name}
+                </span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                  {s.metadata?.bingos as number ?? Math.round(s.score / 100)} bingo{(s.metadata?.bingos as number ?? 1) > 1 ? 's' : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
