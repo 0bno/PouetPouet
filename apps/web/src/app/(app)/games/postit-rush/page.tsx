@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { useGameLeaderboard } from '@/hooks/useGameLeaderboard'
 
 const COLORS = [
   { bg: 'bg-yellow-200', shadow: 'shadow-yellow-300', text: 'text-yellow-900' },
@@ -19,7 +20,6 @@ const TEXTS = [
   'Performance audit', 'Design review', 'Security scan', 'DB migration', 'Log cleanup',
 ]
 
-const LS_KEY = 'pivot:highscore:postit'
 const GAME_DURATION = 60
 const SPAWN_INTERVAL_INITIAL = 800
 const SPAWN_INTERVAL_FAST = 500
@@ -34,23 +34,11 @@ type PostIt = {
   createdAt: number
 }
 
-function loadHighScore(): number {
-  try {
-    return parseInt(localStorage.getItem(LS_KEY) ?? '0', 10) || 0
-  } catch {
-    return 0
-  }
-}
-
-function saveHighScore(score: number) {
-  try {
-    localStorage.setItem(LS_KEY, String(score))
-  } catch {
-    // ignore
-  }
-}
-
 type Phase = 'idle' | 'playing' | 'done'
+
+function initials(name: string) {
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)
+}
 
 export default function PostItRushPage() {
   const [phase, setPhase] = useState<Phase>('idle')
@@ -59,11 +47,11 @@ export default function PostItRushPage() {
   const [concentration, setConcentration] = useState(10)
   const [combo, setCombo] = useState(0)
   const [postIts, setPostIts] = useState<PostIt[]>([])
-  const [highScore, setHighScore] = useState(0)
   const [lastComboBonus, setLastComboBonus] = useState(0)
 
   const idRef = useRef(0)
   const comboRef = useRef(0)
+  const maxComboRef = useRef(0)
   const scoreRef = useRef(0)
   const concentrationRef = useRef(10)
   const areaRef = useRef<HTMLDivElement>(null)
@@ -71,15 +59,15 @@ export default function PostItRushPage() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const phaseRef = useRef<Phase>('idle')
 
+  const { scores, myBest, fetchLeaderboard, submitScore } = useGameLeaderboard('postit-rush')
+
   // keep refs in sync
   useEffect(() => { comboRef.current = combo }, [combo])
   useEffect(() => { scoreRef.current = score }, [score])
   useEffect(() => { concentrationRef.current = concentration }, [concentration])
   useEffect(() => { phaseRef.current = phase }, [phase])
 
-  useEffect(() => {
-    setHighScore(loadHighScore())
-  }, [])
+  useEffect(() => { void fetchLeaderboard() }, [fetchLeaderboard])
 
   const spawnPostIt = useCallback(() => {
     if (phaseRef.current !== 'playing') return
@@ -93,17 +81,12 @@ export default function PostItRushPage() {
     const color = COLORS[Math.floor(Math.random() * COLORS.length)]
     const id = ++idRef.current
 
-    setPostIts((prev) => [
-      ...prev,
-      { id, x, y, text, color, createdAt: Date.now() },
-    ])
+    setPostIts((prev) => [...prev, { id, x, y, text, color, createdAt: Date.now() }])
 
-    // Auto-remove after lifetime + fade (3s + 0.5s fade)
     setTimeout(() => {
       setPostIts((prev) => {
         const stillThere = prev.some((p) => p.id === id)
         if (stillThere && phaseRef.current === 'playing') {
-          // missed
           setConcentration((c) => Math.max(0, c - 1))
           concentrationRef.current = Math.max(0, concentrationRef.current - 1)
           comboRef.current = 0
@@ -131,12 +114,8 @@ export default function PostItRushPage() {
     phaseRef.current = 'done'
     setPostIts([])
     const final = scoreRef.current
-    setHighScore((prev) => {
-      const next = Math.max(prev, final)
-      saveHighScore(next)
-      return next
-    })
-  }, [stopAll])
+    void submitScore(final, { maxCombo: maxComboRef.current })
+  }, [stopAll, submitScore])
 
   const startGame = useCallback(() => {
     setPhase('playing')
@@ -148,10 +127,10 @@ export default function PostItRushPage() {
     concentrationRef.current = 10
     setCombo(0)
     comboRef.current = 0
+    maxComboRef.current = 0
     setPostIts([])
     setLastComboBonus(0)
 
-    // First spawn immediately
     setTimeout(spawnPostIt, 100)
     startSpawning(false)
 
@@ -159,14 +138,8 @@ export default function PostItRushPage() {
     countdownRef.current = setInterval(() => {
       elapsed += 1
       setTimeLeft(GAME_DURATION - elapsed)
-
-      if (elapsed === 30) {
-        startSpawning(true)
-      }
-
-      if (elapsed >= GAME_DURATION) {
-        endGame()
-      }
+      if (elapsed === 30) startSpawning(true)
+      if (elapsed >= GAME_DURATION) endGame()
     }, 1000)
   }, [spawnPostIt, startSpawning, endGame])
 
@@ -175,6 +148,7 @@ export default function PostItRushPage() {
       if (!prev.some((p) => p.id === id)) return prev
       comboRef.current += 1
       const newCombo = comboRef.current
+      if (newCombo > maxComboRef.current) maxComboRef.current = newCombo
       setCombo(newCombo)
 
       const bonus = newCombo >= 3 ? 5 : 0
@@ -187,7 +161,6 @@ export default function PostItRushPage() {
     })
   }, [])
 
-  // cleanup on unmount
   useEffect(() => () => stopAll(), [stopAll])
 
   const concentrationBars = Array.from({ length: 10 }, (_, i) => i < concentration)
@@ -214,19 +187,16 @@ export default function PostItRushPage() {
       {/* Stats bar */}
       {phase !== 'idle' && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 flex items-center gap-6 flex-wrap">
-          {/* Timer */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 dark:text-gray-400">Temps</span>
             <span className={`font-mono font-bold text-lg ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-900 dark:text-white'}`}>
               {timeLeft}s
             </span>
           </div>
-          {/* Score */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 dark:text-gray-400">Score</span>
             <span className="font-bold text-lg text-primary-600 dark:text-primary-400">{score}</span>
           </div>
-          {/* Combo */}
           {combo >= 2 && (
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-orange-500">x{combo} combo</span>
@@ -237,7 +207,6 @@ export default function PostItRushPage() {
               )}
             </div>
           )}
-          {/* Concentration */}
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-xs text-gray-500 dark:text-gray-400">Concentration</span>
             <div className="flex gap-0.5">
@@ -260,9 +229,9 @@ export default function PostItRushPage() {
       >
         {phase === 'idle' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-            {highScore > 0 && (
+            {myBest !== null && myBest > 0 && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Meilleur score : <span className="font-bold text-primary-600 dark:text-primary-400">{highScore}</span>
+                Votre record : <span className="font-bold text-primary-600 dark:text-primary-400">{myBest}</span>
               </p>
             )}
             <button
@@ -282,11 +251,8 @@ export default function PostItRushPage() {
             <div className="text-4xl">🏁</div>
             <div className="text-center">
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{score} pts</p>
-              {score >= highScore && score > 0 && (
+              {myBest !== null && score >= myBest && score > 0 && (
                 <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mt-1">Nouveau record !</p>
-              )}
-              {highScore > 0 && score < highScore && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Meilleur : {highScore}</p>
               )}
             </div>
             <button
@@ -298,29 +264,20 @@ export default function PostItRushPage() {
           </div>
         )}
 
-        {/* Post-its */}
         {phase === 'playing' && postIts.map((p) => {
           const age = Date.now() - p.createdAt
-          // Start fading at 2s, fully gone at 3s
           const opacity = age < 2000 ? 1 : Math.max(0, 1 - (age - 2000) / 1000)
 
           return (
             <button
               key={p.id}
               onClick={() => clickPostIt(p.id)}
-              style={{
-                left: p.x,
-                top: p.y,
-                opacity,
-                transition: 'opacity 0.3s linear',
-              }}
+              style={{ left: p.x, top: p.y, opacity, transition: 'opacity 0.3s linear' }}
               className={[
                 'absolute w-24 h-24 flex items-center justify-center text-center text-[10px] font-medium leading-tight px-1.5',
                 'rounded shadow-md cursor-pointer select-none',
                 'hover:scale-105 active:scale-95',
-                p.color.bg,
-                p.color.shadow,
-                p.color.text,
+                p.color.bg, p.color.shadow, p.color.text,
                 'transition-transform',
               ].join(' ')}
             >
@@ -329,13 +286,48 @@ export default function PostItRushPage() {
           )
         })}
 
-        {/* Combo flash */}
         {lastComboBonus >= 3 && phase === 'playing' && (
           <div className="absolute top-2 right-2 text-xs font-bold text-orange-500 bg-orange-100 dark:bg-orange-950/50 px-2 py-1 rounded-lg animate-bounce pointer-events-none">
             COMBO x{combo}!
           </div>
         )}
       </div>
+
+      {/* Leaderboard */}
+      {scores.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Classement</h2>
+          <div className="space-y-2">
+            {scores.slice(0, 10).map((s) => (
+              <div
+                key={s.rank}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                  s.isMe
+                    ? 'bg-primary-50 dark:bg-primary-950/40 border border-primary-100 dark:border-primary-900'
+                    : 'bg-gray-50 dark:bg-gray-800/50'
+                }`}
+              >
+                <span className="w-5 text-right text-xs font-mono text-gray-400 dark:text-gray-500 shrink-0">
+                  {s.rank <= 3 ? ['🥇', '🥈', '🥉'][s.rank - 1] : `${s.rank}.`}
+                </span>
+                <div className="w-7 h-7 rounded-full bg-primary-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                  {s.avatar
+                    ? <img src={s.avatar} alt={s.name} className="w-7 h-7 rounded-full object-cover" />
+                    : initials(s.name)
+                  }
+                </div>
+                <span className={`flex-1 truncate font-medium ${s.isMe ? 'text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {s.name}
+                </span>
+                {typeof s.metadata?.maxCombo === 'number' && (
+                  <span className="text-[10px] text-orange-500 shrink-0">x{s.metadata.maxCombo} combo</span>
+                )}
+                <span className="font-bold text-gray-900 dark:text-white shrink-0">{s.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

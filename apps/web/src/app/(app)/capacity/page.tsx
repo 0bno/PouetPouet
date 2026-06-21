@@ -9,6 +9,7 @@ import {
   EVENT_TYPE_LABELS, EVENT_TYPE_EMOJI, EVENT_STATUS_LABELS, WEEKDAY_LABELS,
   computeEventCapacity, formatDateRange,
 } from '@/lib/capacity'
+import { useFlagGuard } from '@/hooks/useFlagGuard'
 
 interface TeamMemberDraft { name: string; role: string; fte: number }
 
@@ -348,6 +349,7 @@ function EventCard({ event, onOpen, onDelete }: { event: CapacityEvent; onOpen: 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CapacityPage() {
+  useFlagGuard('module.capacity')
   const router = useRouter()
   const { teams, isLoading: teamsLoading, createTeam, updateTeam, deleteTeam } = useCapacityTeams()
   const { events, isLoading: eventsLoading, createEvent, deleteEvent } = useCapacityEvents()

@@ -11,6 +11,7 @@ import type { MeetEventType } from '@/lib/meetops'
 import {
   EVENT_TYPE_LABELS, EVENT_TYPE_EMOJI, EVENT_STATUS_LABELS,
 } from '@/lib/meetops'
+import { useFlagGuard } from '@/hooks/useFlagGuard'
 
 // ── Bannière de connexion Microsoft ─────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ function EventModal({ onSave, onClose }: { onSave: (input: CreateEventInput) => 
 // ── Page liste ──────────────────────────────────────────────────────────────────
 
 export default function MeetopsPage() {
+  useFlagGuard('module.meetops')
   const router = useRouter()
   const { events, isLoading, createEvent, deleteEvent } = useMeetEvents()
   const [modalOpen, setModalOpen] = useState(false)
