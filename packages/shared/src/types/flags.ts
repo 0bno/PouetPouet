@@ -17,10 +17,10 @@ export const FLAG_DEFINITIONS: FlagDefinition[] = [
   { key: 'module.scrum', label: 'Module Scrum Poker', description: 'Affiche le module Scrum Poker dans le Hub.', defaultEnabled: true },
   { key: 'module.wheel', label: 'Module La Roue', description: 'Affiche le module La Roue dans le Hub.', defaultEnabled: true },
   { key: 'module.capacity', label: 'Module Capacité', description: 'Affiche le module Capacité dans le Hub.', defaultEnabled: true },
-  { key: 'module.meetops', label: 'Module MeetOps', description: 'Affiche le module MeetOps dans le Hub.', defaultEnabled: true },
+  { key: 'module.meetops', label: 'Module MeetOps', description: 'Active le module MeetOps dans le Hub + accès direct /meetops.', defaultEnabled: true },
+  { key: 'module.quiz', label: 'Module Quiz interactif', description: 'Active le module Quiz interactif dans le Hub + accès direct /quiz.', defaultEnabled: true },
   // Fonctionnalités board — gating in-code via useFlag().
   { key: 'board.tables', label: 'Tableaux sur les boards', description: "Active l'outil Tableau dans l'éditeur de board.", defaultEnabled: true },
-  { key: 'board.align-guides', label: "Guides d'alignement", description: "Active les guides d'alignement intelligents sur les boards.", defaultEnabled: true },
 ]
 
 export const FLAG_KEYS: string[] = FLAG_DEFINITIONS.map((f) => f.key)

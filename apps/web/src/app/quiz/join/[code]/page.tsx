@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useState, useEffect, useRef } from 'react'
-import { useKahootParticipant } from '@/hooks/useKahootSocket'
+import { useQuizParticipant } from '@/hooks/useQuizSocket'
 import { Zap, Trophy } from 'lucide-react'
 
 const OPTION_COLORS = [
@@ -43,13 +43,13 @@ function Timer({ endsAt }: { endsAt: string }) {
   )
 }
 
-export default function KahootJoinPage({ params }: { params: Promise<{ code: string }> }) {
+export default function QuizJoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params)
   const {
     state, reveal, leaderboard, ended,
     participantId, hasAnswered, error,
     join, answer,
-  } = useKahootParticipant()
+  } = useQuizParticipant()
 
   const [name, setName] = useState('')
   const [joining, setJoining] = useState(false)
@@ -58,10 +58,9 @@ export default function KahootJoinPage({ params }: { params: Promise<{ code: str
   const [myLastAnswer, setMyLastAnswer] = useState<number | null>(null)
   const questionStartRef = useRef<number>(Date.now())
 
-  // sessionStorage auto-rejoin
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem(`klx_kahoot_${code}`)
+      const stored = sessionStorage.getItem(`klx_quiz_${code}`)
       if (stored) {
         const { participantName } = JSON.parse(stored) as { participantName: string }
         if (participantName) {
@@ -74,18 +73,16 @@ export default function KahootJoinPage({ params }: { params: Promise<{ code: str
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
 
-  // Track join success
   useEffect(() => {
     if (state && participantId && !isJoined) {
       setIsJoined(true)
       setJoining(false)
       try {
-        sessionStorage.setItem(`klx_kahoot_${code}`, JSON.stringify({ participantName: myName || name }))
+        sessionStorage.setItem(`klx_quiz_${code}`, JSON.stringify({ participantName: myName || name }))
       } catch {}
     }
   }, [state, participantId, isJoined, code, myName, name])
 
-  // Reset per-question state on new question
   useEffect(() => {
     if (state?.status === 'QUESTION') {
       setMyLastAnswer(null)
@@ -265,7 +262,6 @@ export default function KahootJoinPage({ params }: { params: Promise<{ code: str
 
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col">
-        {/* Header */}
         <div className="bg-gray-800 px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-400">Q{q.index + 1}/{q.total}</span>
@@ -274,12 +270,10 @@ export default function KahootJoinPage({ params }: { params: Promise<{ code: str
           {state.questionEndAt && <Timer endsAt={state.questionEndAt} />}
         </div>
 
-        {/* Question text */}
         <div className="px-4 py-5 text-center">
           <p className="text-lg font-bold text-white">{q.text}</p>
         </div>
 
-        {/* Answer buttons */}
         <div className="flex-1 grid grid-cols-2 gap-3 p-4">
           {q.options.map((opt, idx) => (
             <button

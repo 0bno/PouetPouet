@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useEffect, useState } from 'react'
-import { useKahootHost } from '@/hooks/useKahootSocket'
+import { useQuizHost } from '@/hooks/useQuizSocket'
 import { ArrowLeft, Users, Play, ChevronRight, Trophy, Clock } from 'lucide-react'
 import Link from 'next/link'
 
@@ -36,19 +36,19 @@ function Timer({ endsAt }: { endsAt: string }) {
   )
 }
 
-export default function KahootSessionPage({ params }: { params: Promise<{ id: string; sessionId: string }> }) {
+export default function QuizSessionPage({ params }: { params: Promise<{ id: string; sessionId: string }> }) {
   const { id: quizId, sessionId } = use(params)
-  const { state, reveal, leaderboard, ended, error, start, next, end } = useKahootHost(sessionId)
+  const { state, reveal, leaderboard, ended, error, start, next, end } = useQuizHost(sessionId)
 
   const joinUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/kahoot/join/${state?.code ?? '...'}`
+    ? `${window.location.origin}/quiz/join/${state?.code ?? '...'}`
     : ''
 
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <p className="text-red-500">{error}</p>
-        <Link href={`/kahoot/${quizId}`} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+        <Link href={`/quiz/${quizId}`} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
           <ArrowLeft className="w-4 h-4" /> Retour
         </Link>
       </div>
@@ -76,7 +76,7 @@ export default function KahootSessionPage({ params }: { params: Promise<{ id: st
             </div>
           ))}
         </div>
-        <Link href={`/kahoot/${quizId}`} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
+        <Link href={`/quiz/${quizId}`} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
           <ArrowLeft className="w-4 h-4" /> Retour à l'éditeur
         </Link>
       </div>
@@ -88,7 +88,7 @@ export default function KahootSessionPage({ params }: { params: Promise<{ id: st
     return (
       <div className="max-w-lg mx-auto flex flex-col gap-6">
         <div className="flex items-center gap-3">
-          <Link href={`/kahoot/${quizId}`} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500">
+          <Link href={`/quiz/${quizId}`} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{state.quizTitle}</h1>
@@ -134,9 +134,7 @@ export default function KahootSessionPage({ params }: { params: Promise<{ id: st
   // ── QUESTION ──────────────────────────────────────────────────────────────
   if (state.status === 'QUESTION' && state.question) {
     const q = state.question
-    const answeredCount = reveal
-      ? reveal.stats.reduce((a, b) => a + b, 0)
-      : 0
+    const answeredCount = reveal ? reveal.stats.reduce((a, b) => a + b, 0) : 0
     return (
       <div className="max-w-2xl mx-auto flex flex-col gap-6">
         <div className="flex items-center justify-between">

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { useFlagGuard } from '@/hooks/useFlagGuard'
 import { Zap, Plus, Pencil, Play, Trash2 } from 'lucide-react'
 
 interface Quiz {
@@ -14,7 +15,8 @@ interface Quiz {
   _count: { questions: number }
 }
 
-export default function KahootPage() {
+export default function QuizPage() {
+  useFlagGuard('module.quiz')
   const router = useRouter()
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,7 +27,7 @@ export default function KahootPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
-    api.get<Quiz[]>('/api/kahoot').then(setQuizzes).catch(() => {}).finally(() => setLoading(false))
+    api.get<Quiz[]>('/api/quiz').then(setQuizzes).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   async function handleCreate(e: React.FormEvent) {
@@ -33,11 +35,11 @@ export default function KahootPage() {
     if (!newTitle.trim()) return
     setCreating(true)
     try {
-      const quiz = await api.post<Quiz>('/api/kahoot', { title: newTitle.trim() })
+      const quiz = await api.post<Quiz>('/api/quiz', { title: newTitle.trim() })
       setQuizzes((prev) => [quiz, ...prev])
       setNewTitle('')
       setShowForm(false)
-      router.push(`/kahoot/${quiz.id}`)
+      router.push(`/quiz/${quiz.id}`)
     } catch {}
     setCreating(false)
   }
@@ -46,9 +48,9 @@ export default function KahootPage() {
     setLaunchingId(quizId)
     try {
       const { sessionId } = await api.post<{ sessionId: string; code: string }>(
-        `/api/kahoot/${quizId}/session`, {}
+        `/api/quiz/${quizId}/session`, {}
       )
-      router.push(`/kahoot/${quizId}/session/${sessionId}`)
+      router.push(`/quiz/${quizId}/session/${sessionId}`)
     } catch {
       setLaunchingId(null)
     }
@@ -58,7 +60,7 @@ export default function KahootPage() {
     if (!confirm('Supprimer ce quiz ?')) return
     setDeletingId(quizId)
     try {
-      await api.delete(`/api/kahoot/${quizId}`)
+      await api.delete(`/api/quiz/${quizId}`)
       setQuizzes((prev) => prev.filter((q) => q.id !== quizId))
     } catch {}
     setDeletingId(null)
@@ -66,19 +68,16 @@ export default function KahootPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Zap className="w-6 h-6 text-rose-500" />
-            Quiz interactif
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Créez et animez des quiz style Kahoot en temps réel.
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Quiz interactif</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Créez et animez des quiz en temps réel.
           </p>
         </div>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-4 py-2.5 transition-colors"
+          className="flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-4 py-2.5 active:scale-95 transition-all shadow-sm shadow-rose-200"
         >
           <Plus className="w-4 h-4" />
           Nouveau quiz
@@ -135,7 +134,7 @@ export default function KahootPage() {
               </div>
               <div className="flex gap-2">
                 <Link
-                  href={`/kahoot/${quiz.id}`}
+                  href={`/quiz/${quiz.id}`}
                   className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium px-3 py-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <Pencil className="w-3.5 h-3.5" />

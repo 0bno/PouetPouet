@@ -3,15 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { connectSocket } from '@/lib/socket'
 
-export type KahootStatus = 'LOBBY' | 'QUESTION' | 'REVEAL' | 'LEADERBOARD' | 'ENDED'
+export type QuizStatus = 'LOBBY' | 'QUESTION' | 'REVEAL' | 'LEADERBOARD' | 'ENDED'
 
-export interface KahootParticipant {
+export interface QuizParticipant {
   id: string
   name: string
   score: number
 }
 
-export interface KahootQuestion {
+export interface QuizQuestion {
   index: number
   total: number
   text: string
@@ -20,38 +20,38 @@ export interface KahootQuestion {
   points: number
 }
 
-export interface KahootState {
+export interface QuizState {
   sessionId: string
   code: string
-  status: KahootStatus
+  status: QuizStatus
   quizTitle: string
   currentQuestion: number
   totalQuestions: number
-  participants: KahootParticipant[]
+  participants: QuizParticipant[]
   questionEndAt?: string
-  question?: KahootQuestion
+  question?: QuizQuestion
 }
 
-export interface KahootReveal {
+export interface QuizReveal {
   correct: number
   stats: number[]
   scores: { name: string; score: number; delta: number }[]
 }
 
-export interface KahootLeaderboard {
+export interface QuizLeaderboard {
   podium: { name: string; score: number }[]
 }
 
-export interface KahootEnded {
+export interface QuizEnded {
   podium: { name: string; score: number; rank: number }[]
 }
 
 // Hook for host view
-export function useKahootHost(sessionId: string) {
-  const [state, setState] = useState<KahootState | null>(null)
-  const [reveal, setReveal] = useState<KahootReveal | null>(null)
-  const [leaderboard, setLeaderboard] = useState<KahootLeaderboard | null>(null)
-  const [ended, setEnded] = useState<KahootEnded | null>(null)
+export function useQuizHost(sessionId: string) {
+  const [state, setState] = useState<QuizState | null>(null)
+  const [reveal, setReveal] = useState<QuizReveal | null>(null)
+  const [leaderboard, setLeaderboard] = useState<QuizLeaderboard | null>(null)
+  const [ended, setEnded] = useState<QuizEnded | null>(null)
   const [error, setError] = useState<string | null>(null)
   const socketRef = useRef(connectSocket())
   const sessionIdRef = useRef(sessionId)
@@ -61,56 +61,55 @@ export function useKahootHost(sessionId: string) {
     const socket = socketRef.current
 
     const handleConnect = () => {
-      socket.emit('kahoot:host_join', { sessionId: sessionIdRef.current })
+      socket.emit('quiz:host_join', { sessionId: sessionIdRef.current })
     }
     socket.on('connect', handleConnect)
     if (socket.connected) handleConnect()
 
-    socket.on('kahoot:state', (s: KahootState) => {
+    socket.on('quiz:state', (s: QuizState) => {
       setState(s)
       if (s.status !== 'REVEAL') setReveal(null)
       if (s.status !== 'LEADERBOARD') setLeaderboard(null)
     })
-    socket.on('kahoot:reveal', (r: KahootReveal) => setReveal(r))
-    socket.on('kahoot:leaderboard', (l: KahootLeaderboard) => setLeaderboard(l))
-    socket.on('kahoot:ended', (e: KahootEnded) => setEnded(e))
-    socket.on('kahoot:error', (msg: string) => setError(msg))
+    socket.on('quiz:reveal', (r: QuizReveal) => setReveal(r))
+    socket.on('quiz:leaderboard', (l: QuizLeaderboard) => setLeaderboard(l))
+    socket.on('quiz:ended', (e: QuizEnded) => setEnded(e))
+    socket.on('quiz:error', (msg: string) => setError(msg))
 
     return () => {
       socket.off('connect', handleConnect)
-      ;['kahoot:state', 'kahoot:reveal', 'kahoot:leaderboard', 'kahoot:ended', 'kahoot:error'].forEach(
+      ;['quiz:state', 'quiz:reveal', 'quiz:leaderboard', 'quiz:ended', 'quiz:error'].forEach(
         (e) => socket.off(e)
       )
     }
   }, [])
 
   const start = useCallback(() => {
-    socketRef.current.emit('kahoot:start', { sessionId })
+    socketRef.current.emit('quiz:start', { sessionId })
   }, [sessionId])
 
   const next = useCallback(() => {
-    socketRef.current.emit('kahoot:next', { sessionId })
+    socketRef.current.emit('quiz:next', { sessionId })
   }, [sessionId])
 
   const end = useCallback(() => {
-    socketRef.current.emit('kahoot:end', { sessionId })
+    socketRef.current.emit('quiz:end', { sessionId })
   }, [sessionId])
 
   return { state, reveal, leaderboard, ended, error, start, next, end }
 }
 
 // Hook for participant view
-export function useKahootParticipant() {
-  const [state, setState] = useState<KahootState | null>(null)
-  const [reveal, setReveal] = useState<KahootReveal | null>(null)
-  const [leaderboard, setLeaderboard] = useState<KahootLeaderboard | null>(null)
-  const [ended, setEnded] = useState<KahootEnded | null>(null)
+export function useQuizParticipant() {
+  const [state, setState] = useState<QuizState | null>(null)
+  const [reveal, setReveal] = useState<QuizReveal | null>(null)
+  const [leaderboard, setLeaderboard] = useState<QuizLeaderboard | null>(null)
+  const [ended, setEnded] = useState<QuizEnded | null>(null)
   const [participantId, setParticipantId] = useState<string | null>(null)
   const [hasAnswered, setHasAnswered] = useState(false)
   const [pointsEarned, setPointsEarned] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const socketRef = useRef(connectSocket())
-  // Store join params for reconnect — anti-race condition pattern
   const joinParamsRef = useRef<{ code: string; name: string } | null>(null)
   const participantIdRef = useRef<string | null>(null)
 
@@ -119,14 +118,13 @@ export function useKahootParticipant() {
 
     const handleConnect = () => {
       if (joinParamsRef.current) {
-        socket.emit('kahoot:participant_join', joinParamsRef.current)
+        socket.emit('quiz:participant_join', joinParamsRef.current)
       }
     }
     socket.on('connect', handleConnect)
 
-    socket.on('kahoot:state', (s: KahootState) => {
+    socket.on('quiz:state', (s: QuizState) => {
       setState(s)
-      // Reset per-question state when new question starts
       if (s.status === 'QUESTION') {
         setHasAnswered(false)
         setPointsEarned(null)
@@ -134,30 +132,25 @@ export function useKahootParticipant() {
       }
       if (s.status !== 'LEADERBOARD') setLeaderboard(null)
     })
-    socket.on('kahoot:reveal', (r: KahootReveal) => {
+    socket.on('quiz:reveal', (r: QuizReveal) => {
       setReveal(r)
-      // Find own delta
       if (participantIdRef.current) {
-        const me = r.scores.find((s) => {
-          // match by participantId is unavailable in reveal — scores is { name, score, delta }
-          // we'll find it in the parent component using name
-          return false
-        })
+        const me = r.scores.find(() => false)
         if (me) setPointsEarned(me.delta)
       }
     })
-    socket.on('kahoot:leaderboard', (l: KahootLeaderboard) => setLeaderboard(l))
-    socket.on('kahoot:ended', (e: KahootEnded) => setEnded(e))
-    socket.on('kahoot:answer_ack', ({ participantId: pid }: { participantId: string; received: boolean }) => {
+    socket.on('quiz:leaderboard', (l: QuizLeaderboard) => setLeaderboard(l))
+    socket.on('quiz:ended', (e: QuizEnded) => setEnded(e))
+    socket.on('quiz:answer_ack', ({ participantId: pid }: { participantId: string; received: boolean }) => {
       participantIdRef.current = pid
       setParticipantId(pid)
       setHasAnswered(true)
     })
-    socket.on('kahoot:error', (msg: string) => setError(msg))
+    socket.on('quiz:error', (msg: string) => setError(msg))
 
     return () => {
       socket.off('connect', handleConnect)
-      ;['kahoot:state', 'kahoot:reveal', 'kahoot:leaderboard', 'kahoot:ended', 'kahoot:answer_ack', 'kahoot:error'].forEach(
+      ;['quiz:state', 'quiz:reveal', 'quiz:leaderboard', 'quiz:ended', 'quiz:answer_ack', 'quiz:error'].forEach(
         (e) => socket.off(e)
       )
     }
@@ -167,14 +160,14 @@ export function useKahootParticipant() {
     joinParamsRef.current = { code, name: name.trim() }
     setError(null)
     if (socketRef.current.connected) {
-      socketRef.current.emit('kahoot:participant_join', { code, name: name.trim() })
+      socketRef.current.emit('quiz:participant_join', { code, name: name.trim() })
     }
   }, [])
 
   const answer = useCallback(
     (optionIndex: number, responseMs: number) => {
       if (!state?.sessionId || !participantIdRef.current || hasAnswered) return
-      socketRef.current.emit('kahoot:answer', {
+      socketRef.current.emit('quiz:answer', {
         sessionId: state.sessionId,
         participantId: participantIdRef.current,
         optionIndex,

@@ -125,7 +125,7 @@ function QuestionForm({
   )
 }
 
-export default function KahootEditorPage({ params }: { params: Promise<{ id: string }> }) {
+export default function QuizEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: quizId } = use(params)
   const router = useRouter()
   const [quiz, setQuiz] = useState<Quiz | null>(null)
@@ -139,15 +139,14 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     Promise.all([
-      api.get<Quiz>(`/api/kahoot/${quizId}`).catch(() => null),
-      api.get<Question[]>(`/api/kahoot/${quizId}/questions`),
+      api.get<Quiz>(`/api/quiz/${quizId}`).catch(() => null),
+      api.get<Question[]>(`/api/quiz/${quizId}/questions`),
     ]).then(([q, qs]) => {
       if (q) setQuiz(q)
       setQuestions(qs ?? [])
     }).catch(() => {}).finally(() => setLoading(false))
   }, [quizId])
 
-  // If GET /api/kahoot/:id doesn't exist, build from questions response
   useEffect(() => {
     if (!quiz && questions.length > 0) {
       setQuiz({ id: quizId, title: 'Quiz' })
@@ -155,7 +154,7 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
   }, [quiz, questions, quizId])
 
   async function handleAddQuestion(data: { text: string; options: string[]; correct: number; timeLimit: number; points: number }) {
-    const q = await api.post<Question>(`/api/kahoot/${quizId}/questions`, {
+    const q = await api.post<Question>(`/api/quiz/${quizId}/questions`, {
       ...data,
       order: questions.length,
     })
@@ -164,7 +163,7 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
   }
 
   async function handleEditQuestion(qId: string, data: { text: string; options: string[]; correct: number; timeLimit: number; points: number }) {
-    const updated = await api.put<Question>(`/api/kahoot/questions/${qId}`, data)
+    const updated = await api.put<Question>(`/api/quiz/questions/${qId}`, data)
     setQuestions((prev) => prev.map((q) => (q.id === qId ? updated : q)))
     setEditingId(null)
   }
@@ -172,7 +171,7 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
   async function handleDeleteQuestion(qId: string) {
     if (!confirm('Supprimer cette question ?')) return
     setDeletingId(qId)
-    await api.delete(`/api/kahoot/questions/${qId}`)
+    await api.delete(`/api/quiz/questions/${qId}`)
     setQuestions((prev) => prev.filter((q) => q.id !== qId))
     setDeletingId(null)
   }
@@ -181,15 +180,14 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
     setLaunching(true)
     try {
       const { sessionId } = await api.post<{ sessionId: string; code: string }>(
-        `/api/kahoot/${quizId}/session`, {}
+        `/api/quiz/${quizId}/session`, {}
       )
-      router.push(`/kahoot/${quizId}/session/${sessionId}`)
+      router.push(`/quiz/${quizId}/session/${sessionId}`)
     } catch {
       setLaunching(false)
     }
   }
 
-  // HTML5 drag-to-reorder
   function handleDragStart(idx: number) { dragIdx.current = idx }
   function handleDragOver(e: React.DragEvent, idx: number) {
     e.preventDefault()
@@ -205,7 +203,7 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
   }
   async function handleDragEnd() {
     dragIdx.current = null
-    await api.post(`/api/kahoot/${quizId}/reorder`, { order: questions.map((q) => q.id) }).catch(() => {})
+    await api.post(`/api/quiz/${quizId}/reorder`, { order: questions.map((q) => q.id) }).catch(() => {})
   }
 
   if (loading) {
@@ -215,7 +213,7 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
   return (
     <div className="flex flex-col gap-6 max-w-2xl mx-auto">
       <div className="flex items-center gap-3">
-        <Link href="/kahoot" className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500">
+        <Link href="/quiz" className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500">
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div className="flex-1 min-w-0">
@@ -232,7 +230,6 @@ export default function KahootEditorPage({ params }: { params: Promise<{ id: str
         </button>
       </div>
 
-      {/* Question list */}
       <div className="flex flex-col gap-3">
         {questions.map((q, idx) =>
           editingId === q.id ? (

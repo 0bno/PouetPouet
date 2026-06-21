@@ -106,15 +106,15 @@ export const TESTBOOKS_MODULE: ModuleManifest = {
   listensTo: [],
 }
 
-export const KAHOOT_MODULE: ModuleManifest = {
-  id: 'kahoot',
+export const QUIZ_MODULE: ModuleManifest = {
+  id: 'quiz',
   name: 'Quiz interactif',
-  description: 'Quiz style Kahoot : questions en temps réel avec classement',
+  description: 'Quiz interactif : questions en temps réel avec classement',
   icon: '🎯',
   color: '#e11d48',
-  nav: [{ label: 'Quiz interactif', href: '/kahoot', match: '/kahoot' }],
-  apiPrefix: '/api/kahoot',
-  ownedEntities: ['KahootQuiz', 'KahootQuestion', 'KahootSession', 'KahootParticipant', 'KahootAnswer'],
+  nav: [{ label: 'Quiz interactif', href: '/quiz', match: '/quiz' }],
+  apiPrefix: '/api/quiz',
+  ownedEntities: ['Quiz', 'QuizQuestion', 'QuizSession', 'QuizParticipant', 'QuizAnswer'],
   referencedPivots: ['User'],
   emits: [],
   listensTo: [],
@@ -129,5 +129,5 @@ export const PIVOT_MODULES: ModuleManifest[] = [
   CAPACITY_MODULE,
   MEETOPS_MODULE,
   TESTBOOKS_MODULE,
-  KAHOOT_MODULE,
+  QUIZ_MODULE,
 ]

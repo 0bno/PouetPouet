@@ -32,7 +32,7 @@ export const MODULE_ICONS: Record<string, LucideIcon> = {
   meetops:     Calendar,
   teams:       Users,
   testbooks:   FlaskConical,
-  kahoot:      Zap,
+  quiz:        Zap,
 }
 
 // Icônes pour les activités de board (activity-launcher et boards).
