@@ -47,7 +47,7 @@ export default function QuizJoinPage({ params }: { params: Promise<{ code: strin
   const { code } = use(params)
   const {
     state, reveal, leaderboard, ended,
-    participantId, hasAnswered, error,
+    participantId, hasAnswered, streak, multiplier, error,
     join, answer,
   } = useQuizParticipant()
 
@@ -235,6 +235,9 @@ export default function QuizJoinPage({ params }: { params: Promise<{ code: strin
           <div className="text-center">
             <p className="text-white/80 text-sm">Points gagnés</p>
             <p className="text-4xl font-black text-white">+{myRevealEntry.delta.toLocaleString()}</p>
+            {streak >= 2 && (
+              <p className="text-sm font-semibold text-orange-300 mt-1">🔥 Série de {streak} · ×{multiplier.toFixed(1)}</p>
+            )}
           </div>
         )}
         <div className="bg-white/20 rounded-2xl px-6 py-3 text-center">
@@ -255,6 +258,13 @@ export default function QuizJoinPage({ params }: { params: Promise<{ code: strin
         <div className="min-h-screen bg-gradient-to-br from-gray-800 to-gray-900 flex flex-col items-center justify-center gap-6 p-4">
           <div className="text-5xl animate-bounce">⏳</div>
           <h2 className="text-xl font-bold text-white">Vote envoyé !</h2>
+          {streak >= 2 && (
+            <div className="bg-orange-500/20 border border-orange-500/30 rounded-2xl px-6 py-3 text-center">
+              <p className="text-orange-300 text-xs font-medium mb-1">Multiplicateur de série</p>
+              <p className="text-2xl font-black text-orange-400">🔥 ×{multiplier.toFixed(1)}</p>
+              <p className="text-orange-300 text-xs mt-1">{streak} bonnes réponses d'affilée</p>
+            </div>
+          )}
           <p className="text-gray-400 text-sm">En attente des autres joueurs…</p>
         </div>
       )
@@ -265,6 +275,9 @@ export default function QuizJoinPage({ params }: { params: Promise<{ code: strin
         <div className="bg-gray-800 px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-400">Q{q.index + 1}/{q.total}</span>
+            {streak >= 2 && (
+              <span className="text-xs font-semibold text-orange-400">🔥 Série de {streak} · ×{multiplier.toFixed(1)}</span>
+            )}
             <span className="text-xs font-medium text-gray-400">{q.points} pts</span>
           </div>
           {state.questionEndAt && <Timer endsAt={state.questionEndAt} />}

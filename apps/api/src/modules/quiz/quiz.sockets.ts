@@ -9,6 +9,14 @@ function calcPoints(points: number, timeLimit: number, responseMs: number): numb
   return Math.max(0, Math.round(points * (1 - responseMs / (timeLimit * 1000 * 0.5))))
 }
 
+function calcStreakMultiplier(streak: number): number {
+  if (streak <= 1) return 1.0
+  if (streak === 2) return 1.1
+  if (streak === 3) return 1.2
+  if (streak === 4) return 1.3
+  return 1.5
+}
+
 async function buildState(sessionId: string) {
   const session = await prisma.quizSession.findUnique({
     where: { id: sessionId },
@@ -161,21 +169,30 @@ export function quizSocketHandlers(io: Server, socket: Socket) {
     })
     if (existing) return
 
+    const participant = await prisma.quizParticipant.findUnique({
+      where: { id: participantId },
+      select: { streak: true },
+    })
+
     const isCorrect = optionIndex === question.correct
-    const pointsEarned = isCorrect ? calcPoints(question.points, question.timeLimit, responseMs) : 0
+    const newStreak = isCorrect ? (participant?.streak ?? 0) + 1 : 0
+    const multiplier = calcStreakMultiplier(newStreak)
+    const basePoints = isCorrect ? calcPoints(question.points, question.timeLimit, responseMs) : 0
+    const pointsEarned = Math.round(basePoints * multiplier)
 
     await prisma.quizAnswer.create({
       data: { sessionId, questionId: question.id, participantId, optionIndex, isCorrect, responseMs, pointsEarned },
     })
 
-    if (isCorrect) {
-      await prisma.quizParticipant.update({
-        where: { id: participantId },
-        data: { score: { increment: pointsEarned } },
-      })
-    }
+    await prisma.quizParticipant.update({
+      where: { id: participantId },
+      data: {
+        ...(pointsEarned > 0 ? { score: { increment: pointsEarned } } : {}),
+        streak: newStreak,
+      },
+    })
 
-    socket.emit('quiz:answer_ack', { participantId, received: true })
+    socket.emit('quiz:answer_ack', { participantId, received: true, streak: newStreak, multiplier })
 
     const totalParticipants = await prisma.quizParticipant.count({ where: { sessionId } })
     const totalAnswers = await prisma.quizAnswer.count({ where: { sessionId, questionId: question.id } })
