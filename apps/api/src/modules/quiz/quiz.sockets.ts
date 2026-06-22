@@ -6,7 +6,8 @@ function roomKey(sessionId: string) {
 }
 
 function calcPoints(points: number, timeLimit: number, responseMs: number): number {
-  return Math.max(0, Math.round(points * (1 - responseMs / (timeLimit * 1000 * 0.5))))
+  const ratio = Math.min(1, responseMs / (timeLimit * 1000))
+  return Math.round(points * (1 - ratio * 0.9))
 }
 
 function calcStreakMultiplier(streak: number): number {
