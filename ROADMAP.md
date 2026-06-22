@@ -199,12 +199,12 @@
 ## P1 - Nouveaux modules
 
 ### Module Quiz interactif (style Kahoot) — #164
-- [ ] CRUD quiz : titre, questions (texte + 2–4 options, bonne réponse, timer, points)
-- [ ] Réordonner les questions par glisser-déposer
-- [ ] Session live : code d'accès 6 caractères, participants anonymes
-- [ ] Déroulé temps réel : question → réponses → révélation + stats → classement
-- [ ] Bonus de rapidité (points proportionnels au temps de réponse)
-- [ ] Podium final
+- [x] CRUD quiz : titre, questions (texte + 2–4 options, bonne réponse, timer, points)
+- [x] Réordonner les questions par glisser-déposer
+- [x] Session live : code d'accès 6 caractères, participants anonymes
+- [x] Déroulé temps réel : question → réponses → révélation + stats → classement
+- [x] Bonus de rapidité (points proportionnels au temps de réponse)
+- [x] Podium final
 
 ### Mini-jeux collaboratifs (module caché `/games`) — #165
 - [ ] Bingo des Réunions — grille 5×5, phrases cultes de réunion, coche en temps réel
