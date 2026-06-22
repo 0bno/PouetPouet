@@ -108,6 +108,8 @@ export function useQuizParticipant() {
   const [participantId, setParticipantId] = useState<string | null>(null)
   const [hasAnswered, setHasAnswered] = useState(false)
   const [pointsEarned, setPointsEarned] = useState<number | null>(null)
+  const [streak, setStreak] = useState(0)
+  const [multiplier, setMultiplier] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const socketRef = useRef(connectSocket())
   const joinParamsRef = useRef<{ code: string; name: string } | null>(null)
@@ -145,10 +147,12 @@ export function useQuizParticipant() {
       participantIdRef.current = pid
       setParticipantId(pid)
     })
-    socket.on('quiz:answer_ack', ({ participantId: pid }: { participantId: string; received: boolean }) => {
+    socket.on('quiz:answer_ack', ({ participantId: pid, streak: s, multiplier: m }: { participantId: string; received: boolean; streak: number; multiplier: number }) => {
       participantIdRef.current = pid
       setParticipantId(pid)
       setHasAnswered(true)
+      setStreak(s ?? 0)
+      setMultiplier(m ?? 1)
     })
     socket.on('quiz:error', (msg: string) => setError(msg))
 
@@ -189,6 +193,8 @@ export function useQuizParticipant() {
     participantId,
     hasAnswered,
     pointsEarned,
+    streak,
+    multiplier,
     error,
     join,
     answer,
