@@ -18,7 +18,7 @@ export const FLAG_DEFINITIONS: FlagDefinition[] = [
   { key: 'module.wheel', label: 'Module La Roue', description: 'Active le module La Roue (Hub + accès direct /wheel).', defaultEnabled: true },
   { key: 'module.capacity', label: 'Module Capacité', description: 'Active le module Capacité (Hub + accès direct /capacity).', defaultEnabled: true },
   { key: 'module.meetops', label: 'Module MeetOps', description: 'Active le module MeetOps (Hub + accès direct /meetops).', defaultEnabled: true },
-  { key: 'module.kahoot', label: 'Module Kahoot', description: 'Active le module Quiz Kahoot (Hub + accès direct /kahoot).', defaultEnabled: true },
+  { key: 'module.quiz', label: 'Module Quiz interactif', description: 'Active le module Quiz interactif (Hub + accès direct /quiz).', defaultEnabled: true },
   // Fonctionnalités board — gating in-code via useFlag().
   { key: 'board.tables', label: 'Tableaux sur les boards', description: "Active l'outil Tableau dans l'éditeur de board.", defaultEnabled: true },
 ]

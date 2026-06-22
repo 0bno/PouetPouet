@@ -15,10 +15,11 @@ const RESOLVERS: Record<string, (id: string) => Promise<ResourceInfo | null>> = 
   wheel: (id) => prisma.wheelEvent.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
   capacity: (id) => prisma.capacityEvent.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
   meetops: (id) => prisma.meetEvent.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
+  quiz: (id) => prisma.quiz.findUnique({ where: { id }, select: { ownerId: true, title: true } }).then((q) => q ? { ownerId: q.ownerId, name: q.title } : null),
 }
 
-const MODULE_LABEL: Record<string, string> = { scrum: 'Scrum Poker', daily: 'Daily', team: 'Équipe', wheel: 'La Roue', capacity: 'Capacité', meetops: 'MeetOps' }
-const MODULE_LINK: Record<string, string> = { scrum: '/scrum', daily: '/daily', team: '/equipes', wheel: '/wheel', capacity: '/capacity', meetops: '/meetops' }
+const MODULE_LABEL: Record<string, string> = { scrum: 'Scrum Poker', daily: 'Daily', team: 'Équipe', wheel: 'La Roue', capacity: 'Capacité', meetops: 'MeetOps', quiz: 'Quiz' }
+const MODULE_LINK: Record<string, string> = { scrum: '/scrum', daily: '/daily', team: '/equipes', wheel: '/wheel', capacity: '/capacity', meetops: '/meetops', quiz: '/quiz' }
 
 const inviteSchema = z.object({ email: z.string().email(), role: z.enum(['VIEWER', 'EDITOR']) })
 const inviteTeamSchema = z.object({ teamId: z.string().min(1), role: z.enum(['VIEWER', 'EDITOR']) })
