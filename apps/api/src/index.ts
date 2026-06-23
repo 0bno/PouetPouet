@@ -277,6 +277,7 @@ const io = new Server(app.server, {
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
     credentials: true,
   },
+  maxHttpBufferSize: 50 * 1024 * 1024,
 })
 
 // Redis adapter : active si Redis est connecté (prod avec REDIS_HOST).
