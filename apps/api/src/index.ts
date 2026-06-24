@@ -91,7 +91,9 @@ await app.register(cors, {
 
 await app.register(jwt, {
   secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
-  sign: { expiresIn: '30m' },
+  // 4h = une demi-journée de travail sans réauth. Les sessions actives sont
+  // renouvelées en continu côté client (refresh glissant), les inactives lapsent.
+  sign: { expiresIn: '4h' },
 })
 
 await app.register(cookie)
