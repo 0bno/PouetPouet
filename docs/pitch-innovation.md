@@ -181,7 +181,7 @@ Les équipes agiles jonglent entre **6 à 9 outils distincts** pour collaborer.
 </div>
 </div>
 
-> **Ce n'est pas un prototype — v0.20.0 en production, 20 releases livrées.**
+> **Ce n'est pas un prototype — v0.21.0 en production, 21 releases livrées.**
 
 ---
 <!-- _class: roi -->
@@ -287,7 +287,7 @@ La stack TypeScript / Next.js / Fastify est **parfaitement lisible par les LLM d
 
 ### Ce que ça change concrètement
 - **Pivot lui-même** est développé en AI-assist
-- 18 releases livrées en ~18 mois · équipe réduite
+- 21 releases livrées en ~18 mois · équipe réduite
 - Nouvelle feature : **1–3 jours** au lieu de 1–2 semaines
 - Correction de bug complexe : **quelques heures**
 
@@ -438,6 +438,6 @@ Pour les équipes sans ops
 
 **Open-source · Auto-hébergée · Temps réel · 7 modules · ROI positif M+1**
 
-`github.com/0bno/PouetPouet` · `v0.20.0`
+`github.com/0bno/PouetPouet` · `v0.21.0`
 
 > *Prêt à faire le pivot ?*
