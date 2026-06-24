@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/store/auth'
@@ -41,39 +41,85 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (token) void useFlagsStore.getState().loadFlags()
   }, [token])
 
-  // Fire the session-expired state exactly when the JWT's `exp` is reached.
-  // If the stored token is already dead on load, clear it so the guard bounces to /login.
+  // Horodatage de la dernière activité utilisateur. Capture-phase + scroll inclus
+  // pour attraper même les événements stoppés par stopPropagation (board canvas)
+  // ou émis par un conteneur scrollable interne (le scroll ne bulle pas, mais la
+  // phase de capture sur window le reçoit tout de même).
+  const lastActivityRef = useRef(Date.now())
   useEffect(() => {
-    if (!token) return
-    const times = tokenTimes(token)
-    if (times == null) return
-    const delay = times.exp - Date.now()
-    if (delay <= 0) {
-      logout()
-      return
-    }
-    const id = setTimeout(() => expireSession(), delay)
-    return () => clearTimeout(id)
-  }, [token, logout, expireSession])
+    const bump = () => { lastActivityRef.current = Date.now() }
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'pointerdown'] as const
+    events.forEach((e) => window.addEventListener(e, bump, { passive: true, capture: true }))
+    return () => events.forEach((e) => window.removeEventListener(e, bump, { capture: true }))
+  }, [])
 
-  // Sliding session: any user activity past the token's half-life renews it,
-  // so an active user is never logged out while an idle one expires ~on schedule.
+  // Session glissante robuste :
+  // - Refresh PROACTIF à la mi-vie (minuterie), sans dépendre d'un événement DOM —
+  //   tant que l'utilisateur a été actif pendant la 1re moitié de vie du token.
+  //   Un onglet totalement inactif ne se renouvelle pas → il finit par lapser.
+  // - Refresh aussi au retour de veille / ré-affichage de l'onglet (visibilitychange,
+  //   focus), pour rattraper une minuterie qui aurait été gelée.
+  // - Le serveur reste seul juge de l'expiration : à l'échéance, on tente un dernier
+  //   refresh si l'utilisateur est actif ; on n'affiche « session expirée » que si le
+  //   token est réellement périmé (inactif) — ce qui neutralise un décalage d'horloge.
   useEffect(() => {
     if (!token) return
     const times = tokenTimes(token)
     if (times == null) return
+    const now = Date.now()
+    if (times.exp <= now) { logout(); return }
+
     const halfLife = times.iat + (times.exp - times.iat) / 2
-    let refreshing = false
-    const onActivity = () => {
-      if (refreshing || Date.now() < halfLife) return
+    // L'utilisateur a-t-il été actif pendant la 1re moitié de vie du token ?
+    const activeThisCycle = () => lastActivityRef.current >= times.iat
+    let refreshed = false
+    let retries = 0
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    const MAX_RETRIES = 5
+    const RETRY_MS = 30_000
+
+    // Tente le renouvellement ; en cas d'échec transitoire (réseau, cold start),
+    // réessaie quelques fois plutôt que d'abandonner la session sur un seul échec.
+    const doRefresh = async () => {
+      if (refreshed) return
       if (useAuthStore.getState().sessionExpired) return
-      refreshing = true
-      void refreshSession()
+      if (!activeThisCycle()) return // inactif → on laisse lapser
+      refreshed = true
+      const ok = await refreshSession()
+      if (ok) return // succès → le token change, l'effet se ré-arme tout seul
+      // Échec : autoriser une nouvelle tentative tant que le token n'est pas périmé.
+      if (retries < MAX_RETRIES && Date.now() < times.exp) {
+        retries += 1
+        refreshed = false
+        retryTimer = setTimeout(doRefresh, RETRY_MS)
+      }
     }
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'] as const
-    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true }))
-    return () => events.forEach((e) => window.removeEventListener(e, onActivity))
-  }, [token, refreshSession])
+
+    const refreshTimer = setTimeout(doRefresh, Math.max(0, halfLife - now))
+    // Gardien final à l'échéance : un dernier refresh si l'utilisateur est actif
+    // (le serveur tranche : succès → on continue, ce qui neutralise un décalage
+    // d'horloge) ; on n'expire que si le token est réellement rejeté ou inactif.
+    const expireTimer = setTimeout(async () => {
+      if (useAuthStore.getState().sessionExpired) return
+      if (activeThisCycle() && (await refreshSession())) return
+      expireSession()
+    }, Math.max(0, times.exp - now))
+
+    const onWake = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() >= halfLife) void doRefresh()
+    }
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('focus', onWake)
+
+    return () => {
+      clearTimeout(refreshTimer)
+      clearTimeout(expireTimer)
+      if (retryTimer) clearTimeout(retryTimer)
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('focus', onWake)
+    }
+  }, [token, refreshSession, expireSession, logout])
 
   // Sync dark mode class on html element whenever theme changes
   useEffect(() => {

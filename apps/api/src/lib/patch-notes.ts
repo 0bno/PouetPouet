@@ -20,6 +20,29 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.21.0',
+    date: '2026-06-25',
+    title: 'Sessions plus longues et fiables',
+    summary: 'Votre session dure désormais une demi-journée (4 h) et se renouvelle automatiquement tant que vous travaillez — fini les déconnexions inopinées et les pertes de page au rafraîchissement.',
+    sections: [
+      {
+        heading: '🔐 Session',
+        items: [
+          'Durée de session portée à 4 heures (une demi-journée) : plus besoin de se reconnecter en pleine journée de travail.',
+          'Renouvellement automatique et continu tant que vous êtes actif — y compris au retour de veille de l\'ordinateur ou en revenant sur l\'onglet.',
+          'Fini les déconnexions « fantômes » : certaines actions semblaient fonctionner alors que la session était perdue, et tout disparaissait au rafraîchissement. Corrigé.',
+          'Plus robuste face aux coupures réseau : une tentative de renouvellement qui échoue est désormais réessayée au lieu d\'abandonner la session.',
+        ],
+      },
+      {
+        heading: '⚡ Sous le capot',
+        items: [
+          'Tableau blanc : 2 requêtes base de données redondantes supprimées à l\'ouverture d\'un board et au partage par lien.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.20.0',
     date: '2026-06-23',
     title: 'Quiz Kahoot, partage étendu, images & une surprise',
