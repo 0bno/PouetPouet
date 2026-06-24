@@ -6,6 +6,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le pr
 
 > Les notes de version **détaillées** (groupées par thème, orientées utilisateur) sont la source de vérité in-app : [`apps/api/src/lib/patch-notes.ts`](apps/api/src/lib/patch-notes.ts), affichées dans le panneau de notifications. Ce fichier en est l'index public condensé.
 
+## [0.21.0] — 2026-06-25
+**Sessions plus longues et fiables.** Durée de session portée à **4 h** (une demi-journée) ; **renouvellement automatique et continu** tant que l'utilisateur est actif (y compris au retour de veille / focus d'onglet), avec **retry** sur échec réseau et le serveur seul juge de l'expiration. Corrige les déconnexions inopinées et la perte de page au rafraîchissement. Côté board : 2 requêtes Prisma redondantes supprimées (ouverture d'un board, partage par lien).
+
 ## [0.20.0] — 2026-06-23
 Import d'**images** par coller/glisser-déposer et outil de **rognage** sur le board ; **aperçu automatique des liens** dans les tickets texte (image OG, titre, domaine) avec masquage de l'URL brute ; **droits éditeur** étendus (import/export/paramètres/partage) ; nouveau **logo hexagone** Pivot ; et une feature mystère accessible via la section Aide.
 
