@@ -76,7 +76,10 @@ export function RoadmapItemsPanel({ items, totalDays, canEdit, onEdit, onDuplica
                   {item.prio === 'must' && <span className="text-amber-400 text-sm" title="Must">★</span>}
                 </div>
 
-                <div className="font-mono text-[11px] text-gray-400">{item.startDate} → {item.endDate} <span className="text-gray-300">· {days} j</span></div>
+                {item.startDate === item.endDate
+                  ? <div className="font-mono text-[11px] text-gray-400">⬦ Jalon · {item.startDate}</div>
+                  : <div className="font-mono text-[11px] text-gray-400">{item.startDate} → {item.endDate} <span className="text-gray-300">· {days} j</span></div>
+                }
 
                 <div className="h-1 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: catColor + '88' }} />

@@ -27,11 +27,21 @@ export function RoadmapItemModal({ item, allItems, defaultStart, defaultEnd, onS
   const [categories, setCategories] = useState<Category[]>(item?.categories?.length ? item.categories : ['dev'])
   const [deps, setDeps] = useState<string[]>(item?.deps ?? [])
   const [depQuery, setDepQuery] = useState('')
+  const [isMilestone, setIsMilestone] = useState(() => !!(item && item.startDate === item.endDate))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const others = allItems.filter((i) => i.id !== item?.id)
   const filteredOthers = others.filter((i) => !depQuery || i.name.toLowerCase().includes(depQuery.toLowerCase()))
+
+  function handleStartChange(v: string) {
+    setStartDate(v)
+    if (isMilestone) setEndDate(v)
+  }
+  function handleToggleMilestone(v: boolean) {
+    setIsMilestone(v)
+    if (v) setEndDate(startDate)
+  }
 
   function toggleCategory(c: Category) {
     setCategories((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c])
@@ -80,15 +90,23 @@ export function RoadmapItemModal({ item, allItems, defaultStart, defaultEnd, onS
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Migration infra, Lancement v2…" className={inputCls} autoFocus />
           </div>
 
-          <div className="flex gap-3">
-            <div className="flex flex-col gap-1.5 flex-1">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Début *</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-3">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Début *</label>
+                <input type="date" value={startDate} onChange={(e) => handleStartChange(e.target.value)} className={inputCls} />
+              </div>
+              {!isMilestone && (
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fin *</label>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+                </div>
+              )}
             </div>
-            <div className="flex flex-col gap-1.5 flex-1">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fin *</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
-            </div>
+            <button type="button" onClick={() => handleToggleMilestone(!isMilestone)}
+              className={`self-start rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${isMilestone ? 'border-primary-500 bg-primary-50 dark:bg-primary-950 text-primary-700 dark:text-primary-300' : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:border-gray-300 hover:text-gray-500'}`}>
+              ⬦ {isMilestone ? 'Jalon (date unique)' : 'Marquer comme jalon'}
+            </button>
           </div>
 
           <div className="flex flex-col gap-1.5">

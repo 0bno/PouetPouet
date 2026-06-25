@@ -4,13 +4,14 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { Plus } from 'lucide-react'
-import { useRoadmap, type RoadmapScale, type RoadmapItem, type ItemInput } from '@/hooks/useRoadmap'
+import { useRoadmap, type RoadmapScale, type RoadmapItem, type ItemInput, type Category, type Risk, type Prio } from '@/hooks/useRoadmap'
 import { useFlagGuard } from '@/hooks/useFlagGuard'
 import { ModuleShareModal } from '@/components/share/module-share-modal'
 import { RoadmapTimeline } from '@/components/roadmap/roadmap-timeline'
 import { RoadmapItemsPanel } from '@/components/roadmap/roadmap-items-panel'
 import { RoadmapItemModal } from '@/components/roadmap/roadmap-item-modal'
 import { exportRoadmapPDF } from '@/components/roadmap/roadmap-pdf'
+import { CATEGORIES, RISKS, CATEGORY_KEYS, RISK_KEYS } from '@/components/roadmap/roadmap-constants'
 import { SCALE_LABELS, diffDays } from '@/lib/roadmap-timeline'
 
 type Tab = 'roadmap' | 'items'
@@ -24,7 +25,11 @@ export default function RoadmapEditorPage() {
   const [tab, setTab] = useState<Tab>('roadmap')
   const [showDeps, setShowDeps] = useState(false)
   const [showShare, setShowShare] = useState(false)
-  const [editing, setEditing] = useState<RoadmapItem | null | undefined>(undefined) // undefined = fermé, null = création
+  const [editing, setEditing] = useState<RoadmapItem | null | undefined>(undefined)
+
+  const [filterCat, setFilterCat] = useState<Category | null>(null)
+  const [filterRisk, setFilterRisk] = useState<Risk | null>(null)
+  const [filterPrio, setFilterPrio] = useState<Prio | null>(null)
 
   if (isLoading) {
     return <div className="flex justify-center py-20"><div className="w-7 h-7 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -41,7 +46,14 @@ export default function RoadmapEditorPage() {
   const canEdit = roadmap.role === 'OWNER' || roadmap.role === 'EDITOR'
   const isOwner = roadmap.role === 'OWNER'
   const orderedItems = [...roadmap.items].sort((a, b) => a.order - b.order)
+  const filteredItems = orderedItems.filter((item) => {
+    if (filterCat && !item.categories.includes(filterCat)) return false
+    if (filterRisk && item.risk !== filterRisk) return false
+    if (filterPrio && item.prio !== filterPrio) return false
+    return true
+  })
   const totalDays = diffDays(roadmap.startDate, roadmap.endDate)
+  const hasFilters = !!(filterCat || filterRisk || filterPrio)
 
   async function handleSaveItem(input: ItemInput) {
     if (editing) await updateItem(editing.id, input)
@@ -55,6 +67,10 @@ export default function RoadmapEditorPage() {
   }
   async function handleDeleteItem(item: RoadmapItem) {
     if (confirm(`Supprimer « ${item.name} » ?`)) await deleteItem(item.id)
+  }
+
+  function handleItemUpdate(itemId: string, patch: { startDate: string; endDate: string }) {
+    updateItem(itemId, patch)
   }
 
   async function exportPDF() {
@@ -95,12 +111,10 @@ export default function RoadmapEditorPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Onglets */}
           <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1">
             <button onClick={() => setTab('roadmap')} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'roadmap' ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>📅 Roadmap</button>
             <button onClick={() => setTab('items')} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'items' ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>☰ Items</button>
           </div>
-
           {canEdit && <button onClick={() => setEditing(null)} className="flex items-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2.5 active:scale-95 transition-all shadow-sm"><Plus className="w-4 h-4" />Item</button>}
           <button onClick={exportPDF} className="rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">↓ PDF</button>
           <button onClick={exportJSON} className="rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">↓ JSON</button>
@@ -108,53 +122,88 @@ export default function RoadmapEditorPage() {
         </div>
       </div>
 
-      {/* Contrôles roadmap (échelle + plage + dépendances) */}
+      {/* Contrôles roadmap */}
       {tab === 'roadmap' && (
-        <div className="flex items-center gap-3 flex-wrap text-sm">
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-400 text-xs font-medium">Du</span>
-            <input type="date" value={roadmap.startDate} disabled={!canEdit} onChange={(e) => updateMeta({ startDate: e.target.value })}
-              className="font-mono text-xs border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded-lg px-2 py-1 disabled:opacity-60" />
-            <span className="text-gray-400 text-xs font-medium">au</span>
-            <input type="date" value={roadmap.endDate} disabled={!canEdit} onChange={(e) => updateMeta({ endDate: e.target.value })}
-              className="font-mono text-xs border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded-lg px-2 py-1 disabled:opacity-60" />
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-3 flex-wrap text-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-400 text-xs font-medium">Du</span>
+              <input type="date" value={roadmap.startDate} disabled={!canEdit} onChange={(e) => updateMeta({ startDate: e.target.value })}
+                className="font-mono text-xs border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded-lg px-2 py-1 disabled:opacity-60" />
+              <span className="text-gray-400 text-xs font-medium">au</span>
+              <input type="date" value={roadmap.endDate} disabled={!canEdit} onChange={(e) => updateMeta({ endDate: e.target.value })}
+                className="font-mono text-xs border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded-lg px-2 py-1 disabled:opacity-60" />
+            </div>
+            <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 gap-0.5">
+              {SCALES.map((s) => (
+                <button key={s} onClick={() => canEdit && updateMeta({ scale: s })} disabled={!canEdit}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${roadmap.scale === s ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 disabled:hover:text-gray-500'}`}>
+                  {SCALE_LABELS[s]}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowDeps((v) => !v)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${showDeps ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+              → Dépendances
+            </button>
           </div>
-          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 gap-0.5">
-            {SCALES.map((s) => (
-              <button key={s} onClick={() => canEdit && updateMeta({ scale: s })} disabled={!canEdit}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${roadmap.scale === s ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 disabled:hover:text-gray-500'}`}>
-                {SCALE_LABELS[s]}
+
+          {/* Filtres */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 shrink-0">Filtres</span>
+            {CATEGORY_KEYS.map((c) => (
+              <button key={c} onClick={() => setFilterCat(filterCat === c ? null : c)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${filterCat === c ? 'opacity-100 ring-2 ring-offset-1 ring-gray-300' : 'opacity-45 hover:opacity-80'}`}
+                style={{ background: CATEGORIES[c].color, color: CATEGORIES[c].text }}>
+                {CATEGORIES[c].label}
               </button>
             ))}
+            {RISK_KEYS.map((r) => (
+              <button key={r} onClick={() => setFilterRisk(filterRisk === r ? null : r)}
+                className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${filterRisk === r ? 'font-bold' : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600'}`}
+                style={filterRisk === r ? { color: RISKS[r].color, borderColor: RISKS[r].color, background: RISKS[r].color + '18' } : {}}>
+                ● {RISKS[r].label}
+              </button>
+            ))}
+            <button onClick={() => setFilterPrio(filterPrio === 'must' ? null : 'must')}
+              className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${filterPrio === 'must' ? 'border-amber-400 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-300 font-bold' : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600'}`}>
+              ★ Must
+            </button>
+            {hasFilters && (
+              <>
+                <button onClick={() => { setFilterCat(null); setFilterRisk(null); setFilterPrio(null) }}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                  × Effacer
+                </button>
+                <span className="font-mono text-[10px] text-gray-400">{filteredItems.length}/{orderedItems.length}</span>
+              </>
+            )}
           </div>
-          <button onClick={() => setShowDeps((v) => !v)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${showDeps ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
-            → Dépendances
-          </button>
         </div>
       )}
 
       {/* Contenu */}
       {tab === 'roadmap' ? (
-        orderedItems.length === 0 ? (
+        filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-20 text-gray-400">
             <span className="text-3xl opacity-30">📅</span>
-            <p className="text-sm font-medium">Aucun item sur la roadmap</p>
-            {canEdit && <button onClick={() => setEditing(null)} className="text-sm font-medium text-primary-600 hover:text-primary-700">Ajouter un item</button>}
+            <p className="text-sm font-medium">{hasFilters ? 'Aucun item ne correspond aux filtres' : 'Aucun item sur la roadmap'}</p>
+            {!hasFilters && canEdit && <button onClick={() => setEditing(null)} className="text-sm font-medium text-primary-600 hover:text-primary-700">Ajouter un item</button>}
           </div>
         ) : (
           <RoadmapTimeline
             startDate={roadmap.startDate}
             endDate={roadmap.endDate}
             scale={roadmap.scale}
-            items={orderedItems}
+            items={filteredItems}
             showDeps={showDeps}
             onItemClick={(item) => canEdit ? setEditing(item) : undefined}
+            onItemUpdate={canEdit ? handleItemUpdate : undefined}
           />
         )
       ) : (
         <RoadmapItemsPanel
-          items={orderedItems}
+          items={filteredItems}
           totalDays={totalDays}
           canEdit={canEdit}
           onEdit={(item) => setEditing(item)}
@@ -177,6 +226,8 @@ export default function RoadmapEditorPage() {
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: '#ef4444' }} />Élevé</span>
         <span className="w-px h-3 bg-gray-200" />
         <span className="flex items-center gap-1 text-amber-500">★ Must</span>
+        <span className="w-px h-3 bg-gray-200" />
+        <span>⬦ Jalon</span>
       </div>
 
       {editing !== undefined && (
