@@ -22,14 +22,14 @@ interface SavedView { id: string; name: string; viewMode: ViewMode; filter: CalF
 const EMPTY_FILTER: CalFilter = { eventIds: null, statuses: null, labels: null }
 const WEEKDAY_HEADERS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
-const HOUR_START = 7
-const HOUR_END = 21
+const HOUR_START = 0
+const HOUR_END = 24
 const WORK_START = 9
 const WORK_END = 18
 const TOTAL_MIN = (HOUR_END - HOUR_START) * 60
-const GRID_HEIGHT = 560
+const GRID_HEIGHT = 960
 const PX_PER_MIN = GRID_HEIGHT / TOTAL_MIN
-const HOURS = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i)
+const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i)
 
 // ── Utilitaires ──────────────────────────────────────────────────────────────────
 
@@ -477,7 +477,7 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode, handlers }: {
 
             return (
               <div key={i}
-                className="relative border-l border-gray-100 dark:border-gray-800 cursor-crosshair"
+                className="relative border-l border-gray-100 dark:border-gray-800 cursor-crosshair overflow-hidden"
                 style={{ height: GRID_HEIGHT }}
                 onClick={(e) => handleColumnClick(e, d)}
                 onDragOver={(e) => handleDragOver(e, d)}
