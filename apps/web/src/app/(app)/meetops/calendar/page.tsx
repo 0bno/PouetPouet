@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMeetCalendar } from '@/hooks/useMeetops'
@@ -92,10 +92,12 @@ function layoutItems(items: Placed[]): PlacedLayout[] {
 
 interface PopupState { item: Placed; x: number; y: number }
 
-function MeetingPopup({ popup, onClose, onNavigate }: {
+function MeetingPopup({ popup, onClose, onNavigate, onMouseEnter, onMouseLeave }: {
   popup: PopupState
   onClose: () => void
   onNavigate: (eventId: string) => void
+  onMouseEnter: () => void
+  onMouseLeave: () => void
 }) {
   const start = new Date(popup.item.startAt)
   const end = new Date(+start + popup.item.durationMin * 60_000)
@@ -107,6 +109,8 @@ function MeetingPopup({ popup, onClose, onNavigate }: {
     <div
       className="fixed z-[100] w-60 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3"
       style={{ left: x, top: y }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-start gap-2 mb-2">
@@ -276,12 +280,15 @@ function timeToTop(startAt: string): number {
   return Math.max(0, minutesFromStart * PX_PER_MIN)
 }
 
-function TimeGrid({ columnDays, byDay, todayKey, viewMode, onMeetingDblClick, onMeetingDrop }: {
+function TimeGrid({ columnDays, byDay, todayKey, viewMode, selectedId, onMeetingEnter, onMeetingLeave, onMeetingClick, onMeetingDrop }: {
   columnDays: Date[]
   byDay: Map<string, Placed[]>
   todayKey: string
   viewMode: ViewMode
-  onMeetingDblClick: (item: Placed, e: React.MouseEvent) => void
+  selectedId: string | null
+  onMeetingEnter: (item: Placed, e: React.MouseEvent) => void
+  onMeetingLeave: () => void
+  onMeetingClick: (id: string) => void
   onMeetingDrop: (meetingId: string, newStartAt: Date) => void
 }) {
   const gridCols = viewMode === 'day' ? 'grid-cols-1' : viewMode === 'workweek' ? 'grid-cols-5' : 'grid-cols-7'
@@ -392,12 +399,14 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode, onMeetingDblClick, on
                         e.dataTransfer.setData('text/plain', JSON.stringify({ id: it.id, offsetY: e.clientY - rect.top }))
                         e.dataTransfer.effectAllowed = 'move'
                       }}
-                      onDoubleClick={(e) => { e.stopPropagation(); onMeetingDblClick(it, e) }}
+                      onMouseEnter={(e) => onMeetingEnter(it, e)}
+                      onMouseLeave={onMeetingLeave}
+                      onClick={(e) => { e.stopPropagation(); onMeetingClick(it.id) }}
                       className={[
                         'absolute rounded px-1 overflow-hidden text-white text-[10px]',
-                        'cursor-grab active:cursor-grabbing select-none',
-                        'hover:brightness-90 transition-[filter]',
-                        it.cancelled ? 'opacity-50 line-through' : '',
+                        'cursor-pointer select-none transition-[filter,outline]',
+                        it.cancelled ? 'opacity-50 line-through' : 'hover:brightness-90',
+                        selectedId === it.id ? 'outline outline-2 outline-white outline-offset-1' : '',
                       ].join(' ')}
                       style={{
                         top,
@@ -444,6 +453,8 @@ export default function MeetopsCalendarPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [popup, setPopup] = useState<PopupState | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const views = loadViews()
@@ -454,13 +465,16 @@ export default function MeetopsCalendarPage() {
     if (d) { setViewMode(d.viewMode); setFilter(d.filter); setAppliedId(d.id) }
   }, [])
 
-  // Fermer le popup en cliquant ailleurs
-  useEffect(() => {
-    if (!popup) return
-    const close = () => setPopup(null)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [popup])
+  function showPopup(item: Placed, e: React.MouseEvent) {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    setPopup({ item, x: e.clientX, y: e.clientY })
+  }
+  function scheduleHide() {
+    hideTimerRef.current = setTimeout(() => setPopup(null), 200)
+  }
+  function cancelHide() {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+  }
 
   const allLabels = useMemo(() => {
     const set = new Set<string>()
@@ -567,9 +581,16 @@ export default function MeetopsCalendarPage() {
           return (
             <div key={j}
               title={`${it.eventName} — ${it.title}${it.label ? ` [${it.label}]` : ''} (${time})`}
-              className={`text-[10px] leading-tight rounded px-1 py-0.5 truncate cursor-pointer hover:brightness-90 transition-[filter] ${it.cancelled ? 'line-through opacity-60' : ''}`}
+              className={[
+                'text-[10px] leading-tight rounded px-1 py-0.5 truncate cursor-pointer',
+                'hover:brightness-90 transition-[filter,outline]',
+                it.cancelled ? 'line-through opacity-60' : '',
+                selectedId === it.id ? 'outline outline-2 outline-white outline-offset-1' : '',
+              ].join(' ')}
               style={{ background: it.color, color: '#fff' }}
-              onDoubleClick={(e) => { e.stopPropagation(); setPopup({ item: it, x: e.clientX, y: e.clientY }) }}
+              onMouseEnter={(e) => showPopup(it, e)}
+              onMouseLeave={scheduleHide}
+              onClick={(e) => { e.stopPropagation(); setSelectedId((prev) => prev === it.id ? null : it.id) }}
             >
               {time} {it.title}
             </div>
@@ -581,7 +602,7 @@ export default function MeetopsCalendarPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5" onClick={() => setPopup(null)}>
+    <div className="flex flex-col gap-5" onClick={() => setSelectedId(null)}>
       <div>
         <Link href="/meetops" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
@@ -725,7 +746,10 @@ export default function MeetopsCalendarPage() {
               byDay={byDay}
               todayKey={todayKey}
               viewMode={viewMode}
-              onMeetingDblClick={(item, e) => { e.stopPropagation(); setPopup({ item, x: e.clientX, y: e.clientY }) }}
+              selectedId={selectedId}
+              onMeetingEnter={showPopup}
+              onMeetingLeave={scheduleHide}
+              onMeetingClick={(id) => setSelectedId((prev) => prev === id ? null : id)}
               onMeetingDrop={handleMeetingDrop}
             />
           )}
@@ -742,6 +766,8 @@ export default function MeetopsCalendarPage() {
           popup={popup}
           onClose={() => setPopup(null)}
           onNavigate={(id) => router.push(`/meetops/${id}`)}
+          onMouseEnter={cancelHide}
+          onMouseLeave={scheduleHide}
         />
       )}
     </div>
