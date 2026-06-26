@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMeetCalendar } from '@/hooks/useMeetops'
 import { MEETING_STATUS_LABELS } from '@/lib/meetops'
 import type { MeetCalendarEvent, MeetingStatus } from '@/lib/meetops'
@@ -11,13 +12,12 @@ import type { MeetCalendarEvent, MeetingStatus } from '@/lib/meetops'
 type ViewMode = 'month' | 'week' | 'workweek' | 'day'
 const VIEW_LABELS: Record<ViewMode, string> = { month: 'Mois', week: 'Semaine', workweek: 'Sem. travail', day: 'Jour' }
 const STATUSES: MeetingStatus[] = ['DRAFT', 'SENT', 'UPDATED', 'CANCELLED']
-const NO_LABEL = '—' // clé interne pour « sans étiquette »
+const NO_LABEL = '—'
 
 interface CalFilter { eventIds: string[] | null; statuses: MeetingStatus[] | null; labels: string[] | null }
 interface SavedView { id: string; name: string; viewMode: ViewMode; filter: CalFilter }
 
 const EMPTY_FILTER: CalFilter = { eventIds: null, statuses: null, labels: null }
-
 const WEEKDAY_HEADERS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 function dayKey(d: Date): string {
@@ -28,8 +28,6 @@ function mondayOffset(d: Date): number { return (d.getDay() + 6) % 7 }
 function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 function startOfWeek(d: Date): Date { return addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -mondayOffset(d)) }
 
-// ── localStorage (préférences d'affichage, par navigateur) ───────────────────────
-
 const LS_VIEWS = 'meetops_cal_views'
 const LS_DEFAULT = 'meetops_cal_default'
 function loadViews(): SavedView[] { try { return JSON.parse(localStorage.getItem(LS_VIEWS) || '[]') } catch { return [] } }
@@ -37,9 +35,115 @@ function persistViews(v: SavedView[]) { localStorage.setItem(LS_VIEWS, JSON.stri
 function loadDefaultId(): string | null { try { return localStorage.getItem(LS_DEFAULT) } catch { return null } }
 function persistDefaultId(id: string | null) { if (id) localStorage.setItem(LS_DEFAULT, id); else localStorage.removeItem(LS_DEFAULT) }
 
-interface Placed { eventId: string; eventName: string; color: string; title: string; label: string | null; startAt: string; durationMin: number; cancelled: boolean }
+// Meeting enrichi avec les infos de son événement parent.
+interface Placed {
+  id: string
+  eventId: string
+  eventName: string
+  color: string
+  title: string
+  label: string | null
+  startAt: string
+  durationMin: number
+  cancelled: boolean
+}
 
-// ── Popup de recherche / sélection d'événements ──────────────────────────────────
+// Meeting positionné dans la grille (col = colonne dans un groupe de chevauchement).
+interface PlacedLayout extends Placed {
+  col: number
+  totalCols: number
+}
+
+// ── Algorithme de layout pour les chevauchements ─────────────────────────────────
+
+function layoutItems(items: Placed[]): PlacedLayout[] {
+  if (!items.length) return []
+  const sorted = [...items].sort((a, b) => +new Date(a.startAt) - +new Date(b.startAt))
+  const cols: number[] = new Array(sorted.length).fill(0)
+
+  for (let i = 0; i < sorted.length; i++) {
+    const si = +new Date(sorted[i].startAt)
+    const ei = si + sorted[i].durationMin * 60_000
+    const used = new Set<number>()
+    for (let j = 0; j < i; j++) {
+      const sj = +new Date(sorted[j].startAt)
+      const ej = sj + sorted[j].durationMin * 60_000
+      if (sj < ei && ej > si) used.add(cols[j])
+    }
+    let c = 0; while (used.has(c)) c++
+    cols[i] = c
+  }
+
+  return sorted.map((item, i) => {
+    const si = +new Date(item.startAt)
+    const ei = si + item.durationMin * 60_000
+    let max = cols[i]
+    for (let j = 0; j < sorted.length; j++) {
+      if (j === i) continue
+      const sj = +new Date(sorted[j].startAt)
+      const ej = sj + sorted[j].durationMin * 60_000
+      if (sj < ei && ej > si) max = Math.max(max, cols[j])
+    }
+    return { ...item, col: cols[i], totalCols: max + 1 }
+  })
+}
+
+// ── Popup meeting ────────────────────────────────────────────────────────────────
+
+interface PopupState { item: Placed; x: number; y: number }
+
+function MeetingPopup({ popup, onClose, onNavigate }: {
+  popup: PopupState
+  onClose: () => void
+  onNavigate: (eventId: string) => void
+}) {
+  const start = new Date(popup.item.startAt)
+  const end = new Date(+start + popup.item.durationMin * 60_000)
+  const fmt = (d: Date) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const x = typeof window !== 'undefined' ? Math.min(popup.x + 8, window.innerWidth - 264) : popup.x
+  const y = typeof window !== 'undefined' ? Math.min(popup.y - 20, window.innerHeight - 200) : popup.y
+
+  return (
+    <div
+      className="fixed z-[100] w-60 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3"
+      style={{ left: x, top: y }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-start gap-2 mb-2">
+        <span className="w-2.5 h-2.5 rounded-sm mt-0.5 shrink-0" style={{ background: popup.item.color }} />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm text-gray-900 dark:text-white leading-tight truncate">{popup.item.title}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 truncate">{popup.item.eventName}</div>
+        </div>
+        <button onClick={onClose} className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 shrink-0 ml-1 p-0.5">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">
+        {fmt(start)} – {fmt(end)}
+        <span className="text-gray-400 ml-1.5">· {popup.item.durationMin} min</span>
+      </div>
+      {popup.item.label && (
+        <span className="inline-block text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full mb-2">
+          {popup.item.label}
+        </span>
+      )}
+      {popup.item.cancelled && (
+        <div className="text-xs text-red-500 mb-2">Annulée</div>
+      )}
+      <button
+        onClick={() => { onNavigate(popup.item.eventId); onClose() }}
+        className="w-full text-xs font-medium py-1.5 bg-primary-50 dark:bg-primary-950/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-950/50 rounded-lg transition-colors"
+      >
+        Ouvrir l&apos;événement →
+      </button>
+    </div>
+  )
+}
+
+// ── Popup de sélection d'événements ─────────────────────────────────────────────
 
 function EventPickerModal({
   events, selected, onApply, onClose,
@@ -50,7 +154,6 @@ function EventPickerModal({
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
-  // null = tous → on matérialise en set de tous les ids pour l'édition.
   const [picked, setPicked] = useState<Set<string>>(() => new Set(selected ?? events.map((e) => e.id)))
 
   const filtered = events.filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase()))
@@ -101,7 +204,7 @@ function EventPickerModal({
   )
 }
 
-// ── Panneau de filtres (statuts + étiquettes) ────────────────────────────────────
+// ── Panneau de filtres ────────────────────────────────────────────────────────────
 
 function FilterPanel({
   allLabels, filter, onChange, onClose,
@@ -158,12 +261,12 @@ function FilterPanel({
   )
 }
 
-// ── Grille horaire (vues jour / semaine) ─────────────────────────────────────────
+// ── Grille horaire ────────────────────────────────────────────────────────────────
 
 const HOUR_START = 7
 const HOUR_END = 21
 const TOTAL_MIN = (HOUR_END - HOUR_START) * 60
-const GRID_HEIGHT = 560 // px
+const GRID_HEIGHT = 560
 const PX_PER_MIN = GRID_HEIGHT / TOTAL_MIN
 const HOURS = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i)
 
@@ -173,13 +276,41 @@ function timeToTop(startAt: string): number {
   return Math.max(0, minutesFromStart * PX_PER_MIN)
 }
 
-function TimeGrid({ columnDays, byDay, todayKey, viewMode }: {
+function TimeGrid({ columnDays, byDay, todayKey, viewMode, onMeetingDblClick, onMeetingDrop }: {
   columnDays: Date[]
   byDay: Map<string, Placed[]>
   todayKey: string
   viewMode: ViewMode
+  onMeetingDblClick: (item: Placed, e: React.MouseEvent) => void
+  onMeetingDrop: (meetingId: string, newStartAt: Date) => void
 }) {
   const gridCols = viewMode === 'day' ? 'grid-cols-1' : viewMode === 'workweek' ? 'grid-cols-5' : 'grid-cols-7'
+  const [dropInfo, setDropInfo] = useState<{ key: string; top: number } | null>(null)
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>, d: Date) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const rect = e.currentTarget.getBoundingClientRect()
+    const y = Math.max(0, e.clientY - rect.top)
+    const minutes = (y / GRID_HEIGHT) * TOTAL_MIN
+    const snapped = Math.min(Math.round(minutes / 15) * 15, TOTAL_MIN - 15)
+    setDropInfo({ key: dayKey(d), top: (snapped / TOTAL_MIN) * GRID_HEIGHT })
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>, d: Date) {
+    e.preventDefault()
+    setDropInfo(null)
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain')) as { id: string; offsetY: number }
+      const rect = e.currentTarget.getBoundingClientRect()
+      const y = Math.max(0, e.clientY - rect.top - data.offsetY)
+      const minutes = (y / GRID_HEIGHT) * TOTAL_MIN
+      const snapped = Math.max(0, Math.min(TOTAL_MIN - 30, Math.round(minutes / 15) * 15))
+      const totalMin = HOUR_START * 60 + snapped
+      const newStartAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(totalMin / 60), totalMin % 60, 0, 0)
+      onMeetingDrop(data.id, newStartAt)
+    } catch { /* données drag invalides */ }
+  }
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
@@ -196,7 +327,7 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode }: {
         })}
       </div>
 
-      {/* Corps avec grille horaire */}
+      {/* Corps */}
       <div className="flex">
         {/* Étiquettes heures */}
         <div className="w-10 shrink-0 relative" style={{ height: GRID_HEIGHT }}>
@@ -208,38 +339,82 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode }: {
           ))}
         </div>
 
-        {/* Colonnes */}
+        {/* Colonnes jours */}
         <div className={`flex-1 grid ${gridCols}`}>
           {columnDays.map((d, i) => {
             const key = dayKey(d)
             const items = byDay.get(key) ?? []
+            const visible = items.filter((it) => {
+              const h = new Date(it.startAt).getHours()
+              return h >= HOUR_START && h < HOUR_END
+            })
+            const laid = layoutItems(visible)
+
             return (
-              <div key={i} className="relative border-l border-gray-100 dark:border-gray-800" style={{ height: GRID_HEIGHT }}>
+              <div
+                key={i}
+                className="relative border-l border-gray-100 dark:border-gray-800"
+                style={{ height: GRID_HEIGHT }}
+                onDragOver={(e) => handleDragOver(e, d)}
+                onDragLeave={() => setDropInfo(null)}
+                onDrop={(e) => handleDrop(e, d)}
+              >
                 {/* Lignes horaires */}
                 {HOURS.map((h) => (
                   <div key={h} className="absolute w-full border-t border-gray-100 dark:border-gray-800"
                     style={{ top: (h - HOUR_START) * 60 * PX_PER_MIN }} />
                 ))}
-                {/* Événements */}
-                {items.filter((it) => {
-                  const h = new Date(it.startAt).getHours()
-                  return h >= HOUR_START && h < HOUR_END
-                }).map((it, j) => {
+
+                {/* Indicateur de drop */}
+                {dropInfo?.key === key && (
+                  <div
+                    className="absolute left-0 right-0 h-0.5 bg-primary-400 z-10 pointer-events-none"
+                    style={{ top: dropInfo.top }}
+                  >
+                    <div className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-primary-400" />
+                  </div>
+                )}
+
+                {/* Meetings */}
+                {laid.map((it, j) => {
                   const top = timeToTop(it.startAt)
-                  const height = Math.max(18, it.durationMin * PX_PER_MIN)
+                  const height = Math.max(20, it.durationMin * PX_PER_MIN)
                   const time = new Date(it.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                  const colW = 100 / it.totalCols
+                  const GAP = 1.5
                   return (
-                    <div key={j}
+                    <div
+                      key={j}
                       title={`${it.eventName} — ${it.title}${it.label ? ` [${it.label}]` : ''} (${time}, ${it.durationMin} min)`}
-                      className={`absolute left-0.5 right-0.5 rounded px-1 overflow-hidden text-white text-[10px] ${it.cancelled ? 'opacity-50 line-through' : ''}`}
-                      style={{ top, height, background: it.color }}>
-                      <div className="font-semibold leading-tight">{time}</div>
-                      {height > 28 && <div className="truncate leading-tight">{it.title}</div>}
+                      draggable
+                      onDragStart={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        e.dataTransfer.setData('text/plain', JSON.stringify({ id: it.id, offsetY: e.clientY - rect.top }))
+                        e.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDoubleClick={(e) => { e.stopPropagation(); onMeetingDblClick(it, e) }}
+                      className={[
+                        'absolute rounded px-1 overflow-hidden text-white text-[10px]',
+                        'cursor-grab active:cursor-grabbing select-none',
+                        'hover:brightness-90 transition-[filter]',
+                        it.cancelled ? 'opacity-50 line-through' : '',
+                      ].join(' ')}
+                      style={{
+                        top,
+                        height,
+                        left: `${it.col * colW + GAP}%`,
+                        width: `${colW - GAP * 2}%`,
+                        background: it.color,
+                      }}
+                    >
+                      <div className="font-semibold leading-tight truncate">{time}</div>
+                      {height > 28 && <div className="truncate leading-tight opacity-90">{it.title}</div>}
                     </div>
                   )
                 })}
-                {items.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-200 dark:text-gray-700">—</div>
+
+                {visible.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-200 dark:text-gray-700 pointer-events-none">—</div>
                 )}
               </div>
             )
@@ -253,7 +428,8 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode }: {
 // ── Page ──────────────────────────────────────────────────────────────────────────
 
 export default function MeetopsCalendarPage() {
-  const { events, isLoading } = useMeetCalendar()
+  const { events, isLoading, updateMeeting } = useMeetCalendar()
+  const router = useRouter()
 
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [anchor, setAnchor] = useState<Date>(() => new Date())
@@ -267,8 +443,8 @@ export default function MeetopsCalendarPage() {
   const [savedOpen, setSavedOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [popup, setPopup] = useState<PopupState | null>(null)
 
-  // Chargement des préférences + application du filtre par défaut (une fois).
   useEffect(() => {
     const views = loadViews()
     const def = loadDefaultId()
@@ -277,6 +453,14 @@ export default function MeetopsCalendarPage() {
     const d = views.find((v) => v.id === def)
     if (d) { setViewMode(d.viewMode); setFilter(d.filter); setAppliedId(d.id) }
   }, [])
+
+  // Fermer le popup en cliquant ailleurs
+  useEffect(() => {
+    if (!popup) return
+    const close = () => setPopup(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [popup])
 
   const allLabels = useMemo(() => {
     const set = new Set<string>()
@@ -302,7 +486,12 @@ export default function MeetopsCalendarPage() {
         if (!meetingVisible(ev.id, m, ev.name)) continue
         const key = dayKey(new Date(m.startAt))
         if (!map.has(key)) map.set(key, [])
-        map.get(key)!.push({ eventId: ev.id, eventName: ev.name, color: ev.color, title: m.title, label: m.label, startAt: m.startAt, durationMin: m.durationMin, cancelled: m.status === 'CANCELLED' })
+        map.get(key)!.push({
+          id: m.id,
+          eventId: ev.id, eventName: ev.name, color: ev.color,
+          title: m.title, label: m.label, startAt: m.startAt,
+          durationMin: m.durationMin, cancelled: m.status === 'CANCELLED',
+        })
       }
     }
     for (const list of map.values()) list.sort((a, b) => +new Date(a.startAt) - +new Date(b.startAt))
@@ -312,14 +501,12 @@ export default function MeetopsCalendarPage() {
 
   const todayKey = dayKey(new Date())
 
-  // Navigation adaptée au mode.
   function shift(dir: number) {
     if (viewMode === 'month') setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1))
     else if (viewMode === 'day') setAnchor(addDays(anchor, dir))
     else setAnchor(addDays(anchor, dir * 7))
   }
 
-  // Colonnes pour les vues jour / semaine.
   const columnDays = useMemo(() => {
     if (viewMode === 'day') return [new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())]
     if (viewMode === 'week') return Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor), i))
@@ -343,7 +530,6 @@ export default function MeetopsCalendarPage() {
     return `${a.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – ${b.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`
   }, [viewMode, anchor, columnDays])
 
-  // ── Gestion des filtres enregistrés ──
   function applyView(v: SavedView) { setViewMode(v.viewMode); setFilter(v.filter); setAppliedId(v.id); setSavedOpen(false) }
   function saveCurrent() {
     const name = prompt('Nom du filtre enregistré :', '')
@@ -365,15 +551,26 @@ export default function MeetopsCalendarPage() {
 
   const activeFilterCount = (filter.eventIds ? 1 : 0) + (filter.statuses ? 1 : 0) + (filter.labels ? 1 : 0)
 
+  async function handleMeetingDrop(meetingId: string, newStartAt: Date) {
+    try {
+      await updateMeeting(meetingId, { startAt: newStartAt.toISOString() })
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+
   function renderChips(items: Placed[], max: number) {
     return (
       <>
         {items.slice(0, max).map((it, j) => {
           const time = new Date(it.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
           return (
-            <div key={j} title={`${it.eventName} — ${it.title}${it.label ? ` [${it.label}]` : ''} (${time})`}
-              className={`text-[10px] leading-tight rounded px-1 py-0.5 truncate ${it.cancelled ? 'line-through opacity-60' : ''}`}
-              style={{ background: it.color, color: '#fff' }}>
+            <div key={j}
+              title={`${it.eventName} — ${it.title}${it.label ? ` [${it.label}]` : ''} (${time})`}
+              className={`text-[10px] leading-tight rounded px-1 py-0.5 truncate cursor-pointer hover:brightness-90 transition-[filter] ${it.cancelled ? 'line-through opacity-60' : ''}`}
+              style={{ background: it.color, color: '#fff' }}
+              onDoubleClick={(e) => { e.stopPropagation(); setPopup({ item: it, x: e.clientX, y: e.clientY }) }}
+            >
               {time} {it.title}
             </div>
           )
@@ -384,11 +581,14 @@ export default function MeetopsCalendarPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5" onClick={() => setPopup(null)}>
       <div>
-        <Link href="/meetops" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>MeetOps</Link>
+        <Link href="/meetops" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          MeetOps
+        </Link>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight mt-2">📆 Calendrier global</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Toutes tes réunions, filtrables et superposées.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Double-cliquez sur une réunion pour voir ses détails. Glissez-déposez pour changer l&apos;heure.</p>
       </div>
 
       {isLoading ? (
@@ -397,7 +597,6 @@ export default function MeetopsCalendarPage() {
         <>
           {/* Barre d'outils */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Modes d'affichage */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
               {(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => (
                 <button key={v} onClick={() => setViewMode(v)}
@@ -407,11 +606,10 @@ export default function MeetopsCalendarPage() {
               ))}
             </div>
 
-            {/* Navigation */}
             <div className="flex items-center gap-1">
-              <button onClick={() => shift(-1)} className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Précédent">‹</button>
+              <button onClick={() => shift(-1)} className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">‹</button>
               <button onClick={() => setAnchor(new Date())} className="px-2 h-8 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">Aujourd&apos;hui</button>
-              <button onClick={() => shift(1)} className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Suivant">›</button>
+              <button onClick={() => shift(1)} className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">›</button>
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{rangeLabel}</span>
 
@@ -431,8 +629,7 @@ export default function MeetopsCalendarPage() {
                 </div>
               ) : (
                 <button onClick={() => setSearchOpen(true)}
-                  className={`text-sm font-medium border rounded-lg px-3 py-1.5 ${searchQuery ? 'border-primary-400 text-primary-600' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                  title="Rechercher">
+                  className={`text-sm font-medium border rounded-lg px-3 py-1.5 ${searchQuery ? 'border-primary-400 text-primary-600' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
                   </svg>
@@ -473,7 +670,7 @@ export default function MeetopsCalendarPage() {
                             </button>
                             <button onClick={() => toggleDefault(v.id)} title={defaultId === v.id ? 'Filtre par défaut' : 'Définir par défaut'}
                               className={`px-1 ${defaultId === v.id ? 'text-amber-400' : 'text-gray-300 hover:text-amber-400'}`}>★</button>
-                            <button onClick={() => deleteView(v.id)} title="Supprimer" className="px-1 text-gray-300 hover:text-red-500">✕</button>
+                            <button onClick={() => deleteView(v.id)} className="px-1 text-gray-300 hover:text-red-500">✕</button>
                           </li>
                         ))}
                       </ul>
@@ -521,9 +718,16 @@ export default function MeetopsCalendarPage() {
             </div>
           )}
 
-          {/* Vues Jour / Semaine / Semaine travail — grille horaire */}
+          {/* Vues Semaine / Jour — grille horaire */}
           {viewMode !== 'month' && (
-            <TimeGrid columnDays={columnDays} byDay={byDay} todayKey={todayKey} viewMode={viewMode} />
+            <TimeGrid
+              columnDays={columnDays}
+              byDay={byDay}
+              todayKey={todayKey}
+              viewMode={viewMode}
+              onMeetingDblClick={(item, e) => { e.stopPropagation(); setPopup({ item, x: e.clientX, y: e.clientY }) }}
+              onMeetingDrop={handleMeetingDrop}
+            />
           )}
         </>
       )}
@@ -531,6 +735,14 @@ export default function MeetopsCalendarPage() {
       {pickerOpen && (
         <EventPickerModal events={events} selected={filter.eventIds}
           onApply={(ids) => setFilter((f) => ({ ...f, eventIds: ids }))} onClose={() => setPickerOpen(false)} />
+      )}
+
+      {popup && (
+        <MeetingPopup
+          popup={popup}
+          onClose={() => setPopup(null)}
+          onNavigate={(id) => router.push(`/meetops/${id}`)}
+        />
       )}
     </div>
   )

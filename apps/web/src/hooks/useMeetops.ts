@@ -163,12 +163,25 @@ export function useMeetHistory(eventId: string, refreshKey?: unknown) {
 export function useMeetCalendar() {
   const [events, setEvents] = useState<MeetCalendarEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  useEffect(() => {
-    api.get<MeetCalendarEvent[]>('/api/meetops/calendar')
-      .then((e) => { setEvents(e); setIsLoading(false) })
-      .catch(() => setIsLoading(false))
+
+  const reload = useCallback(async () => {
+    const e = await api.get<MeetCalendarEvent[]>('/api/meetops/calendar')
+    setEvents(e)
   }, [])
-  return { events, isLoading }
+
+  useEffect(() => {
+    reload().finally(() => setIsLoading(false))
+  }, [reload])
+
+  const updateMeeting = useCallback(async (
+    meetingId: string,
+    patch: { startAt?: string; durationMin?: number },
+  ) => {
+    await api.patch(`/api/meetops/meetings/${meetingId}`, patch)
+    await reload()
+  }, [reload])
+
+  return { events, isLoading, reload, updateMeeting }
 }
 
 // ── Templates ──────────────────────────────────────────────────────────────────────
