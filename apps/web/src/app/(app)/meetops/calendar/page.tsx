@@ -414,6 +414,7 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode, calRange, handlers }:
 
   function handleColumnClick(e: React.MouseEvent<HTMLDivElement>, d: Date) {
     if ((e.target as HTMLElement).closest('[data-meeting]')) return
+    e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
     const y = Math.max(0, e.clientY - rect.top)
     const snapped = Math.max(0, Math.min(totalMin - 30, Math.round((y / gridHeight * totalMin) / 15) * 15))
