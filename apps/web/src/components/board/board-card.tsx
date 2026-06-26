@@ -1,10 +1,10 @@
 'use client'
 
-import { memo, useState, useRef, useEffect } from 'react'
+import { memo, useState, useRef, useEffect, useLayoutEffect } from 'react'
 import type { Card, BoardField } from '@/hooks/useBoard'
 import { parseLabelFmt, parseTextFmt, serializeTextFmt, formatFieldValue, type LabelFmt, type TextFmt } from '@/lib/card-format'
 import { ConnectHandles, LinkCardsOverlay, FmtBtn, BorderResizeHandles, type ResizeDir } from './board-card-parts'
-import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN } from './board-card-constants'
+import { CHIP_STYLE, MIN_W, MIN_H, SHAPE_MIN, MIN_LABEL_W } from './board-card-constants'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { headerTint } from '@/lib/colors'
 import { ShapeCard } from './board-card-shape'
@@ -26,6 +26,7 @@ interface Props {
   onCommitDrag?: (id: string) => void
   onUpdate: (id: string, content: string) => void
   onRecolor?: (id: string, color: string) => void
+  onCrop?: (id: string) => void
   onDelete: (id: string) => void
   onResize: (id: string, w: number, h: number) => void
   onResizeBox?: (id: string, box: { posX: number; posY: number; width: number; height: number }) => void
@@ -51,7 +52,7 @@ interface Props {
 // wraps them in useStableHandler) for the memo to be effective.
 export const BoardCard = memo(function BoardCard({
   card, fields, zoom = 1, isSelected, isMultiSelect, groupColor, drawMode, isReadonly,
-  onMove, onStartDrag, onCommitDrag, onUpdate, onRecolor, onDelete,
+  onMove, onStartDrag, onCommitDrag, onUpdate, onRecolor, onCrop, onDelete,
   onResize, onResizeBox, onStartResize, onCommitResize,
   onSelect, onOpenDetail, onStartConnect, onSetLocked,
   linkCardsMode, isLinkSource, onLinkCardsClick, consumeAutoEdit, remoteEditor, onEditingChange,
@@ -62,10 +63,16 @@ export const BoardCard = memo(function BoardCard({
   // Initial text, unwrapped from any formatting JSON (TEXT and LABEL store rich text as JSON).
   const initialText = isLabel ? parseLabelFmt(card.content).text : isText ? parseTextFmt(card.content).text : card.content
 
+
   const [isEditing, setIsEditing] = useState(
     () => initialText === '' && (isText || isLabel) && (consumeAutoEdit?.(card.id) ?? false),
   )
   const [content, setContent] = useState(initialText)
+  const firstUrl = isText ? (content.match(/https?:\/\/[^\s<>"']+/)?.[0] ?? null) : null
+  // En mode affichage, masquer l'URL brute si un preview est disponible
+  const displayContent = (isText && !isEditing && card.meta && firstUrl)
+    ? content.replace(firstUrl, '').trim()
+    : content
   const [labelFmt, setLabelFmt] = useState<Omit<LabelFmt, 'text'>>(() => {
     if (!isLabel) return { size: 16, bold: false, italic: false, underline: false, strike: false, color: '#374151' }
     const f = parseLabelFmt(card.content)
@@ -76,8 +83,12 @@ export const BoardCard = memo(function BoardCard({
     const f = parseTextFmt(card.content)
     return { size: f.size, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike, color: f.color, align: f.align }
   })
+  // Largeur mesurée du texte (CSS px) — mise à jour après chaque rendu pour éliminer
+  // tout retour à la ligne, quel que soit le zoom.
+  const [labelDisplayW, setLabelDisplayW] = useState(MIN_LABEL_W)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const labelMeasureRef = useRef<HTMLSpanElement>(null)
   const isDragging = useRef(false)
   const editEntryPointRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -127,6 +138,12 @@ export const BoardCard = memo(function BoardCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing])
 
+  useLayoutEffect(() => {
+    if (!isLabel || !labelMeasureRef.current) return
+    const w = labelMeasureRef.current.offsetWidth + 12
+    setLabelDisplayW(prev => Math.abs(prev - w) > 2 ? Math.max(w, MIN_LABEL_W) : prev)
+  }, [isLabel, content, labelFmt.size, labelFmt.bold, labelFmt.italic])
+
   useEffect(() => {
     if (isLabel) {
       const f = parseLabelFmt(card.content)
@@ -170,7 +187,7 @@ export const BoardCard = memo(function BoardCard({
     window.addEventListener('mouseup', onMouseUp)
   }
 
-  const minW = card.type === 'SHAPE' || card.type === 'DRAW' ? SHAPE_MIN : isLabel ? 40 : MIN_W
+  const minW = card.type === 'SHAPE' || card.type === 'DRAW' ? SHAPE_MIN : isLabel ? MIN_LABEL_W : MIN_W
   const minH = card.type === 'SHAPE' || card.type === 'DRAW' ? SHAPE_MIN : isLabel ? 20 : MIN_H
 
   function handleResizeMouseDown(e: React.MouseEvent, dir: ResizeDir = 'se') {
@@ -201,6 +218,11 @@ export const BoardCard = memo(function BoardCard({
     window.addEventListener('mouseup', onMouseUp)
   }
 
+  function autoResizeLabelToContent() {
+    if (!content.trim()) return
+    if (Math.abs(labelDisplayW - card.width) > 2) onResize(card.id, labelDisplayW, card.height)
+  }
+
   function saveLabelContent(text: string, fmt: Omit<LabelFmt, 'text'>) {
     if (!text.trim()) { onDelete(card.id); return }
     onUpdate(card.id, JSON.stringify({ ...fmt, text }))
@@ -215,7 +237,7 @@ export const BoardCard = memo(function BoardCard({
     // Read scrollHeight synchronously BEFORE setIsEditing unmounts the textarea.
     const ta = textareaRef.current
     setIsEditing(false)
-    if (isLabel) saveLabelContent(content, labelFmt)
+    if (isLabel) { saveLabelContent(content, labelFmt); autoResizeLabelToContent(); return }
     else if (isText) saveTextContent(content)
     else onUpdate(card.id, content)
     if (card.type === 'TEXT' && ta) {
@@ -233,7 +255,7 @@ export const BoardCard = memo(function BoardCard({
     if (e.key === 'Escape') {
       const ta = textareaRef.current
       setIsEditing(false)
-      if (isLabel) saveLabelContent(content, labelFmt)
+      if (isLabel) { saveLabelContent(content, labelFmt); autoResizeLabelToContent(); return }
       else onUpdate(card.id, content)
       if (card.type === 'TEXT' && ta) {
         ta.style.height = 'auto'
@@ -260,6 +282,8 @@ export const BoardCard = memo(function BoardCard({
     e.stopPropagation()
     if (card.type === 'TEXT') {
       editEntryPointRef.current = { x: e.clientX, y: e.clientY }
+      setIsEditing(true)
+    } else if (card.type === 'LINK') {
       setIsEditing(true)
     }
   }
@@ -301,6 +325,7 @@ export const BoardCard = memo(function BoardCard({
         isReadonly={isReadonly}
         outline={outline}
         onRecolor={onRecolor}
+        onCrop={onCrop}
         onDelete={onDelete}
         onSelect={onSelect}
         onSetLocked={onSetLocked}
@@ -400,12 +425,18 @@ export const BoardCard = memo(function BoardCard({
       <div
         data-card-id={card.id}
         className="absolute group select-none"
+        // #116 — boîte déterministe (largeur = card.width, hauteur mini = card.height) :
+        // le centre reste déplaçable, les points d'ancrage et poignées s'alignent sur une
+        // vraie boîte au lieu d'épouser un texte minuscule (où ils couvraient tout et
+        // interceptaient le glisser), et le redimensionnement devient visible.
         style={{
           left: card.posX,
           top: card.posY,
+          minWidth: Math.max(card.width, labelDisplayW),
+          minHeight: Math.max(card.height, 24),
           cursor: isReadonly ? 'default' : (isEditing ? 'default' : 'grab'),
           outline: isSelected ? '1.5px dashed #818cf8' : 'none',
-          outlineOffset: 6,
+          outlineOffset: 2,
           borderRadius: 4,
         }}
         onMouseDown={handleMouseDown}
@@ -466,7 +497,7 @@ export const BoardCard = memo(function BoardCard({
             className="bg-transparent resize-none focus:outline-none"
             style={{
               ...textStyle,
-              width: Math.max(card.width, 80),
+              width: Math.max(card.width, labelDisplayW),
               height: Math.max(card.height, 28),
               border: '1px dashed #cbd5e1',
               borderRadius: 4,
@@ -476,16 +507,16 @@ export const BoardCard = memo(function BoardCard({
             onMouseDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <p className="whitespace-pre-wrap px-1.5 py-0.5" style={{ ...textStyle, minWidth: 40, minHeight: 24 }}>
+          <p className="whitespace-pre px-1.5 py-0.5" style={{ ...textStyle, minHeight: 24 }}>
             {content || <span style={{ color: '#d1d5db', fontSize: 14, fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none' }}>Étiquette…</span>}
           </p>
         )}
 
-        {/* ── Delete button (inside bounds, top-right) ── */}
+        {/* ── Delete button (centered below label) ── */}
         {!isReadonly && !card.locked && (
           <button
-            className="absolute top-0 right-0 w-5 h-5 rounded-full bg-white/90 border border-gray-200 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ zIndex: 5 }}
+            className="absolute w-5 h-5 rounded-full bg-white/90 border border-gray-200 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ zIndex: 5, left: '50%', transform: 'translateX(-50%)', bottom: -22 }}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onDelete(card.id) }}
             title="Supprimer"
@@ -500,10 +531,23 @@ export const BoardCard = memo(function BoardCard({
         {!isReadonly && !card.locked && !isMultiSelect && (
           <BorderResizeHandles onStart={handleResizeMouseDown} />
         )}
-        {!isSelected && <ConnectHandles cardId={card.id} onStart={isReadonly ? undefined : onStartConnect} />}
         {linkCardsMode && onLinkCardsClick && (
           <LinkCardsOverlay cardId={card.id} isSource={isLinkSource} onClick={onLinkCardsClick} />
         )}
+        {/* Span hors-écran pour mesurer la largeur du texte (auto-resize on blur) */}
+        <span
+          ref={labelMeasureRef}
+          aria-hidden="true"
+          style={{
+            position: 'fixed', left: -9999, top: -9999,
+            whiteSpace: 'pre', visibility: 'hidden', pointerEvents: 'none',
+            fontSize: labelFmt.size,
+            fontWeight: labelFmt.bold ? 'bold' : 'normal',
+            fontStyle: labelFmt.italic ? 'italic' : 'normal',
+          }}
+        >
+          {content || 'Étiquette…'}
+        </span>
       </div>
     )
   }
@@ -561,6 +605,18 @@ export const BoardCard = memo(function BoardCard({
           </div>
         ) : (
           <>
+            {card.type === 'LINK' && !card.locked && (
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-gray-500/60 hover:text-primary-600 hover:bg-primary-100/60 transition-colors"
+                title="Modifier le lien"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            )}
             {card.type !== 'LINK' && !card.locked && (
               <button
                 onMouseDown={(e) => e.stopPropagation()}
@@ -607,23 +663,51 @@ export const BoardCard = memo(function BoardCard({
       <div className={`px-3 ${isEditing && card.type === 'TEXT' ? 'pb-2' : 'flex-1 min-h-0 overflow-hidden'}`}>
         {card.type === 'IMAGE' ? (
           <img src={card.content} alt="" className="w-full h-full object-contain rounded" draggable={false} />
+        ) : card.type === 'LINK' && isEditing ? (
+          <input
+            autoFocus
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() } else handleKeyDown(e) }}
+            placeholder="https://…"
+            className="w-full bg-transparent text-xs text-blue-600 dark:text-blue-400 focus:outline-none break-all"
+            onMouseDown={(e) => e.stopPropagation()}
+          />
         ) : card.type === 'LINK' ? (
           <a
             href={card.content}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-col items-center justify-center gap-2 h-full"
+            className="flex flex-col h-full overflow-hidden rounded"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={handleDoubleClick}
           >
-            <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-            </div>
-            <p className="text-[11px] text-blue-600 text-center break-all line-clamp-2 leading-tight font-medium">
-              {card.content}
-            </p>
+            {card.meta ? (
+              <>
+                {card.meta.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={card.meta.image} alt="" className="w-full flex-[2] min-h-0 object-cover" draggable={false} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                )}
+                <div className="flex-1 flex flex-col justify-center px-2.5 py-2 min-h-0 overflow-hidden">
+                  <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 leading-snug">{card.meta.title}</p>
+                  {card.meta.siteName && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{card.meta.siteName}</p>}
+                  {!card.meta.siteName && <p className="text-[10px] text-blue-400 mt-0.5 truncate">{card.content}</p>}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 h-full">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <p className="text-[11px] text-blue-600 text-center break-all line-clamp-2 leading-tight font-medium">
+                  {card.content}
+                </p>
+              </div>
+            )}
           </a>
         ) : isEditing ? (
           <textarea
@@ -643,12 +727,54 @@ export const BoardCard = memo(function BoardCard({
             placeholder="Votre idée…"
             onMouseDown={(e) => e.stopPropagation()}
           />
-        ) : (
+        ) : displayContent ? (
           <p className="whitespace-pre-wrap break-words leading-relaxed" style={textStyle}>
-            {content || <span className="text-gray-400/70 text-xs italic">Double-cliquer pour écrire</span>}
+            {displayContent}
           </p>
-        )}
+        ) : !card.meta || !firstUrl ? (
+          <p className="whitespace-pre-wrap break-words leading-relaxed" style={textStyle}>
+            <span className="text-gray-400/70 text-xs italic">Double-cliquer pour écrire</span>
+          </p>
+        ) : null}
       </div>
+
+      {/* ── Link preview (TEXT card with URL in content) ── */}
+      {isText && !isEditing && card.meta && firstUrl && (
+        <a
+          href={firstUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 flex items-center gap-0 mx-2 mb-1.5 rounded-xl overflow-hidden border border-gray-200/80 bg-gray-50 hover:bg-gray-100 transition-colors"
+          style={{ minHeight: 44 }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {card.meta.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={card.meta.image}
+              alt=""
+              className="w-11 h-11 object-cover shrink-0"
+              draggable={false}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          ) : (
+            <div className="w-11 h-11 shrink-0 bg-blue-50 flex items-center justify-center">
+              <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+          )}
+          <div className="flex-1 min-w-0 px-2 py-1">
+            {card.meta.title && (
+              <p className="text-[11px] font-semibold text-gray-800 truncate leading-snug">{card.meta.title}</p>
+            )}
+            <p className="text-[10px] text-gray-400 truncate mt-0.5">
+              {card.meta.siteName ?? (() => { try { return new URL(firstUrl).hostname.replace(/^www\./, '') } catch { return firstUrl } })()}
+            </p>
+          </div>
+        </a>
+      )}
 
       {/* ── Chips ── */}
       {chips.length > 0 && maxVisible > 0 && (

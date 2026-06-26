@@ -10,9 +10,11 @@ interface Props {
   onClose?: () => void
   // Rapport d'une activité clôturée : libellés adaptés, bouton "Fermer le rapport"
   reportMode?: boolean
+  // Libellé personnalisé pour le bouton de fermeture
+  closeLabel?: string
 }
 
-export function ActivityResults({ activity, responses, participantCount, onClose, reportMode }: Props) {
+export function ActivityResults({ activity, responses, participantCount, onClose, reportMode, closeLabel }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -37,7 +39,7 @@ export function ActivityResults({ activity, responses, participantCount, onClose
           onClick={onClose}
           className="w-full rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 transition-colors"
         >
-          {reportMode ? 'Fermer le rapport' : 'Terminer l\'activité'}
+          {closeLabel ?? (reportMode ? 'Fermer le rapport' : 'Terminer l\'activité')}
         </button>
       )}
     </div>
@@ -48,6 +50,10 @@ function PollResults({ activity, responses, showCorrect = false }: { activity: A
   const options = activity.config.options as string[]
   const correctAnswer = activity.config.correctAnswer as number | undefined
   const total = responses.length
+
+  if (total === 0) {
+    return <p className="text-xs text-gray-400 text-center py-3">En attente de réponses…</p>
+  }
 
   const counts = options.map((_, i) =>
     responses.filter((r) => (r as { value: number }).value === i).length
@@ -81,32 +87,68 @@ function PollResults({ activity, responses, showCorrect = false }: { activity: A
   )
 }
 
+// #113 — clé de regroupement des mots « proches » : insensible à la casse, aux accents
+// et à la ponctuation. Sert uniquement à fusionner ; l'affichage garde la forme saisie.
+function wordKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '') // retire les accents (café → cafe)
+    .replace(/[^\p{L}\p{N}]+/gu, '')                   // ne garde que lettres/chiffres
+}
+
 function WordcloudResults({ responses }: { responses: unknown[] }) {
-  const words: Record<string, number> = {}
+  // Regroupe par clé normalisée ; mémorise les formes saisies pour afficher la plus fréquente.
+  const groups = new Map<string, { count: number; forms: Map<string, number> }>()
   responses.forEach((r) => {
-    const word = ((r as { value: string }).value ?? '').trim().toLowerCase()
-    if (word) words[word] = (words[word] ?? 0) + 1
+    const raw = ((r as { value: string }).value ?? '').trim()
+    const key = wordKey(raw)
+    if (!key) return
+    const g = groups.get(key) ?? { count: 0, forms: new Map<string, number>() }
+    g.count += 1
+    g.forms.set(raw, (g.forms.get(raw) ?? 0) + 1)
+    groups.set(key, g)
   })
 
-  const max = Math.max(...Object.values(words), 1)
-  const sorted = Object.entries(words).sort((a, b) => b[1] - a[1])
+  // Fusionne les pluriels simples : « idées » → « idée » quand la forme singulière existe.
+  for (const key of [...groups.keys()]) {
+    const singular = key.length > 3 && /s$/.test(key) ? key.slice(0, -1) : null
+    if (singular && groups.has(singular)) {
+      const plural = groups.get(key)!
+      const base = groups.get(singular)!
+      base.count += plural.count
+      for (const [form, n] of plural.forms) base.forms.set(form, (base.forms.get(form) ?? 0) + n)
+      groups.delete(key)
+    }
+  }
 
-  if (sorted.length === 0) {
+  const items = [...groups.values()]
+    .map((g) => ({
+      // Forme affichée : la plus saisie (à égalité, la première rencontrée).
+      label: [...g.forms.entries()].sort((a, b) => b[1] - a[1])[0][0],
+      count: g.count,
+    }))
+    .sort((a, b) => b.count - a.count)
+
+  const max = Math.max(...items.map((i) => i.count), 1)
+
+  if (items.length === 0) {
     return <p className="text-xs text-gray-400 text-center py-4">En attente de contributions…</p>
   }
 
   return (
     <div className="flex flex-wrap gap-2 py-2">
-      {sorted.map(([word, count]) => {
+      {items.map(({ label, count }) => {
         const size = Math.round(12 + (count / max) * 20)
         const opacity = 0.5 + (count / max) * 0.5
         return (
           <span
-            key={word}
+            key={label}
             className="font-semibold text-primary-600 transition-all"
             style={{ fontSize: size, opacity }}
+            title={count > 1 ? `${count} contributions` : '1 contribution'}
           >
-            {word}
+            {label}
           </span>
         )
       })}

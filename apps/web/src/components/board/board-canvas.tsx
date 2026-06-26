@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useMemo, useCallback, forwardRef, useImper
 import type { Card, Frame, BoardField, Connection, VoteSession, ClipboardCard } from '@/hooks/useBoard'
 import { groupColor } from '@/hooks/useBoard'
 import { BoardCard } from './board-card'
+import { CropModal } from './crop-modal'
 import { FrameItem } from './frame-item'
 import { CardDetailModal } from './card-detail-modal'
 import { ConnectionLine } from './connection-line'
@@ -184,6 +185,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   const [viewReady, setViewReady] = useState(false)
 
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
+  const [cropCardId, setCropCardId] = useState<string | null>(null)
 
   // Hold Space to temporarily pan with left-drag, whatever the active tool.
   const [spaceHeld, setSpaceHeld] = useState(false)
@@ -234,6 +236,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedConnId])
+  // #111 — changer d'outil ferme la barre contextuelle de connexion (sa palette de
+  // couleur incluse), comme la sélection de cartes est vidée au changement d'outil.
+  useEffect(() => {
+    setSelectedConnId(null)
+  }, [toolMode])
 
   // Reset linkSourceId whenever we leave link-cards mode
   useEffect(() => {
@@ -431,11 +438,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
       const items = e.clipboardData?.items
       if (!items) return
 
-      // Image takes priority
+      // Image takes priority — also handles files copied from OS explorer (type may be empty)
       for (const item of Array.from(items)) {
-        if (!item.type.startsWith('image/')) continue
+        if (item.kind !== 'file') continue
         const file = item.getAsFile()
         if (!file) continue
+        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(file.name)
+        if (!isImage) continue
         e.preventDefault()
         const reader = new FileReader()
         reader.onload = (ev) => {
@@ -571,8 +580,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
       window.removeEventListener('mouseup', onUp)
       if (rb && (rb.w > 5 || rb.h > 5)) {
         onSelectCards(new Set(cards.filter((c) =>
-          c.posX + c.width > rb!.x && c.posX < rb!.x + rb!.w &&
-          c.posY + c.height > rb!.y && c.posY < rb!.y + rb!.h
+          c.posX >= rb!.x && c.posX + c.width <= rb!.x + rb!.w &&
+          c.posY >= rb!.y && c.posY + c.height <= rb!.y + rb!.h
         ).map((c) => c.id)))
       } else {
         onSelectCards(new Set())
@@ -589,17 +598,20 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     if (toolMode === 'select' || toolMode === 'draw' || toolMode === 'link-cards') return
 
     const p = toCanvas(e.clientX, e.clientY)
+    // #114 — taille écran constante quel que soit le zoom : on convertit la taille
+    // souhaitée à l'écran en taille « monde » (÷ zoom). Offsets de centrage scalés d'autant.
+    const s = 1 / zoom
 
     if (toolMode === 'text') {
-      onAddCard(p.x - 80, p.y - 14, 'LABEL', '', '#374151', 160, 28)
+      onAddCard(p.x - 50 * s, p.y - 14 * s, 'LABEL', '', '#374151', 100 * s, 28 * s)
     } else if (toolMode === 'sticky') {
-      onAddCard(p.x - 96, p.y - 64, 'TEXT', '', toolColor)
+      onAddCard(p.x - 96 * s, p.y - 64 * s, 'TEXT', '', toolColor, 192 * s, 128 * s)
     } else if (toolMode === 'table') {
-      onAddCard(p.x - 180, p.y - 60, 'TABLE', serializeTable([['', '', ''], ['', '', ''], ['', '', '']]), '#E0E7FF', 360, 124)
+      onAddCard(p.x - 180 * s, p.y - 60 * s, 'TABLE', serializeTable([['', '', ''], ['', '', ''], ['', '', '']]), '#E0E7FF', 360 * s, 124 * s)
     } else if (toolMode === 'rect' || toolMode === 'circle' || toolMode === 'diamond' || toolMode === 'triangle' || toolMode === 'line' || toolMode === 'star') {
-      onAddCard(p.x - 75, p.y - 75, 'SHAPE', `${toolMode}|${toolStroke}|${toolFill}|${toolOpacity}`, toolColor, 150, 150)
+      onAddCard(p.x - 75 * s, p.y - 75 * s, 'SHAPE', `${toolMode}|${toolStroke}|${toolFill}|${toolOpacity}`, toolColor, 150 * s, 150 * s)
     } else if (toolMode === 'link') {
-      setLinkPopover({ screenX: e.clientX, screenY: e.clientY, canvasX: p.x - 100, canvasY: p.y - 36 })
+      setLinkPopover({ screenX: e.clientX, screenY: e.clientY, canvasX: p.x - 100 * s, canvasY: p.y - 40 * s })
     }
   }
 
@@ -609,7 +621,48 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     if (toolMode !== 'select') return
     if ((e.target as HTMLElement) !== e.currentTarget) return
     const p = toCanvas(e.clientX, e.clientY)
-    onAddCard(p.x - 96, p.y - 64)
+    const s = 1 / zoom // #114 — taille écran constante quel que soit le zoom
+    onAddCard(p.x - 96 * s, p.y - 64 * s, 'TEXT', '', undefined, 192 * s, 128 * s)
+  }
+
+  // ── Drag & drop image files from OS explorer ────────────────────────────────
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (isReadonly) return
+    const hasImageFile = Array.from(e.dataTransfer.items).some(
+      (item) => item.kind === 'file' && (item.type.startsWith('image/') || item.type === '')
+    )
+    if (!hasImageFile) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    if (isReadonly) return
+    const files = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name)
+    )
+    if (files.length === 0) return
+    e.preventDefault()
+    const dropPos = toCanvas(e.clientX, e.clientY)
+    let offsetX = dropPos.x
+    for (const file of files) {
+      const reader = new FileReader()
+      const capturedX = offsetX
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string
+        const img = new Image()
+        img.onload = () => {
+          const MAX_W = 700, MAX_H = 600
+          const ratio = Math.min(MAX_W / img.naturalWidth, MAX_H / img.naturalHeight, 1)
+          const w = Math.round(img.naturalWidth * ratio)
+          const h = Math.round(img.naturalHeight * ratio)
+          onAddCard(capturedX - w / 2, dropPos.y - h / 2, 'IMAGE', dataUrl, 'transparent', w, h)
+        }
+        img.src = dataUrl
+      }
+      reader.readAsDataURL(file)
+      offsetX += 724
+    }
   }
 
   // ── Button zoom (toward canvas center) ──────────────────────────────────────
@@ -821,7 +874,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   function confirmLink() {
     if (!linkPopover || !linkUrl.trim()) { setLinkPopover(null); setLinkUrl(''); return }
     const url = linkUrl.trim().startsWith('http') ? linkUrl.trim() : `https://${linkUrl.trim()}`
-    onAddCard(linkPopover.canvasX, linkPopover.canvasY, 'LINK', url, '#EFF6FF', 200, 80)
+    const s = 1 / zoom // #114 — taille écran constante quel que soit le zoom (offset de centrage déjà scalé à l'ouverture du popover)
+    onAddCard(linkPopover.canvasX, linkPopover.canvasY, 'LINK', url, '#EFF6FF', 200 * s, 80 * s)
     setLinkPopover(null)
     setLinkUrl('')
   }
@@ -933,6 +987,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
   const hStartDragCard  = useStableHandler(onStartDragCard)
   const hCommitDragCard = useStableHandler((id: string) => { clearGuides(); onCommitDragCard(id) })
   const hUpdateCard     = useStableHandler(onUpdateCard)
+  const hCropCard       = useStableHandler((id: string) => setCropCardId(id))
   const hRecolorCard    = useStableHandler(onRecolorCard)
   const hDeleteCard     = useStableHandler(onDeleteCard)
   const hResizeCard     = useStableHandler(onResizeCard)
@@ -1003,8 +1058,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
     ]
     return pool.map((card) => {
       const dimmed = !!highlightedGroupId && card.groupId !== highlightedGroupId
+      // #110 — isolation: confine les z-index internes (points d'ancrage z:40, barres)
+      // à la carte, sinon ils se peignent au-dessus du corps des autres cartes (z:auto).
       return (
-        <div key={card.id} style={{ opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
+        <div key={card.id} style={{ isolation: 'isolate', opacity: dimmed ? 0.12 : 1, transition: 'opacity 0.2s', pointerEvents: dimmed ? 'none' : undefined }}>
           <BoardCard
             card={card}
             fields={fields}
@@ -1019,6 +1076,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
             onCommitDrag={hCommitDragCard}
             onUpdate={hUpdateCard}
             onRecolor={hRecolorCard}
+            onCrop={isReadonly ? undefined : hCropCard}
             onDelete={hDeleteCard}
             onResize={hResizeCard}
             onResizeBox={hResizeCardBox}
@@ -1083,6 +1141,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
         onMouseDown={handleCanvasMouseDown}
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDoubleClick}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         {/* ── Transformed infinite canvas ── */}
         <div
@@ -1385,6 +1445,26 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, Props>(function BoardCa
           onClose={() => setDetailCardId(null)}
         />
       )}
+
+      {cropCardId && (() => {
+        const cropCard = cards.find((c) => c.id === cropCardId)
+        if (!cropCard) return null
+        return (
+          <CropModal
+            src={cropCard.content}
+            onConfirm={(dataUrl, nw, nh) => {
+              const MAX_W = 700, MAX_H = 600
+              const ratio = Math.min(MAX_W / nw, MAX_H / nh, 1)
+              const w = Math.round(nw * ratio)
+              const h = Math.round(nh * ratio)
+              onUpdateCard(cropCardId, dataUrl)
+              onResizeCard(cropCardId, w, h)
+              setCropCardId(null)
+            }}
+            onClose={() => setCropCardId(null)}
+          />
+        )
+      })()}
     </>
   )
 })

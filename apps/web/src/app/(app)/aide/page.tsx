@@ -155,8 +155,8 @@ function CollapsibleSection({ title, subtitle, defaultOpen = false, children }: 
 
 const TEST_BOOKS = [
   { module: 'Dashboard / Hub', file: 'CT-v0.15.1-dashboard.pdf', tests: 32, pages: 2 },
-  { module: 'Boards éditeur',  file: 'CT-v0.15.1-boards.pdf',    tests: 82, pages: 5 },
-  { module: 'Sessions live',   file: 'CT-v0.15.1-sessions.pdf',  tests: 37, pages: 3 },
+  { module: 'Boards éditeur',  file: 'CT-v0.19.0-boards.pdf',    tests: 91, pages: 6 },
+  { module: 'Sessions live',   file: 'CT-v0.19.0-sessions.pdf',  tests: 43, pages: 3 },
   { module: 'Scrum Poker',     file: 'CT-v0.15.1-scrum.pdf',     tests: 36, pages: 3 },
   { module: 'Daily Standup',   file: 'CT-v0.15.1-daily.pdf',     tests: 28, pages: 2 },
   { module: 'La Roue',         file: 'CT-v0.15.1-roue.pdf',      tests: 39, pages: 3 },
@@ -290,6 +290,18 @@ export default function AidePage() {
           ))}
         </div>
       </CollapsibleSection>
+
+      {/* Easter egg — lien discret vers les mini-jeux */}
+      <div className="flex justify-end pt-2">
+        <Link
+          href="/games"
+          title="..."
+          className="text-gray-200 dark:text-gray-800 hover:text-gray-400 dark:hover:text-gray-600 transition-colors text-base select-none"
+          tabIndex={-1}
+        >
+          🎮
+        </Link>
+      </div>
 
     </div>
   )

@@ -11,12 +11,19 @@ type ResourceInfo = { ownerId: string; name: string }
 const RESOLVERS: Record<string, (id: string) => Promise<ResourceInfo | null>> = {
   scrum: (id) => prisma.scrumRoom.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
   daily: (id) => prisma.dailySession.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
+  team: (id) => prisma.team.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
+  wheel: (id) => prisma.wheelEvent.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
+  capacity: (id) => prisma.capacityEvent.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
+  meetops: (id) => prisma.meetEvent.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
+  quiz: (id) => prisma.quiz.findUnique({ where: { id }, select: { ownerId: true, title: true } }).then((q) => q ? { ownerId: q.ownerId, name: q.title } : null),
+  roadmap: (id) => prisma.roadmap.findUnique({ where: { id }, select: { ownerId: true, name: true } }),
 }
 
-const MODULE_LABEL: Record<string, string> = { scrum: 'Scrum Poker', daily: 'Daily' }
-const MODULE_LINK: Record<string, string> = { scrum: '/scrum', daily: '/daily' }
+const MODULE_LABEL: Record<string, string> = { scrum: 'Scrum Poker', daily: 'Daily', team: 'Équipe', wheel: 'La Roue', capacity: 'Capacité', meetops: 'MeetOps', quiz: 'Quiz', roadmap: 'Roadmap' }
+const MODULE_LINK: Record<string, string> = { scrum: '/scrum', daily: '/daily', team: '/equipes', wheel: '/wheel', capacity: '/capacity', meetops: '/meetops', quiz: '/quiz', roadmap: '/roadmap' }
 
 const inviteSchema = z.object({ email: z.string().email(), role: z.enum(['VIEWER', 'EDITOR']) })
+const inviteTeamSchema = z.object({ teamId: z.string().min(1), role: z.enum(['VIEWER', 'EDITOR']) })
 const roleSchema = z.object({ role: z.enum(['VIEWER', 'EDITOR']) })
 
 const SHARE_SELECT = {
@@ -78,6 +85,49 @@ export const shareRoutes: FastifyPluginAsync = async (app) => {
       link: MODULE_LINK[module] ?? null,
     })
     return reply.status(201).send(share)
+  })
+
+  // Inviter tous les membres d'une équipe en lot (propriétaire uniquement).
+  app.post('/:module/:resourceId/invite-team', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const owner = await loadAsOwner(request, reply)
+    if (!owner) return
+    const { id: resourceOwnerId } = request.user as { id: string }
+    const { module, resourceId } = request.params as { module: string; resourceId: string }
+    const { teamId, role } = inviteTeamSchema.parse(request.body)
+
+    // Collect user accounts with access to the team: team owner + shared users.
+    const team = await prisma.team.findUnique({ where: { id: teamId }, select: { ownerId: true } })
+    if (!team) return reply.status(404).send({ error: 'Équipe introuvable.' })
+    const teamShares = await prisma.moduleShare.findMany({ where: { module: 'team', resourceId: teamId }, select: { userId: true } })
+    const userIds = [...new Set([team.ownerId, ...teamShares.map((s) => s.userId)])].filter((id) => id !== resourceOwnerId)
+    if (userIds.length === 0) return reply.status(200).send([])
+
+    // Batch-upsert shares for the target resource.
+    await prisma.moduleShare.createMany({
+      data: userIds.map((userId) => ({ module, resourceId, userId, role })),
+      skipDuplicates: true,
+    })
+    // createMany doesn't support upsert on conflicts; use updateMany to set role on existing rows.
+    await prisma.moduleShare.updateMany({ where: { module, resourceId, userId: { in: userIds } }, data: { role } })
+
+    const created = await prisma.moduleShare.findMany({
+      where: { module, resourceId, userId: { in: userIds } },
+      select: SHARE_SELECT,
+      orderBy: { createdAt: 'asc' },
+    })
+    audit(resourceOwnerId, 'module.share.team-invited', request, `${module}:${resourceId}`)
+    await Promise.all(
+      created.map((s) =>
+        notify({
+          userId: s.user.id,
+          type: 'MODULE_SHARED',
+          title: `${MODULE_LABEL[module] ?? module} partagé avec vous`,
+          body: `Accès ${role === 'EDITOR' ? 'Éditeur' : 'Lecteur'} accordé via une équipe.`,
+          link: MODULE_LINK[module] ?? null,
+        }),
+      ),
+    )
+    return reply.status(201).send(created)
   })
 
   // Changer le rôle d'un partage (propriétaire uniquement).

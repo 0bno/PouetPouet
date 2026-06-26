@@ -44,7 +44,7 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
     room, participantCount, participantNames, isLoading,
     addTicket, bulkAddTickets, activateTicket, reveal, vote,
     setEstimate, bulkEstimate, resetTicket, deleteTicket, updateScale,
-    setQueue, clearQueue,
+    setQueue, clearQueue, kickParticipant, clearParticipants,
   } = useScrum(id)
 
   const [newTicketTitle, setNewTicketTitle] = useState('')
@@ -54,6 +54,9 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
   // Import en masse
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
+  const [importTab, setImportTab] = useState<'text' | 'excel'>('text')
+  const [excelTitles, setExcelTitles] = useState<string[]>([])
+  const [excelFileName, setExcelFileName] = useState('')
 
   // Sélection pour estimation / suppression en masse
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set())
@@ -62,6 +65,9 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
   // Participation de l'hôte au vote
   const [hostParticipating, setHostParticipating] = useState<boolean | null>(null)
   const [hostVote, setHostVote] = useState<string | null>(null)
+
+  // Panneau participants (kick)
+  const [showParticipants, setShowParticipants] = useState(false)
 
   // File d'estimation : mode construction + brouillon ordonné de ticketIds
   const [queueMode, setQueueMode] = useState(false)
@@ -73,9 +79,10 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
   // Réinitialiser le vote de l'hôte à chaque nouveau ticket actif
   useEffect(() => { setHostVote(null) }, [activeTicket?.id])
 
-  function copyCode() {
+  function copyLink() {
     if (!room) return
-    navigator.clipboard.writeText(room.code)
+    const url = `${window.location.origin}/scrum/join/${room.code}`
+    navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -94,6 +101,41 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
     bulkAddTickets(titles)
     setImportText('')
     setShowImport(false)
+  }
+
+  async function handleExcelFile(file: File) {
+    if (!file.name.match(/\.(xlsx|xls)$/i)) return
+    const { read, utils } = await import('xlsx')
+    const buf = await file.arrayBuffer()
+    const wb = read(buf)
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][]
+    const titles = rows.slice(1).map((r) => String(r[0] ?? '').trim()).filter(Boolean)
+    setExcelTitles(titles)
+    setExcelFileName(file.name)
+  }
+
+  function handleExcelImport() {
+    if (excelTitles.length === 0) return
+    bulkAddTickets(excelTitles)
+    setExcelTitles([])
+    setExcelFileName('')
+    setShowImport(false)
+  }
+
+  function downloadTemplate() {
+    import('xlsx').then(({ utils, writeFile }) => {
+      const ws = utils.aoa_to_sheet([
+        ['Titre'],
+        ['US-001 Page de connexion'],
+        ['US-002 Dashboard'],
+        ['US-003 Profil utilisateur'],
+      ])
+      ws['!cols'] = [{ wch: 40 }]
+      const wb = utils.book_new()
+      utils.book_append_sheet(wb, ws, 'Tickets')
+      writeFile(wb, 'template-scrum-tickets.xlsx')
+    })
   }
 
   function handleSetEstimate() {
@@ -165,10 +207,6 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
     return <div className="text-center py-24 text-gray-400">Salle introuvable</div>
   }
 
-  const joinUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/scrum/join/${room.code}`
-    : `/scrum/join/${room.code}`
-
   const pendingTickets = room.tickets.filter((t) => t.status === 'PENDING')
   const ticketsById = new Map(room.tickets.map((t) => [t.id, t]))
   const queueActive = room.queue.length > 0
@@ -184,35 +222,61 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">{room.name}</h1>
 
-        {/* Code */}
         <button
-          onClick={copyCode}
-          title="Copier le code"
+          onClick={copyLink}
+          title="Copier le lien d'invitation"
           className="flex items-center gap-1.5 rounded-lg bg-primary-50 border border-primary-200 px-3 py-1.5 text-sm font-mono font-bold text-primary-700 hover:bg-primary-100 transition-colors"
         >
           {room.code}
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          {copied && <span className="text-green-600 font-normal text-xs">Copié !</span>}
+          {copied && <span className="text-green-600 font-normal text-xs">Lien copié !</span>}
         </button>
 
         {/* Participants */}
-        <div className="relative group">
-          <span className="flex items-center gap-1.5 text-sm text-gray-500 bg-gray-100 rounded-lg px-3 py-1.5 cursor-default select-none">
+        <div className="relative">
+          <button
+            onClick={() => setShowParticipants((v) => !v)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 bg-gray-100 rounded-lg px-3 py-1.5 hover:bg-gray-200 transition-colors select-none"
+          >
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             {participantCount} participant{participantCount !== 1 ? 's' : ''}
-          </span>
-          {participantNames.length > 0 && (
-            <div className="absolute top-full left-0 mt-1.5 z-20 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 w-full">
-              <div className="bg-gray-900 text-white text-xs rounded-xl px-3 py-2 shadow-xl">
-                {participantNames.map((name) => (
-                  <div key={name} className="flex items-center gap-1.5 py-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                    {name}
-                  </div>
-                ))}
-              </div>
+          </button>
+          {showParticipants && (
+            <div
+              className="absolute top-full left-0 mt-1.5 z-30 min-w-[180px] bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl shadow-xl"
+              onMouseLeave={() => setShowParticipants(false)}
+            >
+              {participantNames.length === 0 ? (
+                <p className="text-xs text-gray-400 px-3 py-2">Aucun participant</p>
+              ) : (
+                <div className="py-1">
+                  {participantNames.map((name) => (
+                    <div key={name} className="group/row flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                      <span className="text-xs text-gray-700 dark:text-gray-200 flex-1 truncate">{name}</span>
+                      <button
+                        onClick={() => kickParticipant(name)}
+                        title="Exclure"
+                        className="opacity-0 group-hover/row:opacity-100 text-gray-300 hover:text-red-500 transition-opacity text-xs px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {participantNames.length > 0 && (
+                <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-1.5">
+                  <button
+                    onClick={() => { clearParticipants(); setShowParticipants(false) }}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium w-full text-left"
+                  >
+                    Vider la salle
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -234,15 +298,6 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
           ))}
         </div>
 
-        {/* Join link */}
-        <a
-          href={joinUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-primary-500 hover:underline truncate max-w-xs"
-        >
-          {joinUrl}
-        </a>
       </div>
 
       <div className="flex gap-6 flex-1 min-h-0">
@@ -281,33 +336,100 @@ export default function ScrumRoomPage({ params }: { params: Promise<{ id: string
 
           {/* Bulk import panel */}
           {showImport && (
-            <form onSubmit={handleImport} className="flex flex-col gap-2 bg-primary-50 border border-primary-200 rounded-xl p-3">
-              <p className="text-xs font-semibold text-primary-700">Importer plusieurs tickets</p>
-              <textarea
-                autoFocus
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder={"Un ticket par ligne :\nLogin page\nDashboard\nUser settings…"}
-                rows={5}
-                className="w-full text-sm border border-primary-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none bg-white"
-              />
-              <div className="flex gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => { setShowImport(false); setImportText('') }}
-                  className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={!importText.trim()}
-                  className="px-3 py-1.5 text-xs font-semibold bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-40"
-                >
-                  Importer ({importText.split('\n').filter((l) => l.trim()).length})
-                </button>
+            <div className="flex flex-col gap-2 bg-primary-50 border border-primary-200 rounded-xl p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-primary-700">Importer plusieurs tickets</p>
+                <div className="flex gap-1 bg-white border border-primary-200 rounded-lg p-0.5">
+                  {(['text', 'excel'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setImportTab(tab)}
+                      className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors ${
+                        importTab === tab ? 'bg-primary-600 text-white' : 'text-primary-600 hover:bg-primary-50'
+                      }`}
+                    >
+                      {tab === 'text' ? 'Texte' : 'Excel'}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </form>
+
+              {importTab === 'text' ? (
+                <form onSubmit={handleImport} className="flex flex-col gap-2">
+                  <textarea
+                    autoFocus
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder={"Un ticket par ligne :\nLogin page\nDashboard\nUser settings…"}
+                    rows={5}
+                    className="w-full text-sm border border-primary-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none bg-white"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setShowImport(false); setImportText('') }}
+                      className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!importText.trim()}
+                      className="px-3 py-1.5 text-xs font-semibold bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-40"
+                    >
+                      Importer ({importText.split('\n').filter((l) => l.trim()).length})
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-primary-200 rounded-xl px-3 py-4 cursor-pointer hover:border-primary-400 hover:bg-white/60 transition-colors">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="sr-only"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleExcelFile(f) }}
+                    />
+                    <svg className="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="text-xs text-primary-600 font-medium">
+                      {excelFileName || 'Choisir un fichier .xlsx'}
+                    </span>
+                    {excelTitles.length > 0 && (
+                      <span className="text-[11px] text-green-600 font-semibold">
+                        {excelTitles.length} ticket{excelTitles.length > 1 ? 's' : ''} détecté{excelTitles.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    className="text-[11px] text-primary-500 hover:text-primary-700 hover:underline text-left"
+                  >
+                    Télécharger le modèle Excel
+                  </button>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setShowImport(false); setExcelTitles([]); setExcelFileName('') }}
+                      className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExcelImport}
+                      disabled={excelTitles.length === 0}
+                      className="px-3 py-1.5 text-xs font-semibold bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-40"
+                    >
+                      Importer ({excelTitles.length})
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── File d'estimation ── */}

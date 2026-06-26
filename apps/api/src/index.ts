@@ -22,6 +22,7 @@ import { teamRoutes } from './routes/teams.js'
 import { webhookRoutes, deliverWebhooks } from './routes/webhooks.js'
 import { flagRoutes } from './routes/flags.js'
 import { shareRoutes } from './routes/shares.js'
+import { gamesRoutes } from './modules/games/games.routes.js'
 import { registerModuleRoutes } from './modules/registry.js'
 import { registerSocketHandlers } from './sockets/index.js'
 import { setIO, getIO } from './lib/io.js'
@@ -90,7 +91,9 @@ await app.register(cors, {
 
 await app.register(jwt, {
   secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
-  sign: { expiresIn: '30m' },
+  // 4h = une demi-journée de travail sans réauth. Les sessions actives sont
+  // renouvelées en continu côté client (refresh glissant), les inactives lapsent.
+  sign: { expiresIn: '4h' },
 })
 
 await app.register(cookie)
@@ -152,6 +155,7 @@ app.register(teamRoutes, { prefix: '/api/teams' })
 app.register(webhookRoutes, { prefix: '/api/webhooks' })
 app.register(flagRoutes, { prefix: '/api' })
 app.register(shareRoutes, { prefix: '/api/shares' })
+app.register(gamesRoutes, { prefix: '/api/games' })
 
 // Modules FORGE : montés depuis le registre (cf. modules/registry.ts)
 registerModuleRoutes(app)
@@ -275,6 +279,7 @@ const io = new Server(app.server, {
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
     credentials: true,
   },
+  maxHttpBufferSize: 50 * 1024 * 1024,
 })
 
 // Redis adapter : active si Redis est connecté (prod avec REDIS_HOST).
