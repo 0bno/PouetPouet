@@ -926,14 +926,14 @@ export default function MeetopsCalendarPage() {
                 className="text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-3 py-1.5">
                 Événements{filter.eventIds ? ` (${filter.eventIds.length})` : ''}
               </button>
-              <div className="relative">
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setFilterOpen((o) => !o)}
                   className={`text-sm font-medium border rounded-lg px-3 py-1.5 ${activeFilterCount ? 'border-primary-400 text-primary-600' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                   Filtres{activeFilterCount ? ` (${activeFilterCount})` : ''}
                 </button>
                 {filterOpen && <FilterPanel allLabels={allLabels} filter={filter} onChange={setFilter} onClose={() => setFilterOpen(false)} />}
               </div>
-              <div className="relative">
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setSavedOpen((o) => !o)}
                   className="text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-3 py-1.5">★ Vues</button>
                 {savedOpen && (
