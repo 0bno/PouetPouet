@@ -181,7 +181,20 @@ export function useMeetCalendar() {
     await reload()
   }, [reload])
 
-  return { events, isLoading, reload, updateMeeting }
+  const createMeeting = useCallback(async (
+    eventId: string,
+    input: { title: string; startAt: string; durationMin?: number },
+  ) => {
+    await api.post(`/api/meetops/events/${eventId}/meetings`, input)
+    await reload()
+  }, [reload])
+
+  const deleteMeeting = useCallback(async (meetingId: string) => {
+    await api.delete(`/api/meetops/meetings/${meetingId}`)
+    await reload()
+  }, [reload])
+
+  return { events, isLoading, reload, updateMeeting, createMeeting, deleteMeeting }
 }
 
 // ── Templates ──────────────────────────────────────────────────────────────────────
