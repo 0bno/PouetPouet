@@ -385,7 +385,7 @@ function TimeGrid({ columnDays, byDay, todayKey, viewMode, selectedId, onMeeting
                 {/* Meetings */}
                 {laid.map((it, j) => {
                   const top = timeToTop(it.startAt)
-                  const height = Math.max(20, it.durationMin * PX_PER_MIN)
+                  const height = Math.max(18, it.durationMin * PX_PER_MIN - 2)
                   const time = new Date(it.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
                   const colW = 100 / it.totalCols
                   const GAP = 1.5
