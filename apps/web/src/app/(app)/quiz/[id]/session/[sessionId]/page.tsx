@@ -8,7 +8,7 @@ import Link from 'next/link'
 const OPTION_COLORS = ['bg-red-500', 'bg-blue-500', 'bg-yellow-500', 'bg-green-500']
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
-function Timer({ endsAt }: { endsAt: string }) {
+function Timer({ endsAt, timeLimit }: { endsAt: string; timeLimit: number }) {
   const [seconds, setSeconds] = useState(0)
 
   useEffect(() => {
@@ -21,7 +21,7 @@ function Timer({ endsAt }: { endsAt: string }) {
     return () => clearInterval(id)
   }, [endsAt])
 
-  const pct = seconds > 0 ? (seconds / 30) * 100 : 0
+  const pct = seconds > 0 ? (seconds / timeLimit) * 100 : 0
   return (
     <div className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
       <Clock className="w-6 h-6 text-rose-500" />
@@ -162,7 +162,7 @@ export default function QuizSessionPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        {state.questionEndAt && <Timer endsAt={state.questionEndAt} />}
+        {state.questionEndAt && q.timeLimit > 0 && <Timer endsAt={state.questionEndAt} timeLimit={q.timeLimit} />}
 
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
           <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{q.text}</p>

@@ -170,6 +170,21 @@ export const quizRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(204).send()
   })
 
+  // PATCH /api/quiz/:id/questions/bulk — modifier timeLimit ou points de toutes les questions
+  app.patch('/:id/questions/bulk', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id: quizId } = request.params as { id: string }
+    const { id: ownerId } = request.user as { id: string }
+    const quiz = await prisma.quiz.findFirst({ where: { id: quizId, ownerId } })
+    if (!quiz) return reply.status(404).send({ error: 'Quiz introuvable' })
+    const { timeLimit, points } = request.body as { timeLimit?: number; points?: number }
+    const data: { timeLimit?: number; points?: number } = {}
+    if (timeLimit !== undefined) data.timeLimit = timeLimit
+    if (points !== undefined) data.points = points
+    if (Object.keys(data).length === 0) return reply.status(400).send({ error: 'Nothing to update' })
+    await prisma.quizQuestion.updateMany({ where: { quizId }, data })
+    return prisma.quizQuestion.findMany({ where: { quizId }, orderBy: { order: 'asc' } })
+  })
+
   // POST /api/quiz/:id/reorder — réordonner
   app.post('/:id/reorder', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { id: quizId } = request.params as { id: string }
