@@ -148,6 +148,20 @@ export const PDF_MODULE: ModuleManifest = {
   listensTo: [],
 }
 
+export const SIGNDOC_MODULE: ModuleManifest = {
+  id: 'signdoc',
+  name: 'SignDoc',
+  description: 'Signature de documents : workflow de signataires, échéances, preuve inviolable',
+  icon: '✍️',
+  color: '#0d9488',
+  nav: [{ label: 'SignDoc', href: '/signdoc', match: '/signdoc' }],
+  apiPrefix: '/api/signdoc',
+  ownedEntities: ['SignEnvelope', 'SignRecipient', 'SignField', 'SignEvent'],
+  referencedPivots: ['User'],
+  emits: ['signdoc.envelope.completed'],
+  listensTo: [],
+}
+
 /** Modules actifs, dans l'ordre d'affichage de la navigation. */
 export const PIVOT_MODULES: ModuleManifest[] = [
   POUETPOUET_MODULE,
@@ -160,4 +174,5 @@ export const PIVOT_MODULES: ModuleManifest[] = [
   QUIZ_MODULE,
   ROADMAP_MODULE,
   PDF_MODULE,
+  SIGNDOC_MODULE,
 ]

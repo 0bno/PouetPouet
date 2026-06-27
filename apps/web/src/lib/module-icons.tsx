@@ -35,6 +35,7 @@ export const MODULE_ICONS: Record<string, LucideIcon> = {
   quiz:        Zap,
   roadmap:     Map,
   pdf:         FileText,
+  signdoc:     PenLine,
 }
 
 // Icônes pour les activités de board (activity-launcher et boards).
@@ -52,7 +53,6 @@ export const UPCOMING_ICONS: Record<string, LucideIcon> = {
   'Mes poses (PV de pose & label)':   Package,
   "Demande d'accès serveur":          KeyRound,
   'Mes FDR':                          Compass,
-  SignDoc:                            PenLine,
 }
 
 // Icônes pour la page d'aide.

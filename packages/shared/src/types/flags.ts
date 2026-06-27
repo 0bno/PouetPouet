@@ -20,6 +20,7 @@ export const FLAG_DEFINITIONS: FlagDefinition[] = [
   { key: 'module.meetops', label: 'Module MeetOps', description: 'Active le module MeetOps (Hub + accès direct /meetops).', defaultEnabled: true },
   { key: 'module.quiz', label: 'Module Quiz interactif', description: 'Active le module Quiz interactif (Hub + accès direct /quiz).', defaultEnabled: true },
   { key: 'module.roadmap', label: 'Module Roadmap', description: 'Active le module Roadmap (Hub + accès direct /roadmap).', defaultEnabled: true },
+  { key: 'module.signdoc', label: 'Module SignDoc', description: 'Active le module SignDoc (Hub + accès direct /signdoc).', defaultEnabled: false },
   // Fonctionnalités board — gating in-code via useFlag().
   { key: 'board.tables', label: 'Tableaux sur les boards', description: "Active l'outil Tableau dans l'éditeur de board.", defaultEnabled: true },
 ]
