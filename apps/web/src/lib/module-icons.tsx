@@ -34,6 +34,7 @@ export const MODULE_ICONS: Record<string, LucideIcon> = {
   testbooks:   FlaskConical,
   quiz:        Zap,
   roadmap:     Map,
+  pdf:         FileText,
 }
 
 // Icônes pour les activités de board (activity-launcher et boards).
@@ -48,7 +49,6 @@ export const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 export const UPCOMING_ICONS: Record<string, LucideIcon> = {
   Roadmap:                            Map,
   'Mes PIP':                          ClipboardList,
-  'Mes PDF':                          FileText,
   'Mes poses (PV de pose & label)':   Package,
   "Demande d'accès serveur":          KeyRound,
   'Mes FDR':                          Compass,

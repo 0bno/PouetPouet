@@ -83,7 +83,6 @@ function timeAgo(iso: string): string {
 // Modules annoncés, affichage seul (pas encore cliquables)
 const UPCOMING_MODULES: { name: string }[] = [
   { name: 'Mes PIP' },
-  { name: 'Mes PDF' },
   { name: 'Mes poses (PV de pose & label)' },
   { name: "Demande d'accès serveur" },
   { name: 'Mes FDR' },
