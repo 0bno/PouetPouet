@@ -172,11 +172,12 @@ export function quizSocketHandlers(io: Server, socket: Socket) {
 
     const participant = await prisma.quizParticipant.findUnique({
       where: { id: participantId },
-      select: { streak: true },
+      select: { streak: true, bestStreak: true },
     })
 
     const isCorrect = optionIndex === question.correct
     const newStreak = isCorrect ? (participant?.streak ?? 0) + 1 : 0
+    const newBestStreak = Math.max(participant?.bestStreak ?? 0, newStreak)
     const multiplier = calcStreakMultiplier(newStreak)
     const basePoints = isCorrect ? calcPoints(question.points, question.timeLimit, responseMs) : 0
     const pointsEarned = Math.round(basePoints * multiplier)
@@ -190,6 +191,7 @@ export function quizSocketHandlers(io: Server, socket: Socket) {
       data: {
         ...(pointsEarned > 0 ? { score: { increment: pointsEarned } } : {}),
         streak: newStreak,
+        bestStreak: newBestStreak,
       },
     })
 
@@ -220,7 +222,7 @@ export function quizSocketHandlers(io: Server, socket: Socket) {
         take: 10,
       })
       io.to(roomKey(sessionId)).emit('quiz:leaderboard', {
-        podium: participants.map((p) => ({ name: p.name, score: p.score })),
+        podium: participants.map((p) => ({ name: p.name, score: p.score, bestStreak: p.bestStreak })),
       })
       const state = await buildState(sessionId)
       if (state) io.to(roomKey(sessionId)).emit('quiz:state', state)
@@ -328,7 +330,7 @@ async function endSession(io: Server, sessionId: string) {
     where: { sessionId },
     orderBy: { score: 'desc' },
   })
-  const podium = participants.map((p, idx) => ({ name: p.name, score: p.score, rank: idx + 1 }))
+  const podium = participants.map((p, idx) => ({ name: p.name, score: p.score, rank: idx + 1, bestStreak: p.bestStreak }))
   io.to(roomKey(sessionId)).emit('quiz:ended', { podium })
 
   const state = await buildState(sessionId)

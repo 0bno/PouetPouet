@@ -75,11 +75,16 @@ export default function QuizSessionPage({ params }: { params: Promise<{ id: stri
           <Trophy className="w-6 h-6 text-amber-500" />
           Résultats finaux — {state.quizTitle}
         </h1>
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
           {ended.podium.map((p) => (
-            <div key={p.name} className="flex items-center gap-4 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
-              <span className="text-lg font-bold text-gray-400 w-8">{p.rank}</span>
+            <div key={p.name} className="flex items-center gap-4 px-5 py-3">
+              <span className="text-lg font-bold text-gray-300 dark:text-gray-600 w-8">{p.rank}</span>
               <span className="flex-1 font-semibold text-gray-900 dark:text-gray-100">{p.name}</span>
+              {p.bestStreak >= 2 && (
+                <span className="text-xs font-medium text-orange-500 bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-full">
+                  🔥 ×{p.bestStreak}
+                </span>
+              )}
               <span className="font-bold text-rose-600">{p.score.toLocaleString()} pts</span>
             </div>
           ))}
