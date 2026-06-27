@@ -24,7 +24,11 @@ export function PdfPageCanvas({ docUrl, pageNumber, scale = 1, className }: Prop
           import.meta.url,
         ).toString()
 
-        const pdf = await pdfjsLib.getDocument({ url: docUrl, withCredentials: false }).promise
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const pdf = await pdfjsLib.getDocument({
+          url: docUrl,
+          httpHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+        }).promise
         if (cancelled) return
 
         const page = await pdf.getPage(pageNumber)
