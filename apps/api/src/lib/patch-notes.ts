@@ -20,6 +20,35 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.24.0',
+    date: '2026-06-28',
+    title: 'PDF Manager — bibliothèque, dossiers, tags, exports',
+    summary: 'Nouveau module PDF Manager : bibliothèque centralisée, dossiers, tags, éditeur de pages et exports variés. Corrections sur le module Capacité.',
+    sections: [
+      {
+        heading: '📄 PDF Manager (nouveau module)',
+        items: [
+          'Upload de PDFs, renommage inline, duplication et fusion de documents',
+          'Organisation en dossiers (arborescence) et tags par carte',
+          'Déplacement de documents par drag-and-drop vers les dossiers',
+          'Éditeur de pages : réordonnage DnD, rotation, extraction, split',
+          'Barre de recherche par nom et tri (Nom / Date / Taille / Pages)',
+          'Exports : PDF brut, texte extrait, images ZIP, DOCX/MD si pandoc présent',
+          'Visualisation dans le navigateur avec authentification Bearer automatique',
+        ],
+      },
+      {
+        heading: '🔧 Module Capacité — corrections',
+        items: [
+          'Date « Au » de l\'absence initialisée sur la fin de l\'événement (et non son début)',
+          'Erreurs API désormais visibles sous le formulaire (plus d\'échec silencieux)',
+          'Suppression d\'un membre ou d\'une absence : confirmation Oui / Non requise',
+          'Validation frontend : date fin < date début bloquée avant l\'appel API',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.23.0',
     date: '2026-06-27',
     title: 'Quiz amélioré — séries, timer adaptatif, options libres',

@@ -126,6 +126,20 @@ const MODULES = [
     ],
   },
   {
+    icon: '📄',
+    title: 'PDF Manager',
+    href: '/pdf',
+    desc: 'Bibliothèque centralisée de PDFs avec organisation en dossiers, tags et exports variés.',
+    features: [
+      'Upload, renommage, duplication et fusion de documents PDF',
+      'Organisation en dossiers (arborescence) et tags par carte',
+      'Éditeur de pages : réordonnage drag-and-drop, rotation, extraction, split',
+      'Barre de recherche par nom et tri (Nom / Date / Taille / Pages)',
+      'Exports : PDF brut, texte extrait, images ZIP, DOCX/Markdown si pandoc présent',
+      'Partage par rôle (Lecteur / Éditeur / Owner)',
+    ],
+  },
+  {
     icon: '👤',
     title: 'Compte & Profil',
     href: '/profile',
