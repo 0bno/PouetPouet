@@ -1,6 +1,6 @@
-# Roadmap Pivot — état au 2026-06-25
+# Roadmap Pivot — état au 2026-06-28
 
-> Version courante : **0.23.0** — PDF Manager en develop (→ 0.24.0 à la prochaine release)
+> Version courante : **0.24.0** — PDF Manager + corrections Capacité
 >
 > Source unique de suivi : ce fichier centralise la roadmap et les chantiers ouverts.
 
@@ -228,7 +228,7 @@
 - [x] Prévisualisation et navigation par catégorie
 - [x] Partage par rôle (via ModuleShare)
 
-### PDF Manager — livré v0.24.0 (en develop)
+### PDF Manager — livré v0.24.0
 - [x] Upload, renommage, duplication, fusion de PDFs
 - [x] Éditeur de pages : réordonnage, rotation, extraction, split
 - [x] Dossiers (arborescence) + tags + drag-and-drop entre dossiers
