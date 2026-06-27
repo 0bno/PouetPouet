@@ -106,8 +106,8 @@ export const quizRoutes: FastifyPluginAsync = async (app) => {
       text: string; options: string[]; correct: number; timeLimit?: number; points?: number; order?: number
     }
     if (!text?.trim()) return reply.status(400).send({ error: 'Text required' })
-    if (!Array.isArray(options) || options.length < 2 || options.length > 4) {
-      return reply.status(400).send({ error: '2 to 4 options required' })
+    if (!Array.isArray(options) || options.length < 2 || options.length > 9) {
+      return reply.status(400).send({ error: '2 to 9 options required' })
     }
     if (correct < 0 || correct >= options.length) {
       return reply.status(400).send({ error: 'Invalid correct index' })
