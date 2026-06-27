@@ -283,23 +283,28 @@ function PdfCard({ doc, selected, onSelect, onRename, onDelete, onDuplicate, onU
         {selected && <Check size={12} className="text-white" />}
       </button>
 
-      <Link href={`/pdf/${doc.id}`} className="block p-4 pb-2">
-        <div className="flex items-center justify-center h-16 mb-2 text-red-500"><FileText size={40} /></div>
-        {editing ? (
-          <div className="flex gap-1" onClick={e => e.preventDefault()}>
-            <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setEditing(false) }}
-              className="flex-1 text-xs border rounded px-2 py-0.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-            <button onClick={saveRename} className="text-green-600"><Check size={12} /></button>
-            <button onClick={() => setEditing(false)} className="text-gray-400"><X size={12} /></button>
-          </div>
-        ) : (
+      {editing ? (
+        <div className="p-4 pb-2">
+          <div className="flex items-center justify-center h-16 mb-2 text-red-500"><FileText size={40} /></div>
+          <input
+            autoFocus
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setEditing(false) }}
+            onBlur={saveRename}
+            className="w-full text-xs font-medium border border-primary-400 rounded-lg px-2 py-1 outline-none ring-2 ring-primary-200 dark:bg-gray-700 dark:border-gray-500 dark:text-white dark:ring-primary-900"
+          />
+          <p className="text-[10px] text-gray-400 mt-1">{doc.pageCount}p · {doc.sizeLabel}</p>
+        </div>
+      ) : (
+        <Link href={`/pdf/${doc.id}`} className="block p-4 pb-2">
+          <div className="flex items-center justify-center h-16 mb-2 text-red-500"><FileText size={40} /></div>
           <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{doc.name}</p>
-        )}
-        <p className="text-[10px] text-gray-400 mt-0.5">{doc.pageCount}p · {doc.sizeLabel}</p>
-        <p className="text-[10px] text-gray-400">{formatDate(doc.createdAt)}</p>
-        <TagEditor tags={doc.tags} onSave={onUpdateTags} />
-      </Link>
+          <p className="text-[10px] text-gray-400 mt-0.5">{doc.pageCount}p · {doc.sizeLabel}</p>
+          <p className="text-[10px] text-gray-400">{formatDate(doc.createdAt)}</p>
+          <TagEditor tags={doc.tags} onSave={onUpdateTags} />
+        </Link>
+      )}
 
       {/* Move to folder picker */}
       {showMove && (
@@ -311,12 +316,14 @@ function PdfCard({ doc, selected, onSelect, onRename, onDelete, onDuplicate, onU
         </div>
       )}
 
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={e => { e.preventDefault(); setEditing(true) }} title="Renommer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-gray-500 hover:text-gray-700"><Pencil size={11} /></button>
-        <button onClick={e => { e.preventDefault(); setShowMove(v => !v) }} title="Déplacer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-gray-500 hover:text-gray-700"><Folder size={11} /></button>
-        <button onClick={e => { e.preventDefault(); onDuplicate() }} title="Dupliquer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-gray-500 hover:text-gray-700"><Copy size={11} /></button>
-        <button onClick={e => { e.preventDefault(); onDelete() }} title="Supprimer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-red-400 hover:text-red-600"><Trash2 size={11} /></button>
-      </div>
+      {!editing && (
+        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => { setEditName(doc.name); setEditing(true) }} title="Renommer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-gray-500 hover:text-gray-700"><Pencil size={11} /></button>
+          <button onClick={() => setShowMove(v => !v)} title="Déplacer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-gray-500 hover:text-gray-700"><Folder size={11} /></button>
+          <button onClick={() => onDuplicate()} title="Dupliquer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-gray-500 hover:text-gray-700"><Copy size={11} /></button>
+          <button onClick={() => onDelete()} title="Supprimer" className="p-1 rounded bg-white dark:bg-gray-700 shadow text-red-400 hover:text-red-600"><Trash2 size={11} /></button>
+        </div>
+      )}
     </div>
   )
 }
