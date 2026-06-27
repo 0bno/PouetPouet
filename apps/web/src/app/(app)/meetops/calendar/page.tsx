@@ -169,6 +169,8 @@ function MeetingPopup({ popup, onClose, onNavigate, onMouseEnter, onMouseLeave }
 interface QuickCreateState { date: Date; x: number; y: number }
 
 const NEW_EVENT_ID = '__new__'
+const NO_EVENT_ID = '__none__'
+const SANS_EVENEMENT_NAME = 'Sans événement'
 
 function QuickCreatePopup({ state, events, onSave, onClose }: {
   state: QuickCreateState
@@ -177,23 +179,26 @@ function QuickCreatePopup({ state, events, onSave, onClose }: {
   onClose: () => void
 }) {
   const [title, setTitle] = useState('Nouvelle réunion')
-  const [eventId, setEventId] = useState(events[0]?.id ?? NEW_EVENT_ID)
+  const [eventId, setEventId] = useState(events[0]?.id ?? NO_EVENT_ID)
   const [newEventName, setNewEventName] = useState('')
   const [saving, setSaving] = useState(false)
   const isNew = eventId === NEW_EVENT_ID
+  const isNone = eventId === NO_EVENT_ID
   const x = typeof window !== 'undefined' ? Math.min(state.x + 10, window.innerWidth - 280) : state.x
   const y = typeof window !== 'undefined' ? Math.min(state.y - 20, window.innerHeight - 200) : state.y
   const dateLabel = state.date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
   const timeLabel = state.date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
-  const canSubmit = title.trim() && (isNew ? newEventName.trim() : eventId)
+  const canSubmit = title.trim() && (isNew ? newEventName.trim() : true)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSubmit) return
     setSaving(true)
     try {
-      await onSave(isNew ? null : eventId, isNew ? newEventName.trim() : null, title.trim(), state.date)
+      const resolvedEventId = isNone || isNew ? null : eventId
+      const resolvedName = isNone ? SANS_EVENEMENT_NAME : isNew ? newEventName.trim() : null
+      await onSave(resolvedEventId, resolvedName, title.trim(), state.date)
       onClose()
     } catch (err) { alert((err as Error).message); setSaving(false) }
   }
@@ -214,6 +219,7 @@ function QuickCreatePopup({ state, events, onSave, onClose }: {
           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
         <select value={eventId} onChange={(e) => setEventId(e.target.value)}
           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400">
+          <option value={NO_EVENT_ID}>Sans événement</option>
           {events.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
           <option value={NEW_EVENT_ID}>+ Nouvel événement…</option>
         </select>
@@ -809,7 +815,13 @@ export default function MeetopsCalendarPage() {
   async function handleQuickSave(eventId: string | null, newEventName: string | null, title: string, startAt: Date) {
     let finalEventId = eventId
     if (!finalEventId && newEventName) {
-      finalEventId = await createEvent({ name: newEventName })
+      if (newEventName === SANS_EVENEMENT_NAME) {
+        // Réutilise l'événement "Sans événement" s'il existe déjà
+        finalEventId = events.find((e) => e.name === SANS_EVENEMENT_NAME)?.id
+          ?? await createEvent({ name: SANS_EVENEMENT_NAME })
+      } else {
+        finalEventId = await createEvent({ name: newEventName })
+      }
     }
     if (!finalEventId) return
     await createMeeting(finalEventId, { title, startAt: startAt.toISOString(), durationMin: 60 })
