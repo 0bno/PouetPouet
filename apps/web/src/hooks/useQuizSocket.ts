@@ -39,7 +39,7 @@ export interface QuizReveal {
 }
 
 export interface QuizLeaderboard {
-  podium: { name: string; score: number; bestStreak: number }[]
+  podium: { name: string; score: number; streak: number; bestStreak: number }[]
 }
 
 export interface QuizEnded {

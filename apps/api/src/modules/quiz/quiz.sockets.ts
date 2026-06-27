@@ -222,7 +222,7 @@ export function quizSocketHandlers(io: Server, socket: Socket) {
         take: 10,
       })
       io.to(roomKey(sessionId)).emit('quiz:leaderboard', {
-        podium: participants.map((p) => ({ name: p.name, score: p.score, bestStreak: p.bestStreak })),
+        podium: participants.map((p) => ({ name: p.name, score: p.score, streak: p.streak, bestStreak: p.bestStreak })),
       })
       const state = await buildState(sessionId)
       if (state) io.to(roomKey(sessionId)).emit('quiz:state', state)
