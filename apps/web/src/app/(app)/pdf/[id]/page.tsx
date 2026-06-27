@@ -13,16 +13,16 @@ import { PdfPageCanvas } from '@/components/pdf/pdf-page-canvas'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
 function getToken() {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('token')
+  return typeof window !== 'undefined' ? localStorage.getItem('token') : null
 }
 
 function PageThumb({
-  docId, pageIndex, selected, dragging, dragOver,
+  docId, pageIndex, version, selected, dragging, dragOver,
   onSelect, onDragStart, onDragEnter, onDragEnd
 }: {
   docId: string
   pageIndex: number
+  version: number
   selected: boolean
   dragging: boolean
   dragOver: boolean
@@ -31,8 +31,7 @@ function PageThumb({
   onDragEnter: () => void
   onDragEnd: () => void
 }) {
-  const token = getToken()
-  const url = `${API_URL}/api/pdf/${docId}/file`
+  const url = `${API_URL}/api/pdf/${docId}/file?v=${version}`
 
   return (
     <div
@@ -72,7 +71,7 @@ function PageThumb({
 export default function PdfEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { doc, loading, reorder, rotate, extract, split } = usePdfDoc(id)
+  const { doc, loading, version, reorder, rotate, extract, split } = usePdfDoc(id)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [dragFrom, setDragFrom] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -302,6 +301,7 @@ export default function PdfEditorPage({ params }: { params: Promise<{ id: string
             key={idx}
             docId={id}
             pageIndex={idx}
+            version={version}
             selected={selected.has(idx)}
             dragging={dragFrom === idx}
             dragOver={dragOverIdx === idx}

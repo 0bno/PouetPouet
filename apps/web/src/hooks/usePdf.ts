@@ -79,6 +79,9 @@ export function usePdfList() {
 export function usePdfDoc(id: string) {
   const [doc, setDoc] = useState<PdfDocument | null>(null)
   const [loading, setLoading] = useState(true)
+  const [version, setVersion] = useState(0)
+
+  const bumpVersion = useCallback(() => setVersion(v => v + 1), [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -95,12 +98,14 @@ export function usePdfDoc(id: string) {
   const reorder = useCallback(async (pages: number[]): Promise<void> => {
     const updated: PdfDocument = await api.post(`/api/pdf/${id}/reorder`, { pages })
     setDoc(updated)
-  }, [id])
+    bumpVersion()
+  }, [id, bumpVersion])
 
   const rotate = useCallback(async (pages: number[], deg: 90 | 180 | 270): Promise<void> => {
     const updated: PdfDocument = await api.post(`/api/pdf/${id}/rotate`, { pages, deg })
     setDoc(updated)
-  }, [id])
+    bumpVersion()
+  }, [id, bumpVersion])
 
   const extract = useCallback(async (pages: number[], name: string): Promise<PdfDocument> => {
     return api.post(`/api/pdf/${id}/extract`, { pages, name })
@@ -110,5 +115,5 @@ export function usePdfDoc(id: string) {
     return api.post(`/api/pdf/${id}/split`, { splitAt })
   }, [id])
 
-  return { doc, loading, refresh, reorder, rotate, extract, split }
+  return { doc, loading, version, refresh, reorder, rotate, extract, split }
 }
