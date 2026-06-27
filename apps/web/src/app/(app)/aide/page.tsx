@@ -104,8 +104,7 @@ const SHORTCUTS: { module: string; icon: string; groups: { label: string; items:
           { keys: ['Ctrl', 'C'],         desc: 'Copier la sélection' },
           { keys: ['Ctrl', 'V'],         desc: 'Coller (même entre boards)' },
           { keys: ['Ctrl', 'D'],         desc: 'Dupliquer la sélection en place' },
-          { keys: ['Suppr'],             desc: 'Supprimer les éléments sélectionnés' },
-          { keys: ['Backspace'],         desc: 'Supprimer les éléments sélectionnés' },
+          { keys: ['Suppr', 'Backspace'], desc: 'Supprimer les éléments sélectionnés' },
         ],
       },
       {
