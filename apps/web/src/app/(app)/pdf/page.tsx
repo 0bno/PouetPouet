@@ -14,8 +14,10 @@ function formatDate(iso: string) {
 
 // ── Sidebar arborescence ──────────────────────────────────────────────────────
 
+const DND_TYPE = 'application/pdf-doc-id'
+
 function FolderNode({
-  folder, folders, depth, selected, onSelect, onCreate, onRename, onDelete,
+  folder, folders, depth, selected, onSelect, onCreate, onRename, onDelete, onDropDoc,
 }: {
   folder: PdfFolder
   folders: PdfFolder[]
@@ -25,11 +27,13 @@ function FolderNode({
   onCreate: (parentId: string) => void
   onRename: (id: string, name: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onDropDoc: (docId: string, folderId: string | null) => Promise<void>
 }) {
   const children = folders.filter(f => f.parentId === folder.id)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(folder.name)
+  const [dragOver, setDragOver] = useState(false)
   const isSelected = selected === folder.id
 
   async function saveRename() {
@@ -41,16 +45,27 @@ function FolderNode({
   return (
     <div>
       <div
-        className={`group flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer text-sm transition-colors ${isSelected ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        className={`group flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer text-sm transition-colors
+          ${dragOver ? 'bg-blue-50 border border-blue-300 dark:bg-blue-950/30 dark:border-blue-700' :
+            isSelected ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' :
+            'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
         style={{ paddingLeft: `${8 + depth * 14}px` }}
         onClick={() => { onSelect(folder.id); setOpen(true) }}
+        onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => {
+          e.preventDefault(); e.stopPropagation()
+          setDragOver(false)
+          const docId = e.dataTransfer.getData(DND_TYPE)
+          if (docId) { setOpen(true); onDropDoc(docId, folder.id) }
+        }}
       >
         <button onClick={e => { e.stopPropagation(); setOpen(v => !v) }} className="shrink-0 text-gray-400">
           {children.length > 0
             ? (open ? <ChevronDown size={12} /> : <ChevronRight size={12} />)
             : <span className="w-3" />}
         </button>
-        {open ? <FolderOpen size={14} className="shrink-0" /> : <Folder size={14} className="shrink-0" />}
+        {open || dragOver ? <FolderOpen size={14} className="shrink-0" /> : <Folder size={14} className="shrink-0" />}
         {editing ? (
           <input
             autoFocus
@@ -71,7 +86,8 @@ function FolderNode({
       </div>
       {open && children.map(c => (
         <FolderNode key={c.id} folder={c} folders={folders} depth={depth + 1}
-          selected={selected} onSelect={onSelect} onCreate={onCreate} onRename={onRename} onDelete={onDelete} />
+          selected={selected} onSelect={onSelect} onCreate={onCreate}
+          onRename={onRename} onDelete={onDelete} onDropDoc={onDropDoc} />
       ))}
     </div>
   )
@@ -79,7 +95,7 @@ function FolderNode({
 
 function Sidebar({
   folders, selectedFolder, onSelectFolder, allTags, selectedTag, onSelectTag,
-  onCreate, onRename, onDelete,
+  onCreate, onRename, onDelete, onDropDoc,
 }: {
   folders: PdfFolder[]
   selectedFolder: string | null | undefined
@@ -90,8 +106,10 @@ function Sidebar({
   onCreate: (parentId?: string) => void
   onRename: (id: string, name: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onDropDoc: (docId: string, folderId: string | null) => Promise<void>
 }) {
   const roots = folders.filter(f => !f.parentId)
+  const [rootDragOver, setRootDragOver] = useState(false)
 
   return (
     <aside className="w-56 shrink-0 flex flex-col gap-1 pr-2 border-r border-gray-100 dark:border-gray-800">
@@ -109,7 +127,17 @@ function Sidebar({
 
       <button
         onClick={() => onSelectFolder(null)}
-        className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${selectedFolder === null && !selectedTag ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        onDragOver={e => { e.preventDefault(); setRootDragOver(true) }}
+        onDragLeave={() => setRootDragOver(false)}
+        onDrop={e => {
+          e.preventDefault(); setRootDragOver(false)
+          const docId = e.dataTransfer.getData(DND_TYPE)
+          if (docId) onDropDoc(docId, null)
+        }}
+        className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors
+          ${rootDragOver ? 'bg-blue-50 border border-blue-300 dark:bg-blue-950/30 dark:border-blue-700' :
+            selectedFolder === null && !selectedTag ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' :
+            'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
       >
         <Folder size={13} /> Racine
       </button>
@@ -121,6 +149,7 @@ function Sidebar({
           onCreate={onCreate}
           onRename={onRename}
           onDelete={onDelete}
+          onDropDoc={onDropDoc}
         />
       ))}
 
@@ -242,7 +271,11 @@ function PdfCard({ doc, selected, onSelect, onRename, onDelete, onDuplicate, onU
   }
 
   return (
-    <div className={`relative group rounded-xl border-2 transition-all ${selected ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300'}`}>
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.setData(DND_TYPE, doc.id); e.dataTransfer.effectAllowed = 'move' }}
+      className={`relative group rounded-xl border-2 transition-all cursor-grab active:cursor-grabbing ${selected ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300'}`}
+    >
       <button
         onClick={e => { e.preventDefault(); onSelect() }}
         className={`absolute top-2 left-2 z-10 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selected ? 'bg-red-500 border-red-500 opacity-100' : 'border-gray-300 opacity-0 group-hover:opacity-100'}`}
@@ -377,6 +410,7 @@ export default function PdfLibraryPage() {
           onCreate={parentId => { setNewFolderParent(parentId); setNewFolderName(''); setShowNewFolder(true) }}
           onRename={renameFolder}
           onDelete={deleteFolder}
+          onDropDoc={async (docId, folderId) => { await moveToFolder(docId, folderId) }}
         />
 
         {/* Contenu principal */}
