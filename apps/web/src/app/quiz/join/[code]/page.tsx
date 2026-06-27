@@ -13,9 +13,8 @@ const OPTION_COLORS = [
   'bg-orange-500 hover:bg-orange-400 active:bg-orange-600',
   'bg-teal-500 hover:bg-teal-400 active:bg-teal-600',
   'bg-pink-500 hover:bg-pink-400 active:bg-pink-600',
-  'bg-indigo-500 hover:bg-indigo-400 active:bg-indigo-600',
 ]
-const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 function Timer({ endsAt }: { endsAt: string }) {
   const [seconds, setSeconds] = useState(0)
