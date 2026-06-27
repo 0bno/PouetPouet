@@ -4,9 +4,23 @@ import { useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
   FileText, Upload, Loader2, Merge, Trash2, Copy, Pencil, Check, X,
-  FolderPlus, Folder, FolderOpen, ChevronRight, ChevronDown, Tag, Home
+  FolderPlus, Folder, FolderOpen, ChevronRight, ChevronDown, Tag, Home, Search, ArrowUpDown
 } from 'lucide-react'
 import { usePdfList, usePdfFolders, type PdfDocument, type PdfFolder } from '@/hooks/usePdf'
+
+type SortKey = 'name' | 'date' | 'size' | 'pages'
+type SortDir = 'asc' | 'desc'
+
+function sortDocs(docs: PdfDocument[], key: SortKey, dir: SortDir): PdfDocument[] {
+  return [...docs].sort((a, b) => {
+    let cmp = 0
+    if (key === 'name') cmp = a.name.localeCompare(b.name, 'fr')
+    else if (key === 'date') cmp = a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
+    else if (key === 'size') cmp = a.size - b.size
+    else if (key === 'pages') cmp = a.pageCount - b.pageCount
+    return dir === 'asc' ? cmp : -cmp
+  })
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -197,10 +211,12 @@ function DropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
 
 // ── Tag editor inline ─────────────────────────────────────────────────────────
 
-function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) => Promise<void> }) {
+function TagEditor({ tags, onSave, onEditingChange }: { tags: string[]; onSave: (tags: string[]) => Promise<void>; onEditingChange?: (v: boolean) => void }) {
   const [editing, setEditing] = useState(false)
   const [input, setInput] = useState('')
   const [current, setCurrent] = useState(tags)
+
+  function startEdit() { setCurrent(tags); setEditing(true); onEditingChange?.(true) }
 
   function addTag() {
     const t = input.trim().toLowerCase()
@@ -211,11 +227,14 @@ function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) 
   async function save() {
     await onSave(current)
     setEditing(false)
+    onEditingChange?.(false)
   }
+
+  function cancel() { setEditing(false); onEditingChange?.(false) }
 
   if (!editing) {
     return (
-      <div className="flex flex-wrap gap-1 mt-1 min-h-[18px]" onClick={e => { e.preventDefault(); setEditing(true) }}>
+      <div className="flex flex-wrap gap-1 mt-1 min-h-[18px]" onClick={e => { e.stopPropagation(); startEdit() }}>
         {tags.map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400 cursor-pointer">{t}</span>)}
         {tags.length === 0 && <span className="text-[10px] text-gray-300 cursor-pointer">+ tag</span>}
       </div>
@@ -223,7 +242,7 @@ function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) 
   }
 
   return (
-    <div className="mt-1" onClick={e => e.preventDefault()}>
+    <div className="mt-1" onClick={e => e.stopPropagation()}>
       <div className="flex flex-wrap gap-1 mb-1">
         {current.map(t => (
           <span key={t} className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
@@ -236,12 +255,12 @@ function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) 
           autoFocus
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() } if (e.key === 'Escape') setEditing(false) }}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() } if (e.key === 'Escape') cancel() }}
           placeholder="nouveau tag"
           className="flex-1 text-[10px] border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5 dark:bg-gray-800 dark:text-white"
         />
         <button onClick={save} className="text-green-600"><Check size={12} /></button>
-        <button onClick={() => setEditing(false)} className="text-gray-400"><X size={12} /></button>
+        <button onClick={cancel} className="text-gray-400"><X size={12} /></button>
       </div>
     </div>
   )
@@ -262,6 +281,7 @@ function PdfCard({ doc, selected, onSelect, onRename, onDelete, onDuplicate, onU
 }) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(doc.name)
+  const [tagEditing, setTagEditing] = useState(false)
   const [showMove, setShowMove] = useState(false)
 
   async function saveRename() {
@@ -297,13 +317,17 @@ function PdfCard({ doc, selected, onSelect, onRename, onDelete, onDuplicate, onU
           <p className="text-[10px] text-gray-400 mt-1">{doc.pageCount}p · {doc.sizeLabel}</p>
         </div>
       ) : (
-        <Link href={`/pdf/${doc.id}`} className="block p-4 pb-2">
-          <div className="flex items-center justify-center h-16 mb-2 text-red-500"><FileText size={40} /></div>
-          <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{doc.name}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">{doc.pageCount}p · {doc.sizeLabel}</p>
-          <p className="text-[10px] text-gray-400">{formatDate(doc.createdAt)}</p>
-          <TagEditor tags={doc.tags} onSave={onUpdateTags} />
-        </Link>
+        <>
+          <Link href={`/pdf/${doc.id}`} className={`block p-4 pb-1 ${tagEditing ? 'pointer-events-none' : ''}`}>
+            <div className="flex items-center justify-center h-16 mb-2 text-red-500"><FileText size={40} /></div>
+            <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{doc.name}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{doc.pageCount}p · {doc.sizeLabel}</p>
+            <p className="text-[10px] text-gray-400">{formatDate(doc.createdAt)}</p>
+          </Link>
+          <div className="px-4 pb-2">
+            <TagEditor tags={doc.tags} onSave={onUpdateTags} onEditingChange={setTagEditing} />
+          </div>
+        </>
       )}
 
       {/* Move to folder picker */}
@@ -349,8 +373,21 @@ export default function PdfLibraryPage() {
   const [newFolderParent, setNewFolderParent] = useState<string | undefined>(undefined)
   const [newFolderName, setNewFolderName] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
+  const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const allTags = Array.from(new Set(docs.flatMap(d => d.tags))).sort()
+
+  const filteredDocs = sortDocs(
+    search.trim() ? docs.filter(d => d.name.toLowerCase().includes(search.trim().toLowerCase())) : docs,
+    sortKey, sortDir
+  )
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
 
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -393,7 +430,9 @@ export default function PdfLibraryPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">PDF Manager</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{docs.length} document{docs.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {search ? `${filteredDocs.length} / ${docs.length}` : docs.length} document{docs.length !== 1 ? 's' : ''}
+          </p>
         </div>
         {selected.size >= 2 && (
           <button
@@ -431,18 +470,45 @@ export default function PdfLibraryPage() {
             </div>
           )}
 
+          {/* Barre de recherche + tri */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher par nom…"
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-800"
+              />
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <ArrowUpDown size={13} className="text-gray-400" />
+              {(['name', 'date', 'size', 'pages'] as SortKey[]).map(k => (
+                <button
+                  key={k}
+                  onClick={() => toggleSort(k)}
+                  className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors flex items-center gap-0.5
+                    ${sortKey === k ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                >
+                  {k === 'name' ? 'Nom' : k === 'date' ? 'Date' : k === 'size' ? 'Taille' : 'Pages'}
+                  {sortKey === k && <span className="text-[10px]">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {loading && <div className="flex justify-center py-12 text-gray-400"><Loader2 className="animate-spin" size={24} /></div>}
           {!loading && error && <div className="text-center py-12 text-red-500 text-sm">{error}</div>}
-          {!loading && !error && docs.length === 0 && (
+          {!loading && !error && filteredDocs.length === 0 && (
             <div className="text-center py-16 text-gray-400">
               <FileText size={48} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Aucun PDF dans cet emplacement.</p>
+              <p className="text-sm">{search ? 'Aucun résultat pour cette recherche.' : 'Aucun PDF dans cet emplacement.'}</p>
             </div>
           )}
 
-          {docs.length > 0 && (
+          {filteredDocs.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-              {docs.map(doc => (
+              {filteredDocs.map(doc => (
                 <PdfCard
                   key={doc.id}
                   doc={doc}
