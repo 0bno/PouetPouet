@@ -148,7 +148,9 @@ function PatchNoteModal({
                 {sec.items.map((item, i) => (
                   <li key={i} className="flex gap-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                     <span className="text-primary-400 mt-1 shrink-0">•</span>
-                    <span>{item}</span>
+                    <span>{item.split(/\*\*(.+?)\*\*/).map((part, j) =>
+                      j % 2 === 1 ? <strong key={j} className="font-semibold text-gray-800 dark:text-gray-100">{part}</strong> : part
+                    )}</span>
                   </li>
                 ))}
               </ul>
