@@ -90,24 +90,40 @@ const SHORTCUTS: { module: string; icon: string; groups: { label: string; items:
     module: 'Boards', icon: '🗂️',
     groups: [
       {
-        label: 'Édition',
+        label: 'Historique',
         items: [
-          { keys: ['Ctrl', 'Z'],            desc: 'Annuler' },
-          { keys: ['Ctrl', 'Y'],            desc: 'Rétablir' },
-          { keys: ['Ctrl', 'Shift', 'Z'],   desc: 'Rétablir (variante)' },
-          { keys: ['Ctrl', 'C'],            desc: 'Copier les éléments sélectionnés' },
-          { keys: ['Ctrl', 'V'],            desc: 'Coller' },
-          { keys: ['Ctrl', 'A'],            desc: 'Tout sélectionner' },
-          { keys: ['Ctrl', 'D'],            desc: 'Dupliquer la sélection' },
-          { keys: ['Suppr'],                desc: 'Supprimer la sélection' },
+          { keys: ['Ctrl', 'Z'],          desc: 'Annuler la dernière action' },
+          { keys: ['Ctrl', 'Y'],          desc: 'Rétablir' },
+          { keys: ['Ctrl', 'Shift', 'Z'], desc: 'Rétablir (variante Mac)' },
+        ],
+      },
+      {
+        label: 'Sélection & édition',
+        items: [
+          { keys: ['Ctrl', 'A'],         desc: 'Sélectionner tous les éléments' },
+          { keys: ['Ctrl', 'C'],         desc: 'Copier la sélection' },
+          { keys: ['Ctrl', 'V'],         desc: 'Coller (même entre boards)' },
+          { keys: ['Ctrl', 'D'],         desc: 'Dupliquer la sélection en place' },
+          { keys: ['Suppr'],             desc: 'Supprimer les éléments sélectionnés' },
+          { keys: ['Backspace'],         desc: 'Supprimer les éléments sélectionnés' },
+        ],
+      },
+      {
+        label: 'Déplacement',
+        items: [
+          { keys: ['←', '↑', '→', '↓'],          desc: 'Déplacer la sélection de 1 px' },
+          { keys: ['Shift', '←', '↑', '→', '↓'], desc: 'Déplacer la sélection de 20 px' },
         ],
       },
       {
         label: 'Navigation & outils',
         items: [
-          { keys: ['←', '↑', '→', '↓'],    desc: 'Déplacer les éléments sélectionnés (1 px, ×10 avec Shift)' },
-          { keys: ['V'],                    desc: 'Passer en mode Sélection' },
-          { keys: ['Échap'],               desc: 'Désélectionner / fermer le panneau actif' },
+          { keys: ['Molette'],           desc: 'Zoomer / dézoomer (centré sur le curseur)' },
+          { keys: ['Ctrl', 'Molette'],   desc: 'Zoom précis (ou pincement trackpad)' },
+          { keys: ['Clic molette'],      desc: 'Déplacer le board (clic + glisser)' },
+          { keys: ['Espace'],            desc: 'Déplacer le board temporairement (maintenu)' },
+          { keys: ['V'],                 desc: 'Passer en mode Sélection' },
+          { keys: ['Échap'],            desc: 'Désélectionner / fermer les panneaux actifs' },
         ],
       },
     ],
@@ -128,10 +144,10 @@ const SHORTCUTS: { module: string; icon: string; groups: { label: string; items:
       {
         label: 'Navigation',
         items: [
-          { keys: ['←'],      desc: 'Période précédente (semaine / mois / jour)' },
-          { keys: ['→'],      desc: 'Période suivante' },
-          { keys: ['T'],      desc: "Revenir à aujourd'hui" },
-          { keys: ['Échap'], desc: 'Fermer le popup / la création rapide' },
+          { keys: ['←'],     desc: 'Période précédente (semaine / mois / jour selon la vue)' },
+          { keys: ['→'],     desc: 'Période suivante' },
+          { keys: ['T'],     desc: "Revenir à aujourd'hui" },
+          { keys: ['Échap'], desc: 'Fermer le popup ou la création rapide' },
         ],
       },
     ],
