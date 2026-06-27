@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useMeetEvent, useMeetEvents, type BulkAction } from '@/hooks/useMeetops'
 import { useMeetDistLists } from '@/hooks/useMeetDistLists'
 import { useMeetGraph } from '@/hooks/useMeetGraph'
-import { EventCalendar } from '@/components/meetops/event-calendar'
+import { EventFullCalendar } from '@/components/meetops/event-full-calendar'
 import { EventReport } from '@/components/meetops/event-report'
 import { EventHistory } from '@/components/meetops/event-history'
 import type { Meeting, MeetEvent, MeetDistList } from '@/lib/meetops'
@@ -690,7 +690,9 @@ export default function MeetopsEventPage({ params }: { params: Promise<{ id: str
         ))}
       </div>
 
-      {view === 'calendar' && <EventCalendar event={event} />}
+      {view === 'calendar' && (
+        <EventFullCalendar event={event} onAdd={addMeeting} onUpdate={updateMeeting} onDelete={deleteMeeting} />
+      )}
       {view === 'report' && <EventReport event={event} />}
       {view === 'history' && <EventHistory eventId={event.id} refreshKey={event} />}
       {view === 'list' && (
