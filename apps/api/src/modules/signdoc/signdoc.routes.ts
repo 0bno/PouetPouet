@@ -7,6 +7,8 @@ import { prisma } from '../../lib/prisma.js'
 import { audit } from '../../lib/audit.js'
 import { resolveRole, sharedResourceIds, deleteResourceShares, type ModuleRole } from '../../lib/module-share.js'
 import { recordEvent } from './signdoc.events.js'
+import { dispatchActiveStep, isActingRecipient } from './signdoc.workflow.js'
+import { notify } from '../../lib/notify.js'
 import { deleteEnvelopeFiles, originalStream, sha256, writeOriginal } from './signdoc.storage.js'
 
 // SignDoc — gestion de documents signés (type DocuSign), auto-hébergé. PR1 couvre
@@ -321,5 +323,53 @@ export const signdocRoutes: FastifyPluginAsync = async (app) => {
       prisma.signEnvelope.update({ where: { id }, data: { updatedAt: new Date() } }),
     ])
     return prisma.signField.findMany({ where: { envelopeId: id } })
+  })
+
+  // ── Envoi / annulation ──────────────────────────────────────────────────────
+
+  // Envoie l'enveloppe : fige le workflow, génère les liens, notifie l'étape active.
+  app.post('/:id/send', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const { role, status } = await roleFor(id, userId)
+    const denied = editGuard(role, status)
+    if (denied) return reply.status(denied.code).send({ error: denied.error })
+
+    const recipients = await prisma.signRecipient.findMany({ where: { envelopeId: id } })
+    const actors = recipients.filter(isActingRecipient)
+    if (actors.length === 0) return reply.status(400).send({ error: 'Ajoutez au moins un signataire.' })
+    const fields = await prisma.signField.findMany({ where: { envelopeId: id }, select: { recipientId: true } })
+    const withFields = new Set(fields.map((f) => f.recipientId))
+    const missing = actors.filter((r) => !withFields.has(r.id))
+    if (missing.length > 0) return reply.status(400).send({ error: `Chaque signataire doit avoir au moins un champ : ${missing.map((m) => m.name).join(', ')}.` })
+
+    const { name: ownerName } = (await prisma.user.findUnique({ where: { id: userId }, select: { name: true } })) ?? { name: 'inconnu' }
+    await prisma.signEnvelope.update({ where: { id }, data: { status: 'SENT' } })
+    await recordEvent(id, 'sent', { actorLabel: ownerName, request, payload: { recipients: actors.length } })
+    await dispatchActiveStep(id)
+
+    const full = await prisma.signEnvelope.findUnique({ where: { id }, include: ENVELOPE_DETAIL })
+    return { ...full, role }
+  })
+
+  // Annule une enveloppe en cours (propriétaire). Invalide les liens d'accès.
+  app.post('/:id/void', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const env = await prisma.signEnvelope.findFirst({ where: { id, ownerId: userId }, select: { id: true, status: true, name: true } })
+    if (!env) return reply.status(404).send({ error: 'Enveloppe introuvable.' })
+    if (env.status !== 'SENT' && env.status !== 'IN_PROGRESS') return reply.status(409).send({ error: 'Seule une enveloppe en cours peut être annulée.' })
+    const { reason } = z.object({ reason: z.string().max(500).optional() }).parse(request.body ?? {})
+
+    await prisma.signEnvelope.update({ where: { id }, data: { status: 'VOIDED', voidedAt: new Date(), voidReason: reason ?? null } })
+    // Invalide les jetons d'accès en attente.
+    await prisma.signRecipient.updateMany({ where: { envelopeId: id, status: { in: ['PENDING', 'SENT', 'VIEWED'] } }, data: { accessTokenHash: null, tokenExpires: null } })
+    await recordEvent(id, 'voided', { actorLabel: env.name, request, payload: reason ? { reason } : undefined })
+    // Prévient les signataires internes encore actifs.
+    const internals = await prisma.signRecipient.findMany({ where: { envelopeId: id, userId: { not: null } }, select: { userId: true } })
+    await Promise.all(internals.map((r) => notify({ userId: r.userId as string, type: 'SIGN_DECLINED', title: 'Demande de signature annulée', body: `« ${env.name} » a été annulée.` })))
+
+    const full = await prisma.signEnvelope.findUnique({ where: { id }, include: ENVELOPE_DETAIL })
+    return { ...full, role: 'OWNER' as const }
   })
 }

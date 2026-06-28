@@ -187,7 +187,15 @@ export function useEnvelope(id: string) {
     setEnvelope((prev) => (prev ? { ...prev, fields: saved } : prev))
   }, [id])
 
-  return { envelope, loading, error, refresh, patch, addRecipient, updateRecipient, removeRecipient, saveFields }
+  const send = useCallback(async () => {
+    setEnvelope(await api.post<EnvelopeDetail>(`/api/signdoc/${id}/send`, {}))
+  }, [id])
+
+  const voidEnvelope = useCallback(async (reason?: string) => {
+    setEnvelope(await api.post<EnvelopeDetail>(`/api/signdoc/${id}/void`, reason ? { reason } : {}))
+  }, [id])
+
+  return { envelope, loading, error, refresh, patch, addRecipient, updateRecipient, removeRecipient, saveFields, send, voidEnvelope }
 }
 
 export const FILE_URL = (id: string) => `${API_URL}/api/signdoc/${id}/file`

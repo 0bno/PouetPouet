@@ -11,6 +11,9 @@ export type NotificationType =
   | 'WHEEL_DRAW'
   | 'BOARD_IMPORTED'
   | 'MODULE_SHARED'
+  | 'SIGN_REQUESTED'
+  | 'SIGN_COMPLETED'
+  | 'SIGN_DECLINED'
 
 interface NotifyInput {
   userId: string

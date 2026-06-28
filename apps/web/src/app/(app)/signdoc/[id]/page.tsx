@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Loader2, Plus, Trash2, Share2, Save, PenLine, Type, Calendar, Hash,
-  GripVertical, Clock, ChevronUp, ChevronDown,
+  GripVertical, Clock, ChevronUp, ChevronDown, Send, Ban,
 } from 'lucide-react'
 import { PdfPageCanvas } from '@/components/pdf/pdf-page-canvas'
 import { ModuleShareModal } from '@/components/share/module-share-modal'
@@ -39,6 +39,14 @@ function cid(): string {
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+const RECIPIENT_STATUS: Record<string, { label: string; cls: string }> = {
+  PENDING:  { label: 'En attente', cls: 'text-gray-400' },
+  SENT:     { label: 'Envoyé',     cls: 'text-blue-500' },
+  VIEWED:   { label: 'Consulté',   cls: 'text-amber-500' },
+  SIGNED:   { label: 'Signé',      cls: 'text-green-600' },
+  DECLINED: { label: 'Refusé',     cls: 'text-red-500' },
 }
 
 const EVENT_LABEL: Record<string, string> = {
@@ -212,6 +220,9 @@ function RecipientsPanel({
               <p className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{r.name}</p>
               <p className="text-[10px] text-gray-400 truncate">{r.email}{r.userId ? '' : ' · externe'}</p>
             </div>
+            {!canEdit && (
+              <span className={`text-[10px] font-medium shrink-0 ${RECIPIENT_STATUS[r.status]?.cls ?? 'text-gray-400'}`}>{RECIPIENT_STATUS[r.status]?.label ?? r.status}</span>
+            )}
             {canEdit && ordered && (
               <div className="flex flex-col">
                 <button onClick={(e) => { e.stopPropagation(); onReorder(r.id, -1) }} disabled={i === 0} className="text-gray-300 hover:text-gray-600 disabled:opacity-30"><ChevronUp size={11} /></button>
@@ -243,13 +254,15 @@ function RecipientsPanel({
 
 export default function EnvelopeWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { envelope, loading, error, patch, addRecipient, updateRecipient, removeRecipient, saveFields } = useEnvelope(id)
+  const { envelope, loading, error, patch, addRecipient, updateRecipient, removeRecipient, saveFields, send, voidEnvelope } = useEnvelope(id)
 
   const [localFields, setLocalFields] = useState<LocalField[]>([])
   const [dirty, setDirty] = useState(false)
   const [activeRecipientId, setActiveRecipientId] = useState<string | null>(null)
   const [sharing, setSharing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   // (Ré)initialise les champs locaux quand l'enveloppe (re)charge.
   useEffect(() => {
@@ -287,6 +300,25 @@ export default function EnvelopeWorkshopPage({ params }: { params: Promise<{ id:
     finally { setSaving(false) }
   }
 
+  async function handleSend() {
+    setSendError(null); setSending(true)
+    try {
+      if (dirty) await saveFields(localFields.map(({ cid: _cid, ...f }) => f))
+      await send()
+      setDirty(false)
+    } catch (e) { setSendError(e instanceof Error ? e.message : 'Erreur') }
+    finally { setSending(false) }
+  }
+
+  async function handleVoid() {
+    const reason = window.prompt('Motif de l’annulation (facultatif) ?')
+    if (reason === null) return
+    await voidEnvelope(reason || undefined)
+  }
+
+  const canSend = canEdit && envelope.recipients.length > 0
+  const isActive = envelope.status === 'SENT' || envelope.status === 'IN_PROGRESS'
+
   async function reorderRecipient(rid: string, dir: -1 | 1) {
     const r = envelope!.recipients.find((x) => x.id === rid)
     if (!r) return
@@ -315,8 +347,19 @@ export default function EnvelopeWorkshopPage({ params }: { params: Promise<{ id:
               <Share2 size={15} /> Partager
             </button>
           )}
+          {isActive && envelope.role === 'OWNER' && (
+            <button onClick={handleVoid} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 dark:border-red-900 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">
+              <Ban size={15} /> Annuler
+            </button>
+          )}
+          {canSend && (
+            <button onClick={handleSend} disabled={sending} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+              {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer
+            </button>
+          )}
         </div>
       </div>
+      {sendError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded-xl px-4 py-2">{sendError}</div>}
 
       {!canEdit && envelope.status === 'DRAFT' && (
         <div className="text-xs bg-gray-50 dark:bg-gray-800/50 text-gray-500 rounded-xl px-4 py-2">Accès en lecture seule.</div>

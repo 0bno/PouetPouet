@@ -20,6 +20,7 @@ import { quizSocketHandlers } from './quiz/quiz.sockets.js'
 import { roadmapRoutes } from './roadmap/roadmap.routes.js'
 import { pdfRoutes } from './pdf/pdf.routes.js'
 import { signdocRoutes } from './signdoc/signdoc.routes.js'
+import { signdocPublicRoutes } from './signdoc/signdoc.public.routes.js'
 
 // FORGE F0 — registre des modules côté API.
 // Le socle (index.ts) monte routes et handlers socket en itérant ce registre :
@@ -91,7 +92,11 @@ export const API_MODULES: ApiModule[] = [
   },
   {
     manifest: SIGNDOC_MODULE,
-    routes: [{ plugin: signdocRoutes, prefix: '/api/signdoc' }],
+    routes: [
+      { plugin: signdocRoutes, prefix: '/api/signdoc' },
+      // Routes publiques de signature (non authentifiées, jeton à usage unique).
+      { plugin: signdocPublicRoutes, prefix: '/api/sign' },
+    ],
     socketHandlers: [],
   },
 ]
