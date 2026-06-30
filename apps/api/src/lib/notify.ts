@@ -11,6 +11,9 @@ export type NotificationType =
   | 'WHEEL_DRAW'
   | 'BOARD_IMPORTED'
   | 'MODULE_SHARED'
+  | 'PARCOURS_STEP_ASSIGNED'
+  | 'PARCOURS_STEP_COMPLETED'
+  | 'PARCOURS_INSTANCE_COMPLETED'
 
 interface NotifyInput {
   userId: string

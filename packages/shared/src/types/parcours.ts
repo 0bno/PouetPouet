@@ -1,0 +1,132 @@
+export type ParcourDocClass = 'C0' | 'C1' | 'C2' | 'C3'
+export type ParcourStatus = 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED'
+export type StepStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'SKIPPED'
+export type ModuleRole = 'OWNER' | 'EDITOR' | 'VIEWER'
+
+export type FormField = {
+  id: string
+  label: string
+  type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox'
+  required: boolean
+  options?: string[]
+}
+
+export type StepDef = {
+  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module'
+  title: string
+  assignedTo?: string
+  assignedLabel?: string
+  slaDays?: number
+  reminderDays?: number
+  skipIf?: { field: string; operator: 'eq' | 'neq' | 'contains'; value: string }
+  // info
+  body?: string
+  // form — inline fields OR linked Forms module form (formId + formPublicToken)
+  fields?: FormField[]
+  formId?: string
+  formPublicToken?: string
+  // document / mixed
+  maxClass?: ParcourDocClass
+  instructions?: string
+  requireDocument?: boolean   // true = ce step exige aussi un document joint (valable sur form/info)
+  // email
+  to?: string
+  subject?: string
+  // module
+  moduleId?: string
+  moduleHref?: string
+  moduleAction?: 'create_board' | 'create_meeting' | 'create_daily' | 'create_scrum'
+  moduleParams?: { title?: string }
+}
+
+export interface ParcourTemplateSummary {
+  id: string
+  ownerId: string
+  name: string
+  description: string | null
+  category: string | null
+  tags: string[]
+  isPublic: boolean
+  starCount: number
+  stepCount: number
+  role: ModuleRole
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ParcourTemplateDetail extends ParcourTemplateSummary {
+  steps: StepDef[]
+  defaultObservers: string[]
+}
+
+export interface ParcourInstanceSummary {
+  id: string
+  templateId: string
+  ownerId: string
+  title: string
+  refNumber: string | null
+  status: ParcourStatus
+  priority: string
+  currentStep: number
+  stepCount: number
+  dueAt: string | null
+  remindByEmail: boolean
+  role: ModuleRole
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ParcourStepInstanceDetail {
+  id: string
+  instanceId: string
+  stepIndex: number
+  status: StepStatus
+  assignedTo: string | null
+  completedBy: string | null
+  completedAt: string | null
+  dueAt: string | null
+  data: Record<string, unknown> | null
+}
+
+export interface ParcourDocumentSummary {
+  id: string
+  instanceId: string
+  stepIndex: number | null
+  filename: string
+  mimeType: string
+  sizeBytes: number
+  classification: ParcourDocClass
+  uploadedBy: string
+  createdAt: string
+}
+
+export interface ParcourHistoryEntry {
+  id: string
+  instanceId: string
+  stepIndex: number | null
+  userId: string | null
+  action: string
+  comment: string | null
+  createdAt: string
+}
+
+export interface ParcourInstanceDetail {
+  id: string
+  templateId: string
+  ownerId: string
+  title: string
+  refNumber: string | null
+  status: ParcourStatus
+  priority: string
+  currentStep: number
+  dueAt: string | null
+  remindByEmail: boolean
+  data: Record<string, unknown>
+  role: ModuleRole
+  steps: StepDef[]
+  stepInstances: ParcourStepInstanceDetail[]
+  documents: ParcourDocumentSummary[]
+  history: ParcourHistoryEntry[]
+  createdAt: string
+  updatedAt: string
+}
