@@ -8,7 +8,7 @@ export const hubRoutes: FastifyPluginAsync = async (app) => {
   app.get('/stats', { preHandler: [app.authenticate] }, async (request) => {
     const { id: userId } = request.user as { id: string }
 
-    const [boards, teams, scrumRooms, dailySessions, capacityEvents, wheelEvents, testBooks, parcourTemplates] = await Promise.all([
+    const [boards, teams, scrumRooms, dailySessions, capacityEvents, wheelEvents, testBooks, parcourTemplates, forms] = await Promise.all([
       prisma.board.count({ where: { ownerId: userId } }),
       prisma.team.count({ where: { ownerId: userId } }),
       prisma.scrumRoom.count({ where: { ownerId: userId } }),
@@ -17,9 +17,10 @@ export const hubRoutes: FastifyPluginAsync = async (app) => {
       prisma.wheelEvent.count({ where: { ownerId: userId } }),
       prisma.testBook.count({ where: { ownerId: userId } }),
       prisma.parcourTemplate.count({ where: { ownerId: userId } }),
+      prisma.form.count({ where: { ownerId: userId } }),
     ])
 
-    return { boards, teams, scrumRooms, dailySessions, capacityEvents, wheelEvents, testBooks, parcourTemplates }
+    return { boards, teams, scrumRooms, dailySessions, capacityEvents, wheelEvents, testBooks, parcourTemplates, forms }
   })
 
   // Recent activity — dernières actions cross-modules pour la section "Récent" du hub.

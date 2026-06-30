@@ -17,6 +17,8 @@ interface HubStats {
   capacityEvents: number
   wheelEvents: number
   testBooks: number
+  parcourTemplates: number
+  forms: number
 }
 
 interface RecentBoard {
@@ -64,8 +66,10 @@ const STAT_CONFIG: { key: keyof HubStats; label: string; moduleId: string }[] = 
   { key: 'scrumRooms',    label: 'Salles Scrum',  moduleId: 'scrum'      },
   { key: 'dailySessions', label: 'Dailys',        moduleId: 'daily'      },
   { key: 'capacityEvents',label: 'Sprints',       moduleId: 'capacity'   },
-  { key: 'wheelEvents',   label: 'Tirages',       moduleId: 'wheel'      },
-  { key: 'testBooks',     label: 'Cahiers',       moduleId: 'testbooks'  },
+  { key: 'wheelEvents',       label: 'Tirages',      moduleId: 'wheel'      },
+  { key: 'testBooks',         label: 'Cahiers',      moduleId: 'testbooks'  },
+  { key: 'parcourTemplates',  label: 'Parcours',     moduleId: 'parcours'   },
+  { key: 'forms',             label: 'Formulaires',  moduleId: 'forms'      },
 ]
 
 function timeAgo(iso: string): string {
