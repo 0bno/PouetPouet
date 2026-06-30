@@ -153,7 +153,7 @@ export default function FormResponsesPage() {
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
               {form.fields.map((f) => {
                 if (f.type === 'section') return (
-                  <div key={f.id} className="px-6 py-4 bg-violet-50/60 dark:bg-violet-950/20">
+                  <div key={f.id} className="px-6 py-5 bg-violet-50/60 dark:bg-violet-950/20">
                     <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">{f.label}</p>
                     {f.description && <p className="text-xs text-violet-500 dark:text-violet-400 mt-0.5">{f.description}</p>}
                   </div>
@@ -161,15 +161,15 @@ export default function FormResponsesPage() {
                 const val = data[f.id]
                 const unanswered = isEmpty(val)
                 return (
-                  <div key={f.id} className="px-6 py-4">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                  <div key={f.id} className="px-6 py-5">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2.5">
                       {f.label || 'Sans titre'}
                       {f.required && <span className="text-red-400 ml-0.5">*</span>}
                     </p>
                     {unanswered ? (
                       <p className="text-sm text-gray-300 dark:text-gray-600 italic">Sans réponse</p>
                     ) : (
-                      <div className="text-sm text-violet-700 dark:text-violet-300 font-medium border-b border-violet-200 dark:border-violet-800 pb-1">
+                      <div className="text-sm text-violet-700 dark:text-violet-300 font-medium">
                         <CellValue field={f} value={val} formId={id} />
                       </div>
                     )}
