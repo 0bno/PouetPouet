@@ -7,14 +7,21 @@ import type { StepDef, FormField, FormSummary } from '@pouetpouet/shared'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
-const STEP_TYPES = [
+// 'form' est gardé dans ALL pour que les steps existants s'affichent correctement
+// dans le <select> de type, mais il est exclu du menu d'ajout.
+const STEP_TYPES_ALL = [
   { value: 'info',     label: 'Information',  description: 'Affiche un texte à lire' },
-  { value: 'form',     label: 'Formulaire',   description: 'Collecte des données' },
+  { value: 'form',     label: 'Formulaire',   description: 'Collecte des données (ancien type)',  legacy: true },
   { value: 'document', label: 'Document',     description: 'Demande un fichier' },
   { value: 'approval', label: 'Validation',   description: 'Approbation d\'un responsable' },
   { value: 'email',    label: 'Email',        description: 'Envoi automatique d\'email' },
-  { value: 'module',   label: 'Module Pivot', description: 'Lien vers un autre module' },
+  { value: 'module',   label: 'Module Pivot', description: 'Lien vers un module ou un formulaire' },
 ]
+
+const STEP_TYPES_MENU = STEP_TYPES_ALL.filter((t) => !('legacy' in t))
+
+// Modules sélectionnables — on exclut parcours (récursion) mais garde forms
+const MODULE_OPTIONS = PIVOT_MODULES.filter((m) => m.id !== 'parcours')
 
 interface Props {
   steps: StepDef[]
@@ -38,15 +45,19 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
   const [expanded, setExpanded] = useState(true)
   const [availableForms, setAvailableForms] = useState<Pick<FormSummary, 'id' | 'title' | 'publicToken' | 'isPublished'>[]>([])
 
+  const isFormsModule = step.type === 'module' && step.moduleId === 'forms'
+  const isLegacyLinkedForm = step.type === 'form' && step.formId !== undefined
+
   useEffect(() => {
-    if (step.type !== 'form' || !expanded) return
+    const needsForms = isFormsModule || isLegacyLinkedForm || (step.type === 'form' && expanded)
+    if (!needsForms || !expanded) return
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
     if (!token) return
     fetch(`${API_URL}/api/forms`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.ok ? r.json() : [])
       .then((list: Pick<FormSummary, 'id' | 'title' | 'publicToken' | 'isPublished'>[]) => setAvailableForms(list))
       .catch(() => {})
-  }, [step.type, expanded])
+  }, [step.type, step.moduleId, expanded, isFormsModule, isLegacyLinkedForm])
 
   function updateField(key: keyof StepDef, value: unknown) {
     onChange({ ...step, [key]: value } as StepDef)
@@ -56,19 +67,35 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
     onChange({ type, title: step.title })
   }
 
+  function changeModuleId(moduleId: string | undefined) {
+    const wasforms = step.moduleId === 'forms'
+    const isNowForms = moduleId === 'forms'
+    if (wasforms && !isNowForms) {
+      onChange({ ...step, moduleId, formId: undefined, formPublicToken: undefined })
+    } else if (!wasforms && isNowForms) {
+      onChange({ ...step, moduleId, moduleAction: undefined, moduleHref: undefined, moduleParams: undefined })
+    } else {
+      updateField('moduleId', moduleId)
+    }
+  }
+
+  function selectLinkedForm(formId: string) {
+    const selected = availableForms.find((f) => f.id === formId)
+    onChange({ ...step, formId: selected?.id ?? '', formPublicToken: selected?.publicToken ?? '' })
+  }
+
+  // ── champs inline (mode legacy 'form' sans formId) ──────────────────────────
   function addFormField() {
     const fields: FormField[] = [...(step.fields ?? []), {
       id: `field_${Date.now()}`, label: '', type: 'text', required: false,
     }]
     onChange({ ...step, fields })
   }
-
   function updateFormField(idx: number, patch: Partial<FormField>) {
     const fields = [...(step.fields ?? [])]
     fields[idx] = { ...fields[idx], ...patch }
     onChange({ ...step, fields })
   }
-
   function removeFormField(idx: number) {
     const fields = [...(step.fields ?? [])]
     fields.splice(idx, 1)
@@ -100,7 +127,7 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
           onChange={(e) => changeType(e.target.value as StepDef['type'])}
           className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-none focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer flex-shrink-0"
         >
-          {STEP_TYPES.map((t) => (
+          {STEP_TYPES_ALL.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
           ))}
         </select>
@@ -122,6 +149,8 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
 
       {expanded && (
         <div className="px-4 py-4 flex flex-col gap-3">
+
+          {/* ── Info ── */}
           {step.type === 'info' && (
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Contenu</label>
@@ -135,6 +164,7 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
             </div>
           )}
 
+          {/* Document joint requis (info + legacy form) */}
           {(step.type === 'info' || step.type === 'form') && (
             <label className="flex items-center gap-2 cursor-pointer text-sm">
               <input
@@ -147,115 +177,31 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
             </label>
           )}
 
+          {/* ── Legacy form (type='form') — rétrocompat ── */}
           {step.type === 'form' && (
             <div className="flex flex-col gap-3">
-              {/* Toggle inline / lié */}
               <div className="flex gap-4 text-sm">
                 <label className="flex items-center gap-2 cursor-pointer text-gray-600 dark:text-gray-400">
-                  <input
-                    type="radio"
-                    name={`form-mode-${index}`}
-                    checked={step.formId === undefined}
+                  <input type="radio" name={`form-mode-${index}`} checked={step.formId === undefined}
                     onChange={() => onChange({ ...step, formId: undefined, formPublicToken: undefined })}
-                    className="w-3.5 h-3.5 text-cyan-500"
-                  />
+                    className="w-3.5 h-3.5 text-cyan-500" />
                   Champs inline
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer text-gray-600 dark:text-gray-400">
-                  <input
-                    type="radio"
-                    name={`form-mode-${index}`}
-                    checked={step.formId !== undefined}
+                  <input type="radio" name={`form-mode-${index}`} checked={step.formId !== undefined}
                     onChange={() => onChange({ ...step, fields: undefined, formId: '', formPublicToken: '' })}
-                    className="w-3.5 h-3.5 text-cyan-500"
-                  />
-                  Formulaire lié (module Forms)
+                    className="w-3.5 h-3.5 text-cyan-500" />
+                  Formulaire lié
                 </label>
               </div>
-
-              {/* Mode lié */}
-              {step.formId !== undefined && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={step.formId ?? ''}
-                      onChange={(e) => {
-                        const selected = availableForms.find((f) => f.id === e.target.value)
-                        onChange({ ...step, formId: selected?.id ?? '', formPublicToken: selected?.publicToken ?? '' })
-                      }}
-                      className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                    >
-                      <option value="">Choisir un formulaire…</option>
-                      {availableForms.map((f) => (
-                        <option key={f.id} value={f.id}>{f.title}</option>
-                      ))}
-                    </select>
-                    {step.formId && (
-                      <a
-                        href={`/forms/${step.formId}/edit`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg text-gray-400 hover:text-cyan-500 transition-colors"
-                        title="Ouvrir le formulaire"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    )}
-                  </div>
-                  {step.formId && availableForms.find((f) => f.id === step.formId)?.isPublished === false && (
-                    <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                      Ce formulaire est un brouillon — publiez-le pour qu&apos;il soit accessible dans ce workflow.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Mode inline */}
+              {step.formId !== undefined && <FormPicker step={step} availableForms={availableForms} onSelect={selectLinkedForm} />}
               {step.formId === undefined && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Champs</label>
-                    <button onClick={addFormField} className="text-xs text-cyan-500 hover:text-cyan-600 flex items-center gap-1">
-                      <Plus className="w-3 h-3" /> Ajouter un champ
-                    </button>
-                  </div>
-                  {(step.fields ?? []).map((field, fi) => (
-                    <div key={field.id} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2">
-                      <input
-                        value={field.label}
-                        onChange={(e) => updateFormField(fi, { label: e.target.value })}
-                        placeholder="Label"
-                        className="flex-1 text-sm bg-transparent focus:outline-none dark:text-white"
-                      />
-                      <select
-                        value={field.type}
-                        onChange={(e) => updateFormField(fi, { type: e.target.value as FormField['type'] })}
-                        className="text-xs bg-transparent text-gray-500 dark:text-gray-400 focus:outline-none"
-                      >
-                        {['text', 'textarea', 'number', 'date', 'select', 'checkbox'].map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                      <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={field.required}
-                          onChange={(e) => updateFormField(fi, { required: e.target.checked })}
-                          className="w-3 h-3 rounded text-cyan-500"
-                        />
-                        Requis
-                      </label>
-                      <button onClick={() => removeFormField(fi)} className="text-gray-300 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <InlineFieldsEditor fields={step.fields ?? []} onAdd={addFormField} onUpdate={updateFormField} onRemove={removeFormField} />
               )}
             </div>
           )}
 
+          {/* ── Document ── */}
           {step.type === 'document' && (
             <div className="flex flex-col gap-2">
               <div>
@@ -280,6 +226,7 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
             </div>
           )}
 
+          {/* ── Approval / legacy form : assigné à ── */}
           {(step.type === 'approval' || step.type === 'form') && (
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Assigné à (email, optionnel)</label>
@@ -293,71 +240,195 @@ function StepItem({ step, index, total, onChange, onDelete, onMove, onDragStart,
             </div>
           )}
 
+          {/* ── Module Pivot ── */}
           {step.type === 'module' && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Module</label>
                 <select
                   value={step.moduleId ?? ''}
-                  onChange={(e) => updateField('moduleId', e.target.value || undefined)}
+                  onChange={(e) => changeModuleId(e.target.value || undefined)}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                 >
                   <option value="">Choisir un module…</option>
-                  {PIVOT_MODULES.filter((m) => m.id !== 'parcours').map((m) => (
+                  {MODULE_OPTIONS.map((m) => (
                     <option key={m.id} value={m.id}>{m.icon} {m.name}</option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Action automatique (optionnel)</label>
-                <select
-                  value={step.moduleAction ?? ''}
-                  onChange={(e) => updateField('moduleAction', e.target.value || undefined)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                >
-                  <option value="">Aucune — lien simple vers le module</option>
-                  <option value="create_board">🧀 Créer un board PouetPouet</option>
-                  <option value="create_meeting">🗓️ Créer une réunion MeetOps</option>
-                  <option value="create_daily">☀️ Créer une session Daily</option>
-                  <option value="create_scrum">🃏 Créer une room Scrum Poker</option>
-                </select>
-              </div>
-              {step.moduleAction && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Titre de la ressource (optionnel)</label>
-                  <input
-                    value={step.moduleParams?.title ?? ''}
-                    onChange={(e) => updateField('moduleParams', e.target.value ? { title: e.target.value } : undefined)}
-                    placeholder="Par défaut : titre du parcours"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                  />
-                </div>
+
+              {/* Forms : picker de formulaire + options forms */}
+              {isFormsModule && (
+                <>
+                  <FormPicker step={step} availableForms={availableForms} onSelect={selectLinkedForm} />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Assigné à (email, optionnel)</label>
+                    <input
+                      value={step.assignedTo ?? ''}
+                      onChange={(e) => updateField('assignedTo', e.target.value)}
+                      placeholder="prenom.nom@entreprise.fr"
+                      type="email"
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={step.requireDocument ?? false}
+                      onChange={(e) => updateField('requireDocument', e.target.checked || undefined)}
+                      className="w-4 h-4 rounded text-cyan-500"
+                    />
+                    <span className="text-gray-600 dark:text-gray-400">Exiger un document joint</span>
+                  </label>
+                </>
               )}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Instructions (optionnel)</label>
-                <textarea
-                  value={step.instructions ?? ''}
-                  onChange={(e) => updateField('instructions', e.target.value || undefined)}
-                  rows={2}
-                  placeholder="Ce que le participant doit faire dans ce module…"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
-                />
-              </div>
-              {!step.moduleAction && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">URL spécifique (optionnel)</label>
-                  <input
-                    value={step.moduleHref ?? ''}
-                    onChange={(e) => updateField('moduleHref', e.target.value || undefined)}
-                    placeholder="Ex : /scrum/ma-room"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                  />
-                </div>
+
+              {/* Autres modules : options habituelles */}
+              {!isFormsModule && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Action automatique (optionnel)</label>
+                    <select
+                      value={step.moduleAction ?? ''}
+                      onChange={(e) => updateField('moduleAction', e.target.value || undefined)}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    >
+                      <option value="">Aucune — lien simple vers le module</option>
+                      <option value="create_board">🧀 Créer un board PouetPouet</option>
+                      <option value="create_meeting">🗓️ Créer une réunion MeetOps</option>
+                      <option value="create_daily">☀️ Créer une session Daily</option>
+                      <option value="create_scrum">🃏 Créer une room Scrum Poker</option>
+                    </select>
+                  </div>
+                  {step.moduleAction && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Titre de la ressource (optionnel)</label>
+                      <input
+                        value={step.moduleParams?.title ?? ''}
+                        onChange={(e) => updateField('moduleParams', e.target.value ? { title: e.target.value } : undefined)}
+                        placeholder="Par défaut : titre du parcours"
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Instructions (optionnel)</label>
+                    <textarea
+                      value={step.instructions ?? ''}
+                      onChange={(e) => updateField('instructions', e.target.value || undefined)}
+                      rows={2}
+                      placeholder="Ce que le participant doit faire dans ce module…"
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
+                    />
+                  </div>
+                  {!step.moduleAction && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">URL spécifique (optionnel)</label>
+                      <input
+                        value={step.moduleHref ?? ''}
+                        onChange={(e) => updateField('moduleHref', e.target.value || undefined)}
+                        placeholder="Ex : /scrum/ma-room"
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Sous-composants partagés ──────────────────────────────────────────────────
+
+function FormPicker({ step, availableForms, onSelect }: {
+  step: StepDef
+  availableForms: Pick<FormSummary, 'id' | 'title' | 'publicToken' | 'isPublished'>[]
+  onSelect: (formId: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <select
+          value={step.formId ?? ''}
+          onChange={(e) => onSelect(e.target.value)}
+          className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+        >
+          <option value="">Choisir un formulaire…</option>
+          {availableForms.map((f) => (
+            <option key={f.id} value={f.id}>{f.title}</option>
+          ))}
+        </select>
+        {step.formId && (
+          <a
+            href={`/forms/${step.formId}/edit`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-lg text-gray-400 hover:text-cyan-500 transition-colors"
+            title="Ouvrir le formulaire"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        )}
+      </div>
+      {step.formId && availableForms.find((f) => f.id === step.formId)?.isPublished === false && (
+        <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          Ce formulaire est un brouillon — publiez-le pour qu&apos;il soit accessible dans ce workflow.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function InlineFieldsEditor({ fields, onAdd, onUpdate, onRemove }: {
+  fields: FormField[]
+  onAdd: () => void
+  onUpdate: (idx: number, patch: Partial<FormField>) => void
+  onRemove: (idx: number) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Champs</label>
+        <button onClick={onAdd} className="text-xs text-cyan-500 hover:text-cyan-600 flex items-center gap-1">
+          <Plus className="w-3 h-3" /> Ajouter un champ
+        </button>
+      </div>
+      {fields.map((field, fi) => (
+        <div key={field.id} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2">
+          <input
+            value={field.label}
+            onChange={(e) => onUpdate(fi, { label: e.target.value })}
+            placeholder="Label"
+            className="flex-1 text-sm bg-transparent focus:outline-none dark:text-white"
+          />
+          <select
+            value={field.type}
+            onChange={(e) => onUpdate(fi, { type: e.target.value as FormField['type'] })}
+            className="text-xs bg-transparent text-gray-500 dark:text-gray-400 focus:outline-none"
+          >
+            {['text', 'textarea', 'number', 'date', 'select', 'checkbox'].map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={field.required}
+              onChange={(e) => onUpdate(fi, { required: e.target.checked })}
+              className="w-3 h-3 rounded text-cyan-500"
+            />
+            Requis
+          </label>
+          <button onClick={() => onRemove(fi)} className="text-gray-300 hover:text-red-500 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
     </div>
   )
 }
@@ -441,7 +512,7 @@ export function StepBuilder({ steps, onChange }: Props) {
 
         {showTypeMenu && (
           <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-lg overflow-hidden z-10">
-            {STEP_TYPES.map((t) => (
+            {STEP_TYPES_MENU.map((t) => (
               <button
                 key={t.value}
                 onClick={() => addStep(t.value as StepDef['type'])}

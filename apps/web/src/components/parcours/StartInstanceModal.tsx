@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { useParcourInstances } from '@/hooks/useParcours'
+import { api } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import type { ParcourTemplateSummary } from '@pouetpouet/shared'
+import type { ParcourTemplateSummary, ParcourInstanceDetail } from '@pouetpouet/shared'
 
 interface Props {
   template: ParcourTemplateSummary
@@ -20,7 +20,6 @@ const PRIORITY_OPTIONS = [
 
 export function StartInstanceModal({ template, onClose }: Props) {
   const router = useRouter()
-  const { startInstance } = useParcourInstances()
   const [title, setTitle] = useState(`${template.name} — ${new Date().toLocaleDateString('fr-FR')}`)
   const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal')
   const [dueAt, setDueAt] = useState('')
@@ -29,7 +28,7 @@ export function StartInstanceModal({ template, onClose }: Props) {
   async function handleStart() {
     setLoading(true)
     try {
-      const instance = await startInstance({
+      const instance = await api.post<ParcourInstanceDetail>('/api/parcours/instances', {
         templateId: template.id,
         title: title.trim(),
         priority,

@@ -129,7 +129,10 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
     })
   }
 
-  app.addHook('preHandler', app.authenticate)
+  // Toutes les routes suivantes nécessitent une authentification.
+  // Isolées dans un sous-plugin pour que les routes _dev (storage local) n'en héritent pas.
+  await app.register(async (auth) => {
+    auth.addHook('preHandler', app.authenticate)
 
   // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -162,7 +165,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Templates ──────────────────────────────────────────────────────────────────
 
   // Liste : templates possédés + partagés, annotés du rôle + nb d'étapes.
-  app.get('/templates', async (request) => {
+  auth.get('/templates', async (request) => {
     const { id: userId } = request.user as { id: string }
     const shared = await sharedResourceIds('parcourTemplate', userId)
     const sharedRole = new Map(shared.map((s) => [s.id, s.role]))
@@ -187,7 +190,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Détail d'un template.
-  app.get('/templates/:id', async (request, reply) => {
+  auth.get('/templates/:id', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const t = await prisma.parcourTemplate.findUnique({ where: { id } })
@@ -202,7 +205,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Création d'un template.
-  app.post('/templates', async (request, reply) => {
+  auth.post('/templates', async (request, reply) => {
     const { id: ownerId } = request.user as { id: string }
     const body = templateCreateSchema.parse(request.body)
     const t = await prisma.parcourTemplate.create({
@@ -220,7 +223,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Mise à jour d'un template — OWNER/EDITOR.
-  app.patch('/templates/:id', async (request, reply) => {
+  auth.patch('/templates/:id', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { role } = await templateRoleFor(id, userId)
@@ -241,7 +244,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Duplication d'un template — tout rôle autorisé (le dupliqué appartient à l'appelant).
-  app.post('/templates/:id/duplicate', async (request, reply) => {
+  auth.post('/templates/:id/duplicate', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { role } = await templateRoleFor(id, userId)
@@ -264,7 +267,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Suppression d'un template — propriétaire uniquement.
-  app.delete('/templates/:id', async (request, reply) => {
+  auth.delete('/templates/:id', async (request, reply) => {
     const { id: ownerId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const t = await prisma.parcourTemplate.findFirst({ where: { id, ownerId } })
@@ -277,7 +280,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Instances ──────────────────────────────────────────────────────────────────
 
   // Liste des instances : possédées + partagées.
-  app.get('/instances', async (request) => {
+  auth.get('/instances', async (request) => {
     const { id: userId } = request.user as { id: string }
     const { status } = request.query as { status?: string }
     const shared = await sharedResourceIds('parcourInstance', userId)
@@ -310,7 +313,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Détail d'une instance : steps, documents, historique.
-  app.get('/instances/:id', async (request, reply) => {
+  auth.get('/instances/:id', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const instance = await prisma.parcourInstance.findUnique({
@@ -375,7 +378,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Démarrer une instance depuis un template.
-  app.post('/instances', async (request, reply) => {
+  auth.post('/instances', async (request, reply) => {
     const { id: ownerId } = request.user as { id: string }
     const body = instanceCreateSchema.parse(request.body)
     const template = await prisma.parcourTemplate.findUnique({ where: { id: body.templateId } })
@@ -447,7 +450,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
         body: `Réf. ${refNumber} — étape 1`,
         link: `/parcours/run/${instance.id}`,
       })
-      await sendParcoursStepAssignedEmail(
+      void sendParcoursStepAssignedEmail(
         firstStep.assignedTo, instance.title,
         (steps[0] as { title?: string })?.title ?? 'Étape 1', 1,
         refNumber, `${FRONTEND_URL}/parcours/run/${instance.id}`,
@@ -458,7 +461,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Compléter ou rejeter une étape.
-  app.post('/instances/:id/steps/:idx', async (request, reply) => {
+  auth.post('/instances/:id/steps/:idx', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -558,7 +561,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
           body: `Étape ${nextStep + 1}`,
           link: `/parcours/run/${id}`,
         })
-        await sendParcoursStepAssignedEmail(
+        void sendParcoursStepAssignedEmail(
           nextStepDef.assignedTo, instance.title,
           (steps[nextStep] as { title?: string })?.title ?? `Étape ${nextStep + 1}`, nextStep + 1,
           instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
@@ -591,7 +594,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Documents ──────────────────────────────────────────────────────────────────
 
   // Générer une signed URL d'upload GCS.
-  app.post('/instances/:id/documents/upload-url', async (request, reply) => {
+  auth.post('/instances/:id/documents/upload-url', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { filename, mimeType } = request.body as { filename: string; mimeType: string }
@@ -607,7 +610,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Enregistrer un document après upload GCS.
-  app.post('/instances/:id/documents', async (request, reply) => {
+  auth.post('/instances/:id/documents', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { role } = await instanceRoleFor(id, userId)
@@ -634,7 +637,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Signed URL de téléchargement.
-  app.get('/documents/:docId/url', async (request, reply) => {
+  auth.get('/documents/:docId/url', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { docId } = request.params as { docId: string }
     const doc = await prisma.parcourDocument.findUnique({ where: { id: docId } })
@@ -648,7 +651,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Suppression d'un document.
-  app.delete('/documents/:docId', async (request, reply) => {
+  auth.delete('/documents/:docId', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { docId } = request.params as { docId: string }
     const doc = await prisma.parcourDocument.findUnique({ where: { id: docId } })
@@ -667,7 +670,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Instance settings ─────────────────────────────────────────────────────────
 
   // Mise à jour légère : titre, priorité, dueAt, remindByEmail.
-  app.patch('/instances/:id', async (request, reply) => {
+  auth.patch('/instances/:id', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { role } = await instanceRoleFor(id, userId)
@@ -693,7 +696,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Ajouter un commentaire libre (sans compléter l'étape).
-  app.post('/instances/:id/comment', async (request, reply) => {
+  auth.post('/instances/:id/comment', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { role } = await instanceRoleFor(id, userId)
@@ -708,7 +711,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Ajouter un commentaire sur une étape spécifique.
-  app.post('/instances/:id/steps/:idx/comment', async (request, reply) => {
+  auth.post('/instances/:id/steps/:idx/comment', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -726,7 +729,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Stars ──────────────────────────────────────────────────────────────────────
 
   // Toggle star sur un template (crée ou supprime).
-  app.post('/templates/:id/star', async (request, reply) => {
+  auth.post('/templates/:id/star', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id: templateId } = request.params as { id: string }
 
@@ -747,7 +750,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // Retourne les templateIds que l'utilisateur a starrés (pour affichage côté client).
-  app.get('/stars', async (request) => {
+  auth.get('/stars', async (request) => {
     const { id: userId } = request.user as { id: string }
     const stars = await prisma.parcourStar.findMany({ where: { userId }, select: { templateId: true } })
     return stars.map((s) => s.templateId)
@@ -757,7 +760,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
   // Reprendre depuis une étape passée : remet l'étape idx et toutes les suivantes
   // en PENDING, repositionne currentStep sur idx, et remet le parcours IN_PROGRESS.
-  app.post('/instances/:id/steps/:idx/reopen', async (request, reply) => {
+  auth.post('/instances/:id/steps/:idx/reopen', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -794,7 +797,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
   // ── Force-complete (valider n'importe quelle étape manuellement) ─────────────
 
-  app.post('/instances/:id/steps/:idx/force-complete', async (request, reply) => {
+  auth.post('/instances/:id/steps/:idx/force-complete', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -858,7 +861,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
       })
       if (nextStepDef?.assignedTo) {
         await notify({ userId: nextStepDef.assignedTo, type: 'PARCOURS_STEP_ASSIGNED', title: `Étape à compléter dans "${instance.title}"`, link: `/parcours/run/${id}` })
-        await sendParcoursStepAssignedEmail(
+        void sendParcoursStepAssignedEmail(
           nextStepDef.assignedTo, instance.title,
           (steps[nextCurrentStep] as { title?: string })?.title ?? `Étape ${nextCurrentStep + 1}`, nextCurrentStep + 1,
           instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
@@ -875,7 +878,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
   // ── Reset d'une seule étape (sans cascade) ────────────────────────────────────
 
-  app.post('/instances/:id/steps/:idx/reset', async (request, reply) => {
+  auth.post('/instances/:id/steps/:idx/reset', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -912,7 +915,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
   // ── Mise à jour des données d'une étape ───────────────────────────────────────
 
-  app.patch('/instances/:id/steps/:idx/data', async (request, reply) => {
+  auth.patch('/instances/:id/steps/:idx/data', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -938,7 +941,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Restart ────────────────────────────────────────────────────────────────────
 
   // Relancer une instance rejetée ou annulée depuis l'étape courante.
-  app.post('/instances/:id/restart', async (request, reply) => {
+  auth.post('/instances/:id/restart', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
 
@@ -970,7 +973,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Skip step ─────────────────────────────────────────────────────────────────
 
   // Passe une étape (SKIPPED) et avance au suivant. Réservé à OWNER/EDITOR.
-  app.post('/instances/:id/steps/:idx/skip', async (request, reply) => {
+  auth.post('/instances/:id/steps/:idx/skip', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id, idx } = request.params as { id: string; idx: string }
     const stepIndex = parseInt(idx, 10)
@@ -1020,7 +1023,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
       })
       if (nextStepDef?.assignedTo) {
         await notify({ userId: nextStepDef.assignedTo, type: 'PARCOURS_STEP_ASSIGNED', title: `Étape à compléter dans "${instance.title}"`, link: `/parcours/run/${id}` })
-        await sendParcoursStepAssignedEmail(
+        void sendParcoursStepAssignedEmail(
           nextStepDef.assignedTo, instance.title,
           (steps[nextStep] as { title?: string })?.title ?? `Étape ${nextStep + 1}`, nextStep + 1,
           instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
@@ -1038,7 +1041,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   // ── Cancel instance ────────────────────────────────────────────────────────────
 
   // Annule définitivement l'instance (CANCELLED). OWNER uniquement.
-  app.post('/instances/:id/cancel', async (request, reply) => {
+  auth.post('/instances/:id/cancel', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
     const { comment } = z.object({ comment: z.string().max(500).optional() }).parse(request.body ?? {})
@@ -1056,5 +1059,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
     await prisma.parcourHistory.create({ data: { instanceId: id, userId, action: 'cancelled', comment: comment ?? null } })
     return reply.send({ ok: true })
   })
+
+  }) // fin du sous-plugin authentifié
 
 }

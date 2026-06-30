@@ -4,7 +4,7 @@ import { z } from 'zod'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { prisma } from '../../lib/prisma.js'
-import { resolveRole, deleteResourceShares, sharedResourceIds } from '../../lib/module-share.js'
+import { resolveRole, deleteResourceShares } from '../../lib/module-share.js'
 import { sendFormResponseEmail } from '../../lib/mailer.js'
 import { saveFile, readFile, deleteStorageFile } from '../../lib/storage.js'
 import type { FormFieldDef, FormFileValue } from '@pouetpouet/shared'
@@ -207,17 +207,36 @@ export const formsRoutes: FastifyPluginAsync = async (app) => {
     }
 
   // Liste de mes formulaires (possédés + partagés avec moi).
+  // Les deux requêtes sont indépendantes → Promise.all.
   auth.get('/', async (request) => {
     const { id: userId } = request.user as { id: string }
-    const shared = await sharedResourceIds('form', userId)
-    const sharedRoles = new Map(shared.map((s) => [s.id, s.role]))
 
-    const forms = await prisma.form.findMany({
-      where: { OR: [{ ownerId: userId }, { id: { in: shared.map((s) => s.id) } }] },
-      orderBy: { updatedAt: 'desc' },
-      include: { _count: { select: { responses: true } } },
-    })
-    return forms.map((f) => ({
+    const [ownedForms, sharedEntries] = await Promise.all([
+      prisma.form.findMany({
+        where: { ownerId: userId },
+        orderBy: { updatedAt: 'desc' },
+        include: { _count: { select: { responses: true } } },
+      }),
+      prisma.moduleShare.findMany({
+        where: { module: 'form', userId },
+        select: { resourceId: true, role: true },
+      }),
+    ])
+
+    const sharedRoles = new Map(sharedEntries.map((s) => [s.resourceId, s.role]))
+    let sharedForms: typeof ownedForms = []
+    if (sharedEntries.length > 0) {
+      sharedForms = await prisma.form.findMany({
+        where: { id: { in: sharedEntries.map((s) => s.resourceId) } },
+        orderBy: { updatedAt: 'desc' },
+        include: { _count: { select: { responses: true } } },
+      })
+    }
+
+    const allForms = [...ownedForms, ...sharedForms].sort((a, b) =>
+      b.updatedAt.getTime() - a.updatedAt.getTime()
+    )
+    return allForms.map((f) => ({
       id: f.id,
       ownerId: f.ownerId,
       title: f.title,
@@ -297,10 +316,10 @@ export const formsRoutes: FastifyPluginAsync = async (app) => {
   auth.patch('/:id', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
     const { id } = request.params as { id: string }
+    // Parse le body d'abord : fail fast si invalide, sans toucher la DB.
+    const body = formUpdateSchema.parse(request.body)
     const { role } = await roleFor(id, userId)
     if (!role || role === 'VIEWER') return reply.status(403).send({ error: 'Accès refusé' })
-
-    const body = formUpdateSchema.parse(request.body)
     const form = await prisma.form.update({
       where: { id },
       data: {

@@ -60,7 +60,7 @@ export default function ParcoursPage() {
 
       {/* Filtres */}
       <div className="flex gap-2">
-        {[['all', 'Tous'], ['IN_PROGRESS', 'En cours'], ['COMPLETED', 'Terminés'], ['REJECTED', 'Rejetés']].map(([val, label]) => (
+        {[['all', 'Tous'], ['IN_PROGRESS', 'En cours'], ['COMPLETED', 'Terminés'], ['REJECTED', 'Rejetés'], ['CANCELLED', 'Annulés']].map(([val, label]) => (
           <button
             key={val}
             onClick={() => setFilter(val)}

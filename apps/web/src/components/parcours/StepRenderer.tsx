@@ -386,8 +386,23 @@ export function StepRenderer({ step, stepIndex, stepData, existingDocCount = 0, 
         </div>
       )}
 
-      {/* Module step */}
-      {step.type === 'module' && (() => {
+      {/* Module step — formulaire lié */}
+      {step.type === 'module' && step.moduleId === 'forms' && step.formId && step.formPublicToken && (
+        <LinkedFormRenderer
+          formId={step.formId}
+          publicToken={step.formPublicToken}
+          comment={comment}
+          submitting={submitting}
+          setSubmitting={setSubmitting}
+          onComplete={async (data, cmt) => {
+            await onComplete('complete', data, cmt || undefined)
+            onDirtyChange?.(false)
+          }}
+        />
+      )}
+
+      {/* Module step — lien vers module */}
+      {step.type === 'module' && !(step.moduleId === 'forms' && step.formId) && (() => {
         const mod = PIVOT_MODULES.find((m) => m.id === step.moduleId)
         const created = stepData as CreatedResource | null
         const href = created?.url ?? step.moduleHref ?? mod?.nav[0]?.href ?? '/'
@@ -462,7 +477,10 @@ export function StepRenderer({ step, stepIndex, stepData, existingDocCount = 0, 
       )}
 
       {/* Actions — masqué pour les formulaires liés (ils ont leur propre bouton Valider) */}
-      {!(step.type === 'form' && step.formId) && (
+      {!(
+        (step.type === 'form' && step.formId) ||
+        (step.type === 'module' && step.moduleId === 'forms' && step.formId)
+      ) && (
         <div className="flex gap-3">
           <button
             onClick={() => handleComplete('complete')}

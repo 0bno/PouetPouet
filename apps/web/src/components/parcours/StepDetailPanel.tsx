@@ -32,6 +32,39 @@ function CompletedDataSummary({ step, data }: { step: StepDef; data: Record<stri
       {(data.title as string) ?? 'Voir la ressource créée'}
     </a>
   )
+  // Module Pivot → Formulaires : même affichage qu'un form step lié
+  if (step.type === 'module' && step.moduleId === 'forms' && step.formId && data?.formResponseId) {
+    const fields = (data.fields as { id: string; label: string }[] | undefined) ?? []
+    const answers = (data.answers as Record<string, unknown> | undefined) ?? {}
+    const pairs = fields.map((f) => ({ label: f.label, value: answers[f.id] }))
+    const isEmpty = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
+    if (pairs.length === 0) return <p className="text-sm text-gray-400 italic">Formulaire soumis.</p>
+    return (
+      <div className="rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          {pairs.map((p) => (
+            <div key={p.label} className="px-3 py-2.5">
+              <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">{p.label}</p>
+              {isEmpty(p.value)
+                ? <p className="text-xs text-gray-300 dark:text-gray-600 italic">—</p>
+                : <p className="text-sm text-gray-800 dark:text-gray-100">{Array.isArray(p.value) ? p.value.join(', ') : String(p.value)}</p>
+              }
+            </div>
+          ))}
+        </div>
+        <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+          <a
+            href={`/forms/${step.formId}/responses`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400 hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" /> Voir toutes les réponses
+          </a>
+        </div>
+      </div>
+    )
+  }
   if (step.type === 'form' && step.formId && data?.formResponseId) {
     const fields = (data.fields as { id: string; label: string }[] | undefined) ?? []
     const answers = (data.answers as Record<string, unknown> | undefined) ?? {}
