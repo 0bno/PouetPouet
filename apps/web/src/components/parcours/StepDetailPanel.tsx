@@ -35,28 +35,34 @@ function CompletedDataSummary({ step, data }: { step: StepDef; data: Record<stri
   if (step.type === 'form' && step.formId && data?.formResponseId) {
     const fields = (data.fields as { id: string; label: string }[] | undefined) ?? []
     const answers = (data.answers as Record<string, unknown> | undefined) ?? {}
-    const pairs = fields
-      .map((f) => ({ label: f.label, value: answers[f.id] }))
-      .filter((p) => p.value !== undefined && p.value !== null && p.value !== '')
+    const pairs = fields.map((f) => ({ label: f.label, value: answers[f.id] }))
+    const isEmpty = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
+    if (pairs.length === 0) return (
+      <p className="text-sm text-gray-400 italic">Formulaire soumis.</p>
+    )
     return (
-      <div className="flex flex-col gap-2">
-        {pairs.length === 0
-          ? <p className="text-sm text-gray-400 italic">Formulaire soumis.</p>
-          : pairs.map((p) => (
-            <div key={p.label} className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
-              <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">{p.label}</span>
-              <span className="dark:text-gray-200 text-gray-700">{Array.isArray(p.value) ? p.value.join(', ') : String(p.value)}</span>
+      <div className="rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          {pairs.map((p) => (
+            <div key={p.label} className="px-3 py-2.5">
+              <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">{p.label}</p>
+              {isEmpty(p.value)
+                ? <p className="text-xs text-gray-300 dark:text-gray-600 italic">—</p>
+                : <p className="text-sm text-gray-800 dark:text-gray-100">{Array.isArray(p.value) ? p.value.join(', ') : String(p.value)}</p>
+              }
             </div>
-          ))
-        }
-        <a
-          href={`/forms/${step.formId}/responses`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400 hover:underline mt-1"
-        >
-          <ExternalLink className="w-3 h-3" /> Voir toutes les réponses
-        </a>
+          ))}
+        </div>
+        <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+          <a
+            href={`/forms/${step.formId}/responses`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400 hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" /> Voir toutes les réponses
+          </a>
+        </div>
       </div>
     )
   }
@@ -65,11 +71,11 @@ function CompletedDataSummary({ step, data }: { step: StepDef; data: Record<stri
       .filter((p) => p.value !== undefined && p.value !== null && p.value !== '')
     if (pairs.length === 0) return <p className="text-sm text-gray-400 italic">Formulaire soumis (données vides).</p>
     return (
-      <div className="flex flex-col gap-2">
+      <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
         {pairs.map((p) => (
-          <div key={p.label} className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
-            <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">{p.label}</span>
-            <span className="dark:text-gray-200 text-gray-700">{String(p.value)}</span>
+          <div key={p.label} className="px-3 py-2.5">
+            <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">{p.label}</p>
+            <p className="text-sm text-gray-800 dark:text-gray-100">{String(p.value)}</p>
           </div>
         ))}
       </div>
