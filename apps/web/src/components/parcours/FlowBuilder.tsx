@@ -467,18 +467,36 @@ function ValidationEditor({ draft, up }: { draft: StepDef; up: (p: Partial<StepD
 
 function useFieldInsert(value: string, onChange: (v: string) => void) {
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null)
+  // Cursor position is saved on every keyup/click/select so it survives focus loss
+  const savedSel = useRef<[number, number]>([value.length, value.length])
+
+  function saveSel() {
+    const el = ref.current
+    if (el && el.selectionStart !== null) {
+      savedSel.current = [el.selectionStart, el.selectionEnd ?? el.selectionStart]
+    }
+  }
+
   function insert(key: string) {
     const el = ref.current
     const snippet = key.startsWith('(') ? '' : `{{${key}}}`
     if (!snippet) return
-    const start = el?.selectionStart ?? value.length
-    const end = el?.selectionEnd ?? value.length
+    // Prefer live selection if available (element still focused), fall back to saved
+    const [savedStart, savedEnd] = savedSel.current
+    const start = (el && document.activeElement === el && el.selectionStart !== null)
+      ? el.selectionStart
+      : savedStart
+    const end = (el && document.activeElement === el && el.selectionEnd !== null)
+      ? (el.selectionEnd ?? start)
+      : savedEnd
     const next = value.slice(0, start) + snippet + value.slice(end)
     onChange(next)
     const pos = start + snippet.length
+    savedSel.current = [pos, pos]
     requestAnimationFrame(() => { el?.setSelectionRange(pos, pos); el?.focus() })
   }
-  return { ref, insert }
+
+  return { ref, insert, saveSel }
 }
 
 function VarPickerButton({ vars, onInsert }: { vars: WorkflowVariable[]; onInsert: (key: string) => void }) {
@@ -511,7 +529,7 @@ function VarPickerButton({ vars, onInsert }: { vars: WorkflowVariable[]; onInser
             <p className="text-[10px] text-gray-400 px-2 py-1 border-b border-gray-100 dark:border-gray-700 mb-1">Insérer au curseur</p>
             {pickable.map((v) => (
               <button key={`${v.sourceStepIndex}:${v.key}`} type="button"
-                onClick={() => { onInsert(v.key); setOpen(false) }}
+                onMouseDown={(e) => { e.preventDefault(); onInsert(v.key); setOpen(false) }}
                 className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${v.certainty === 'certain' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                 <div className="flex-1 min-w-0">
@@ -534,7 +552,7 @@ function VarTextField({
   label: string; required?: boolean; value: string; onChange: (v: string) => void
   availableVars: WorkflowVariable[]; multiline?: boolean; rows?: number; placeholder?: string; fontMono?: boolean; className?: string
 }) {
-  const { ref, insert } = useFieldInsert(value, onChange)
+  const { ref, insert, saveSel } = useFieldInsert(value, onChange)
   const [acOpen, setAcOpen] = useState(false)
   const [acQuery, setAcQuery] = useState('')
   const [acStart, setAcStart] = useState(-1)
@@ -577,13 +595,21 @@ function VarTextField({
         <VarPickerButton vars={availableVars} onInsert={insert} />
       </div>
       {multiline
-        ? <textarea ref={ref} rows={rows ?? 3} value={value} onChange={(e) => handleChange(e.target.value)} onBlur={() => setTimeout(() => setAcOpen(false), 150)} placeholder={placeholder} className={cls} />
-        : <input ref={ref} value={value} onChange={(e) => handleChange(e.target.value)} onBlur={() => setTimeout(() => setAcOpen(false), 150)} placeholder={placeholder} className={cls} />
+        ? <textarea ref={ref} rows={rows ?? 3} value={value}
+            onChange={(e) => handleChange(e.target.value)}
+            onSelect={saveSel} onKeyUp={saveSel} onMouseUp={saveSel}
+            onBlur={() => { saveSel(); setTimeout(() => setAcOpen(false), 150) }}
+            placeholder={placeholder} className={cls} />
+        : <input ref={ref} value={value}
+            onChange={(e) => handleChange(e.target.value)}
+            onSelect={saveSel} onKeyUp={saveSel} onMouseUp={saveSel}
+            onBlur={() => { saveSel(); setTimeout(() => setAcOpen(false), 150) }}
+            placeholder={placeholder} className={cls} />
       }
       {acOpen && acFiltered.length > 0 && (
         <div className="absolute left-0 top-full mt-0.5 z-50 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-h-40 overflow-y-auto">
           {acFiltered.slice(0, 8).map((v) => (
-            <button key={v.key} type="button" onMouseDown={() => handleAcSelect(v.key)}
+            <button key={v.key} type="button" onMouseDown={(e) => { e.preventDefault(); handleAcSelect(v.key) }}
               className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${v.certainty === 'certain' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200 flex-1 truncate">{v.label}</span>
