@@ -205,7 +205,7 @@ export default function HubPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{item.title}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{item.sub}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{item.sub}</p>
                   </div>
                 </Link>
               )
@@ -290,7 +290,7 @@ export default function HubPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{item.label}</p>
-                  <p className="text-[11px] text-gray-400 truncate">{item.desc}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{item.desc}</p>
                 </div>
               </Link>
             )
@@ -312,7 +312,7 @@ export default function HubPage() {
               <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-gray-400 dark:text-gray-500 truncate">{m.name}</p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500">{m.domain}</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">{m.domain}</p>
               </div>
               <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-2 py-0.5">
                 À venir
