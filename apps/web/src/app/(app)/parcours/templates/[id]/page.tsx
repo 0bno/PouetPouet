@@ -1,44 +1,106 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Play, Pencil, Save, X } from 'lucide-react'
+import { Play, Save, Rocket, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useParcourTemplate } from '@/hooks/useParcours'
 import { useFlagGuard } from '@/hooks/useFlagGuard'
-import { StepBuilder } from '@/components/parcours/StepBuilder'
+import { FlowBuilder, type FlowBuilderState } from '@/components/parcours/FlowBuilder'
 import { StartInstanceModal } from '@/components/parcours/StartInstanceModal'
-import type { StepDef } from '@pouetpouet/shared'
+import { validateForPublish, type ValidationIssue } from '@/lib/parcours-validate'
 
-const STEP_TYPE_LABEL: Record<string, string> = {
-  info: 'Info', form: 'Formulaire', document: 'Document', approval: 'Validation', email: 'Email',
-}
+const CATEGORIES = ['cyber', 'archi', 'onboarding', 'qualite', 'rh', 'it', 'autre']
 
 export default function TemplateDetailPage() {
   useFlagGuard('module.parcours')
   const { id } = useParams<{ id: string }>()
   const { template, isLoading, accessDenied, updateTemplate } = useParcourTemplate(id)
 
-  const [editing, setEditing] = useState(false)
-  const [draftSteps, setDraftSteps] = useState<StepDef[]>([])
-  const [draftName, setDraftName] = useState('')
-  const [draftDesc, setDraftDesc] = useState('')
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('')
+  const [tags, setTags] = useState('')
+
+  const [flowState, setFlowState] = useState<FlowBuilderState>({
+    steps: [],
+    flowEdges: [],
+    triggerType: 'manual',
+    triggerConfig: {},
+  })
+
   const [saving, setSaving] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [error, setError] = useState('')
+  const [issues, setIssues] = useState<ValidationIssue[] | null>(null)
   const [starting, setStarting] = useState(false)
 
-  function startEdit() {
+  // Initialise les champs quand le template est chargé
+  useEffect(() => {
     if (!template) return
-    setDraftName(template.name)
-    setDraftDesc(template.description ?? '')
-    setDraftSteps(template.steps)
-    setEditing(true)
+    setName(template.name)
+    setDescription(template.description ?? '')
+    setCategory(template.category ?? '')
+    setTags(template.tags.join(', '))
+    setFlowState({
+      steps: template.steps,
+      flowEdges: template.flowEdges,
+      triggerType: template.triggerType,
+      triggerConfig: template.triggerConfig,
+    })
+  }, [template])
+
+  function buildPayload() {
+    return {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      category: category || undefined,
+      tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      steps: flowState.steps,
+      flowEdges: flowState.flowEdges,
+      triggerType: flowState.triggerType,
+      triggerConfig: flowState.triggerConfig,
+    }
   }
 
-  async function saveEdit() {
+  async function handleSave() {
+    if (!name.trim()) { setError('Le nom est obligatoire.'); return }
+    setSaving(true)
+    setError('')
+    setIssues(null)
+    try {
+      await updateTemplate(buildPayload())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Erreur lors de la sauvegarde')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleValidateAndSave() {
+    if (!name.trim()) { setError('Le nom est obligatoire.'); return }
+    setError('')
+    setValidating(true)
+    setIssues(null)
+
+    const foundIssues = await validateForPublish(flowState).catch((e) => {
+      setError(e instanceof Error ? e.message : 'Erreur de validation')
+      return null
+    })
+    setValidating(false)
+
+    if (!foundIssues) return
+
+    const blocking = foundIssues.filter((i) => i.blocking)
+    setIssues(foundIssues)
+
+    if (blocking.length > 0) return
+
     setSaving(true)
     try {
-      await updateTemplate({ name: draftName, description: draftDesc, steps: draftSteps })
-      setEditing(false)
+      await updateTemplate(buildPayload())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Erreur lors de la sauvegarde')
     } finally {
       setSaving(false)
     }
@@ -57,109 +119,126 @@ export default function TemplateDetailPage() {
     </div>
   )
 
+  const hasBlockingIssues = issues?.some((i) => i.blocking) ?? false
+  const isViewer = template.role === 'VIEWER'
+
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
       <div>
         <Link href="/parcours/templates" className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 mb-1 inline-block">
           ← Templates
         </Link>
-        {editing ? (
-          <input
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            className="text-3xl font-bold bg-transparent focus:outline-none border-b-2 border-cyan-500 dark:text-white w-full"
-          />
-        ) : (
-          <h1 className="text-3xl font-bold dark:text-white">{template.name}</h1>
-        )}
+        <h1 className="text-3xl font-bold dark:text-white">{template.name}</h1>
       </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => setStarting(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-medium transition-colors"
-        >
-          <Play className="w-4 h-4" />
-          Démarrer
-        </button>
-        {template.role !== 'VIEWER' && !editing && (
-          <button
-            onClick={startEdit}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            <Pencil className="w-4 h-4" />
-            Modifier
-          </button>
-        )}
-        {editing && (
-          <>
-            <button
-              onClick={saveEdit}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-medium disabled:opacity-50 transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Sauvegarde…' : 'Sauvegarder'}
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-              Annuler
-            </button>
-          </>
-        )}
-      </div>
+      {/* Métadonnées */}
+      <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-w-2xl">
+        <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Informations</h2>
 
-      <div className="p-5 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col gap-3">
-        {editing ? (
-          <textarea
-            value={draftDesc}
-            onChange={(e) => setDraftDesc(e.target.value)}
-            rows={2}
-            placeholder="Description…"
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
-          />
-        ) : template.description ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">{template.description}</p>
-        ) : null}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Nom <span className="text-red-500">*</span></label>
+          <input value={name} onChange={(e) => setName(e.target.value)} disabled={isViewer}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60" />
+        </div>
 
-        <div className="flex gap-3 text-xs text-gray-400 flex-wrap">
-          {template.category && <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800">{template.category}</span>}
-          {template.tags.map((tag) => (
-            <span key={tag} className="px-2 py-0.5 rounded-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">{tag}</span>
-          ))}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Description</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} disabled={isViewer}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none disabled:opacity-60" />
+        </div>
+
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Catégorie</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={isViewer}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60">
+              <option value="">Sans catégorie</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Tags (séparés par des virgules)</label>
+            <input value={tags} onChange={(e) => setTags(e.target.value)} disabled={isViewer}
+              placeholder="audit, sécurité…"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60" />
+          </div>
         </div>
       </div>
 
-      <div className="p-5 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col gap-4">
-        <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          Étapes ({editing ? draftSteps.length : template.steps.length})
-        </h2>
-
-        {editing ? (
-          <StepBuilder steps={draftSteps} onChange={setDraftSteps} />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {template.steps.map((step, idx) => (
-              <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800">
-                <span className="text-xs text-gray-400 w-5 flex-shrink-0">{idx + 1}</span>
-                <span className="flex-1 text-sm dark:text-white">{step.title}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                  {STEP_TYPE_LABEL[step.type]}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Canvas */}
+      <div className="flex flex-col gap-3 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            Flux d'étapes <span className="text-gray-400 font-normal normal-case ml-1">({flowState.steps.length} étape{flowState.steps.length > 1 ? 's' : ''})</span>
+          </h2>
+        </div>
+        <FlowBuilder
+          steps={flowState.steps}
+          flowEdges={flowState.flowEdges}
+          triggerType={flowState.triggerType}
+          triggerConfig={flowState.triggerConfig}
+          onChange={isViewer ? () => {} : setFlowState}
+        />
       </div>
 
+      {/* Résultats de validation */}
+      {issues && issues.length > 0 && (
+        <div className="flex flex-col gap-2 max-w-2xl">
+          {issues.map((issue, i) => (
+            <div key={i} className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm ${issue.blocking ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'}`}>
+              <AlertCircle size={15} className={`shrink-0 mt-0.5 ${!issue.blocking ? 'opacity-70' : ''}`} />
+              {issue.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {issues && !hasBlockingIssues && issues.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-sm max-w-2xl">
+          <CheckCircle2 size={15} className="shrink-0" />
+          Avertissements non bloquants — sauvegarde possible
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl max-w-2xl">{error}</p>
+      )}
+
+      {/* Actions */}
+      {!isViewer && (
+        <div className="flex gap-3 max-w-2xl">
+          <button onClick={() => setStarting(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-medium transition-colors">
+            <Play size={14} />
+            Démarrer
+          </button>
+
+          <button onClick={handleSave} disabled={saving || validating}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <Save size={14} />
+            {saving ? 'Sauvegarde…' : 'Enregistrer'}
+          </button>
+
+          <button onClick={handleValidateAndSave} disabled={saving || validating}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+            <Rocket size={14} />
+            {validating ? 'Validation…' : saving ? 'Sauvegarde…' : 'Valider et sauvegarder'}
+          </button>
+        </div>
+      )}
+
+      {isViewer && (
+        <div className="max-w-2xl">
+          <button onClick={() => setStarting(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-medium transition-colors">
+            <Play size={14} />
+            Démarrer un parcours
+          </button>
+        </div>
+      )}
+
       {starting && (
-        <StartInstanceModal
-          template={template}
-          onClose={() => setStarting(false)}
-        />
+        <StartInstanceModal template={template} onClose={() => setStarting(false)} />
       )}
     </div>
   )

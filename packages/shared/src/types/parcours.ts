@@ -22,7 +22,7 @@ export type FormField = {
 }
 
 export type StepDef = {
-  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module' | 'http' | 'approval-chain'
+  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module' | 'http' | 'approval-chain' | 'ai-prompt'
   title: string
   assignedTo?: string
   assignedLabel?: string
@@ -56,6 +56,11 @@ export type StepDef = {
   // approval-chain — séquence d'approbateurs auto-avancée
   approvers?: string[] // userId[] dans l'ordre
   requireAll?: boolean // true = tous doivent approuver (défaut), false = premier suffit
+  // ai-prompt — appel IA auto (beta)
+  aiPrompt?: string        // prompt utilisateur avec {{variable}}
+  aiSystemPrompt?: string  // system prompt optionnel
+  aiModel?: string         // ex: claude-haiku-4-5-20251001
+  aiOutputKey?: string     // clé dans instance.data
 }
 
 export interface ParcourTemplateSummary {

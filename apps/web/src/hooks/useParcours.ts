@@ -93,6 +93,9 @@ export function useParcourTemplate(id: string) {
     category: string
     tags: string[]
     steps: StepDef[]
+    flowEdges: import('@pouetpouet/shared').FlowEdge[]
+    triggerType: import('@pouetpouet/shared').TriggerType
+    triggerConfig: { formId?: string }
     defaultObservers: string[]
   }>) => {
     const updated = await api.patch<ParcourTemplateDetail>(`/api/parcours/templates/${id}`, patch)

@@ -8,6 +8,7 @@ import { sendParcoursStepAssignedEmail } from '../../lib/mailer.js'
 import { getUploadSignedUrl, getDownloadSignedUrl, deleteStorageFile, LOCAL_UPLOAD_DIR } from '../../lib/storage.js'
 import { bus } from '../../lib/bus.js'
 import { initApprovalChain, currentApprover, canDecide, recordDecision } from '../../lib/approval-chain.js'
+import { type SkipIfDef, type FlowEdgeDef, type ModuleStepDef, evalCondition, interpolate, executeHttpStep, executeAiStep, resolveNextStep } from '../../lib/parcours-engine.js'
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
 import crypto from 'node:crypto'
@@ -70,84 +71,6 @@ const documentRegisterSchema = z.object({
   stepIndex: z.number().int().min(0).optional(),
 })
 
-type SkipIfDef = { field: string; operator: 'eq' | 'neq' | 'contains'; value: string }
-type FlowEdgeDef = { id: string; source: string; target: string; condition?: SkipIfDef; label?: string }
-
-type ModuleStepDef = {
-  type?: string
-  assignedTo?: string
-  slaDays?: number
-  skipIf?: SkipIfDef
-  moduleAction?: 'create_board' | 'create_meeting' | 'create_daily' | 'create_scrum'
-  moduleParams?: { title?: string }
-  httpMethod?: string
-  httpUrl?: string
-  httpHeaders?: Record<string, string>
-  httpBody?: string
-  httpOutputKey?: string
-  approvers?: string[]
-  requireAll?: boolean
-}
-
-function evalCondition(cond: SkipIfDef, data: Record<string, unknown>): boolean {
-  const val = String(data[cond.field] ?? '')
-  switch (cond.operator) {
-    case 'eq': return val === cond.value
-    case 'neq': return val !== cond.value
-    case 'contains': return val.includes(cond.value)
-  }
-}
-
-function interpolate(template: string, data: Record<string, unknown>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => String(data[k] ?? ''))
-}
-
-async function executeHttpStep(
-  step: ModuleStepDef,
-  instanceData: Record<string, unknown>,
-): Promise<{ outputKey: string | null; output: unknown }> {
-  const url = interpolate(step.httpUrl ?? '', instanceData)
-  if (!url) return { outputKey: null, output: null }
-  const method = step.httpMethod ?? 'GET'
-  const body = step.httpBody ? interpolate(step.httpBody, instanceData) : undefined
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(step.httpHeaders ?? {}) }
-  const res = await fetch(url, {
-    method,
-    headers,
-    ...(body ? { body } : {}),
-  })
-  let output: unknown = null
-  try { output = await res.json() } catch { output = await res.text().catch(() => null) }
-  return { outputKey: step.httpOutputKey ?? null, output }
-}
-
-// Résolution de la prochaine étape en tenant compte des arêtes et des conditions.
-// Si flowEdges est vide, comportement linéaire original.
-function resolveNextStep(
-  currentIdx: number,
-  steps: ModuleStepDef[],
-  flowEdges: FlowEdgeDef[],
-  statuses: Map<number, string>,
-  instanceData: Record<string, unknown>,
-): number {
-  const edgesFromCurrent = flowEdges.filter((e) => e.source === String(currentIdx))
-  if (edgesFromCurrent.length === 0) {
-    // Comportement linéaire : prochaine étape PENDING
-    for (let i = currentIdx + 1; i < steps.length; i++) {
-      const st = statuses.get(i)
-      if (st !== 'COMPLETED' && st !== 'SKIPPED') return i
-    }
-    return steps.length // terminé
-  }
-  // Évaluer les arêtes conditionnelles en priorité, puis les arêtes sans condition
-  const condEdges = edgesFromCurrent.filter((e) => e.condition)
-  const uncondEdges = edgesFromCurrent.filter((e) => !e.condition)
-  for (const edge of condEdges) {
-    if (edge.condition && evalCondition(edge.condition, instanceData)) return parseInt(edge.target, 10)
-  }
-  if (uncondEdges.length > 0) return parseInt(uncondEdges[0].target, 10)
-  return steps.length // pas d'arête valide → terminé
-}
 
 // Crée la ressource dans le module cible et retourne les métadonnées à stocker dans stepInstance.data.
 async function triggerModuleAction(
@@ -705,23 +628,31 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
           ? new Date(now.getTime() + nextStepDef.slaDays * 24 * 60 * 60 * 1000)
           : null
 
-        // Étape HTTP : exécution automatique puis avancement sans interaction humaine
-        if (nextStepDef?.type === 'http') {
-          const { outputKey, output } = await executeHttpStep(nextStepDef, instanceData).catch(() => ({ outputKey: null, output: null }))
-          const httpData: Record<string, unknown> = { _httpOutput: output }
-          if (outputKey) httpData[outputKey] = output
+        // Étapes auto-exécutées : HTTP et AI prompt
+        const isAutoStep = nextStepDef?.type === 'http' || nextStepDef?.type === 'ai-prompt'
+        if (isAutoStep) {
+          let autoData: Record<string, unknown>
+          if (nextStepDef?.type === 'http') {
+            const { outputKey, output } = await executeHttpStep(nextStepDef, instanceData).catch(() => ({ outputKey: null, output: null }))
+            autoData = { _httpOutput: output }
+            if (outputKey) autoData[outputKey] = output
+          } else {
+            const { outputKey, output } = await executeAiStep(nextStepDef, instanceData, process.env.ANTHROPIC_API_KEY).catch(() => ({ outputKey: null, output: null }))
+            autoData = { _aiOutput: output }
+            if (outputKey) autoData[outputKey] = output
+          }
           await prisma.parcourStepInstance.update({
             where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },
-            data: { status: 'COMPLETED', completedAt: now, data: httpData as Prisma.InputJsonValue },
+            data: { status: 'COMPLETED', completedAt: now, data: autoData as Prisma.InputJsonValue },
           })
           await prisma.parcourHistory.create({
             data: { instanceId: id, stepIndex: nextStep, userId: instance.ownerId, action: 'step_completed' },
           })
           statuses.set(nextStep, 'COMPLETED')
-          Object.assign(instanceData, httpData)
-          const afterHttp = resolveNextStep(nextStep, steps, flowEdges, statuses, instanceData)
-          nextStep = afterHttp >= steps.length ? steps.length - 1 : afterHttp
-          if (afterHttp >= steps.length) {
+          Object.assign(instanceData, autoData)
+          const afterAuto = resolveNextStep(nextStep, steps, flowEdges, statuses, instanceData)
+          nextStep = afterAuto >= steps.length ? steps.length - 1 : afterAuto
+          if (afterAuto >= steps.length) {
             instanceStatus = 'COMPLETED'
             await prisma.parcourHistory.create({ data: { instanceId: id, userId, action: 'completed' } })
             await notify({ userId: instance.ownerId, type: 'PARCOURS_INSTANCE_COMPLETED', title: `Parcours terminé : "${instance.title}"`, link: `/parcours/run/${id}` })

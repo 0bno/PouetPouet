@@ -6,93 +6,10 @@ import { useRouter } from 'next/navigation'
 import { useParcourTemplates } from '@/hooks/useParcours'
 import { useFlagGuard } from '@/hooks/useFlagGuard'
 import { FlowBuilder, type FlowBuilderState } from '@/components/parcours/FlowBuilder'
-import type { StepDef } from '@pouetpouet/shared'
-import { api } from '@/lib/api'
 import { AlertCircle, CheckCircle2, Save, Rocket } from 'lucide-react'
+import { validateForPublish, type ValidationIssue } from '@/lib/parcours-validate'
 
 const CATEGORIES = ['cyber', 'archi', 'onboarding', 'qualite', 'rh', 'it', 'autre']
-
-// ─── Validation pré-publication ───────────────────────────────────────────────
-
-type ValidationIssue = { stepIdx?: number; message: string; blocking: boolean }
-
-async function validateForPublish(state: FlowBuilderState): Promise<ValidationIssue[]> {
-  const issues: ValidationIssue[] = []
-  const { steps, triggerType, triggerConfig } = state
-
-  if (steps.length === 0) {
-    issues.push({ message: 'Le workflow doit contenir au moins une étape', blocking: true })
-    return issues
-  }
-
-  for (let i = 0; i < steps.length; i++) {
-    const s = steps[i]
-    const label = `Étape ${i + 1} "${s.title || 'sans titre'}"`
-
-    if (!s.title?.trim()) {
-      issues.push({ stepIdx: i, message: `${label} : titre obligatoire`, blocking: true })
-    }
-
-    switch (s.type) {
-      case 'form':
-        if (s.formId) {
-          try {
-            await api.get(`/api/forms/${s.formId}`)
-          } catch {
-            issues.push({ stepIdx: i, message: `${label} : formulaire lié introuvable (id: ${s.formId})`, blocking: true })
-          }
-        }
-        break
-
-      case 'http':
-        if (!s.httpUrl?.trim()) {
-          issues.push({ stepIdx: i, message: `${label} : URL HTTP obligatoire`, blocking: true })
-        } else if (!/^https?:\/\/.+/.test(s.httpUrl)) {
-          issues.push({ stepIdx: i, message: `${label} : URL HTTP invalide (doit commencer par http:// ou https://)`, blocking: true })
-        }
-        break
-
-      case 'approval':
-        if (!s.assignedTo?.trim()) {
-          issues.push({ stepIdx: i, message: `${label} : aucun valideur assigné`, blocking: false })
-        }
-        break
-
-      case 'approval-chain':
-        if (!s.approvers?.length) {
-          issues.push({ stepIdx: i, message: `${label} : aucun approbateur défini`, blocking: true })
-        }
-        break
-
-      case 'email':
-        if (!s.to?.trim()) {
-          issues.push({ stepIdx: i, message: `${label} : destinataire email obligatoire`, blocking: true })
-        }
-        break
-
-      case 'module':
-        if (!s.moduleAction) {
-          issues.push({ stepIdx: i, message: `${label} : action module obligatoire`, blocking: true })
-        }
-        break
-    }
-  }
-
-  // Trigger form_response : vérifier le formId
-  if (triggerType === 'form_response') {
-    if (!triggerConfig.formId?.trim()) {
-      issues.push({ message: 'Déclencheur "réponse formulaire" : ID formulaire obligatoire', blocking: true })
-    } else {
-      try {
-        await api.get(`/api/forms/${triggerConfig.formId}`)
-      } catch {
-        issues.push({ message: `Déclencheur : formulaire déclencheur introuvable (id: ${triggerConfig.formId})`, blocking: true })
-      }
-    }
-  }
-
-  return issues
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 

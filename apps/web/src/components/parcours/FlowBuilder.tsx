@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   ReactFlow,
   Background,
@@ -17,20 +17,23 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Plus, Trash2, Zap, Globe, CheckSquare, Mail, FileText, Info, Users, Link2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Trash2, Zap, Globe, CheckSquare, Mail, FileText, Info, Users, Link2, Sparkles } from 'lucide-react'
+import { api } from '@/lib/api'
 import type { StepDef, FlowEdge, TriggerType } from '@pouetpouet/shared'
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 const NODE_TYPES_DEF = [
-  { type: 'info',           label: 'Info',           icon: Info,        color: 'bg-sky-500',    shape: 'rect' },
-  { type: 'form',           label: 'Formulaire',     icon: FileText,    color: 'bg-violet-500', shape: 'rect' },
-  { type: 'document',       label: 'Document',       icon: FileText,    color: 'bg-amber-500',  shape: 'rect' },
-  { type: 'approval',       label: 'Validation',     icon: CheckSquare, color: 'bg-emerald-500',shape: 'diamond' },
-  { type: 'approval-chain', label: 'Chaîne appro.',  icon: Users,       color: 'bg-emerald-600',shape: 'diamond' },
-  { type: 'email',          label: 'Email',          icon: Mail,        color: 'bg-pink-500',   shape: 'rect' },
-  { type: 'http',           label: 'HTTP',           icon: Globe,       color: 'bg-orange-500', shape: 'hexagon' },
-  { type: 'module',         label: 'Module Pivot',   icon: Link2,       color: 'bg-indigo-500', shape: 'rect' },
+  { type: 'info',           label: 'Info',           icon: Info,        color: 'bg-sky-500',    shape: 'rect',    beta: false },
+  { type: 'form',           label: 'Formulaire',     icon: FileText,    color: 'bg-violet-500', shape: 'rect',    beta: false },
+  { type: 'document',       label: 'Document',       icon: FileText,    color: 'bg-amber-500',  shape: 'rect',    beta: false },
+  { type: 'approval',       label: 'Validation',     icon: CheckSquare, color: 'bg-emerald-500',shape: 'diamond', beta: false },
+  { type: 'approval-chain', label: 'Chaîne appro.',  icon: Users,       color: 'bg-emerald-600',shape: 'diamond', beta: false },
+  { type: 'email',          label: 'Email',          icon: Mail,        color: 'bg-pink-500',   shape: 'rect',    beta: false },
+  { type: 'http',           label: 'HTTP',           icon: Globe,       color: 'bg-orange-500', shape: 'hexagon', beta: false },
+  { type: 'module',         label: 'Module Pivot',   icon: Link2,       color: 'bg-indigo-500', shape: 'rect',    beta: false },
+  { type: 'ai-prompt',      label: 'Prompt IA',      icon: Sparkles,    color: 'bg-purple-600', shape: 'hexagon', beta: true  },
 ] as const
 
 type StepType = (typeof NODE_TYPES_DEF)[number]['type']
@@ -199,6 +202,74 @@ function rfEdgesToFlowEdges(rfEdges: Edge[]): FlowEdge[] {
 
 // ─── Éditeur de step ─────────────────────────────────────────────────────────
 
+type FormSummary = { id: string; title: string; isPublished: boolean }
+
+function FormPicker({ value, onChange }: { value?: string; onChange: (id: string) => void }) {
+  const [forms, setForms] = useState<FormSummary[]>([])
+  const [creating, setCreating] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.get<FormSummary[]>('/api/forms').then(setForms).catch(() => {})
+  }, [])
+
+  async function createForm() {
+    if (!newTitle.trim()) return
+    setLoading(true)
+    try {
+      const f = await api.post<FormSummary>('/api/forms', { title: newTitle.trim() })
+      setForms((prev) => [f, ...prev])
+      onChange(f.id)
+      setCreating(false)
+      setNewTitle('')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white"
+      >
+        <option value="">— sélectionner un formulaire —</option>
+        {forms.map((f) => (
+          <option key={f.id} value={f.id}>{f.title}{!f.isPublished ? ' (brouillon)' : ''}</option>
+        ))}
+      </select>
+
+      {creating ? (
+        <div className="flex gap-1">
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && createForm()}
+            placeholder="Nom du nouveau formulaire…"
+            autoFocus
+            className="flex-1 px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white"
+          />
+          <button onClick={createForm} disabled={loading}
+            className="px-2 py-1 rounded-lg bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium disabled:opacity-50">
+            Créer
+          </button>
+          <button onClick={() => setCreating(false)}
+            className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-xs dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800">
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button onClick={() => setCreating(true)}
+          className="text-[11px] text-violet-500 hover:text-violet-600 text-left">
+          + Créer un nouveau formulaire
+        </button>
+      )}
+    </div>
+  )
+}
+
 function StepEditor({ step, onSave, onDelete }: { step: StepDef; onSave: (s: StepDef) => void; onDelete: () => void }) {
   const [draft, setDraft] = useState<StepDef>(step)
   const up = (patch: Partial<StepDef>) => setDraft((d) => ({ ...d, ...patch }))
@@ -249,10 +320,8 @@ function StepEditor({ step, onSave, onDelete }: { step: StepDef; onSave: (s: Ste
 
       {draft.type === 'form' && (
         <div>
-          <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">ID du formulaire lié</label>
-          <input value={draft.formId ?? ''} onChange={(e) => up({ formId: e.target.value || undefined })}
-            placeholder="ID du formulaire…"
-            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono text-xs" />
+          <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Formulaire lié</label>
+          <FormPicker value={draft.formId} onChange={(id) => up({ formId: id || undefined })} />
         </div>
       )}
 
@@ -330,17 +399,59 @@ function StepEditor({ step, onSave, onDelete }: { step: StepDef; onSave: (s: Ste
       )}
 
       {draft.type === 'module' && (
-        <div>
-          <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Action <span className="text-red-500">*</span></label>
-          <select value={draft.moduleAction ?? ''} onChange={(e) => up({ moduleAction: e.target.value as StepDef['moduleAction'] })}
-            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
-            <option value="">— choisir —</option>
-            <option value="create_board">Créer un tableau (PouetPouet)</option>
-            <option value="create_meeting">Créer une réunion (MeetOps)</option>
-            <option value="create_daily">Créer un Daily</option>
-            <option value="create_scrum">Créer un Scrum Poker</option>
-          </select>
-        </div>
+        <>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Action <span className="text-red-500">*</span></label>
+            <select value={draft.moduleAction ?? ''} onChange={(e) => up({ moduleAction: e.target.value as StepDef['moduleAction'] })}
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
+              <option value="">— choisir —</option>
+              <option value="create_board">Créer un tableau (PouetPouet)</option>
+              <option value="create_meeting">Créer une réunion (MeetOps)</option>
+              <option value="create_daily">Créer un Daily</option>
+              <option value="create_scrum">Créer un Scrum Poker</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Titre du module créé</label>
+            <input value={draft.moduleParams?.title ?? ''} onChange={(e) => up({ moduleParams: { ...draft.moduleParams, title: e.target.value || undefined } })}
+              placeholder="Ex : Onboarding {{prenom}}"
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <p className="text-[10px] text-gray-400 mt-1">Supporte <code>{'{{variable}}'}</code></p>
+          </div>
+        </>
+      )}
+
+      {draft.type === 'ai-prompt' && (
+        <>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">System prompt (optionnel)</label>
+            <textarea rows={2} value={draft.aiSystemPrompt ?? ''} onChange={(e) => up({ aiSystemPrompt: e.target.value || undefined })}
+              placeholder="Ex : Tu es un expert en sécurité qui analyse des documents…"
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white resize-none" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Prompt <span className="text-red-500">*</span></label>
+            <textarea rows={4} value={draft.aiPrompt ?? ''} onChange={(e) => up({ aiPrompt: e.target.value || undefined })}
+              placeholder="Ex : Analyse le document {{document}} selon les critères d'exigences éthiques et donne une note sur 10…"
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white resize-none" />
+            <p className="text-[10px] text-gray-400 mt-1">Supporte <code>{'{{variable}}'}</code> depuis les données de l'instance</p>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Modèle</label>
+            <select value={draft.aiModel ?? 'claude-haiku-4-5-20251001'} onChange={(e) => up({ aiModel: e.target.value })}
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
+              <option value="claude-haiku-4-5-20251001">Claude Haiku (rapide)</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet (équilibré)</option>
+              <option value="claude-opus-4-8">Claude Opus (puissant)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Clé de sortie</label>
+            <input value={draft.aiOutputKey ?? ''} onChange={(e) => up({ aiOutputKey: e.target.value || undefined })} placeholder="ex: analyse"
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <p className="text-[10px] text-gray-400 mt-1">La réponse IA sera stockée dans <code>{'{{clé}}'}</code></p>
+          </div>
+        </>
       )}
 
       {/* skipIf */}
@@ -525,7 +636,8 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
                   <span className={`w-6 h-6 rounded-md ${t.color} flex items-center justify-center flex-shrink-0`}>
                     <Icon size={12} className="text-white" />
                   </span>
-                  <span className="text-sm dark:text-white">{t.label}</span>
+                  <span className="text-sm dark:text-white flex-1">{t.label}</span>
+                  {t.beta && <span className="text-[9px] px-1 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-semibold tracking-wide">BETA</span>}
                 </button>
               )
             })}
