@@ -32,7 +32,7 @@ const NODE_TYPES_DEF = [
   { type: 'form',        label: 'Formulaire',    icon: FileText,    color: 'bg-violet-500', shape: 'rect',    beta: false },
   { type: 'document',   label: 'Document',       icon: FileText,    color: 'bg-amber-500',  shape: 'rect',    beta: false },
   { type: 'validation', label: 'Validation',     icon: ShieldCheck, color: 'bg-emerald-500',shape: 'diamond', beta: false },
-  { type: 'email',      label: 'Email',          icon: Mail,        color: 'bg-pink-500',   shape: 'rect',    beta: false },
+  { type: 'notification', label: 'Notification',  icon: Bell,        color: 'bg-pink-500',   shape: 'rect',    beta: false },
   { type: 'http',       label: 'HTTP',           icon: Globe,       color: 'bg-orange-500', shape: 'hexagon', beta: false },
   { type: 'module',     label: 'Module Pivot',   icon: Link2,       color: 'bg-indigo-500', shape: 'rect',    beta: false },
   { type: 'ai-prompt',  label: 'Prompt IA',      icon: Sparkles,    color: 'bg-purple-600', shape: 'hexagon', beta: true  },
@@ -82,7 +82,7 @@ function DiamondNode({ data, selected }: NodeProps<Node<{ step: StepDef }>>) {
   const Icon = def.icon
   return (
     <div className="relative flex items-center justify-center cursor-pointer" style={{ width: 150, height: 110 }}>
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-gray-400" style={{ top: 2 }} />
+      <Handle type="target" position={Position.Top} id="in" className="!w-4 !h-4 !bg-emerald-400 !border-2 !border-white dark:!border-gray-900 !rounded-full" style={{ top: 8 }} />
       <div
         className={`absolute rounded-xl border-2 transition-all ${selected ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20' : 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20'}`}
         style={{ width: 90, height: 90, transform: 'rotate(45deg)' }}
@@ -95,7 +95,7 @@ function DiamondNode({ data, selected }: NodeProps<Node<{ step: StepDef }>>) {
           {data.step.title || <span className="italic text-gray-400 font-normal">Validation</span>}
         </p>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-gray-400" style={{ bottom: 2 }} />
+      <Handle type="source" position={Position.Bottom} id="out" className="!w-4 !h-4 !bg-gray-400 !border-2 !border-white dark:!border-gray-900 !rounded-full" style={{ bottom: 8 }} />
     </div>
   )
 }
@@ -521,9 +521,41 @@ function VarTextField({
   availableVars: WorkflowVariable[]; multiline?: boolean; rows?: number; placeholder?: string; fontMono?: boolean; className?: string
 }) {
   const { ref, insert } = useFieldInsert(value, onChange)
+  const [acOpen, setAcOpen] = useState(false)
+  const [acQuery, setAcQuery] = useState('')
+  const [acStart, setAcStart] = useState(-1)
+
+  const pickable = availableVars.filter((v) => !v.key.startsWith('('))
+  const acFiltered = acQuery ? pickable.filter((v) => v.label.toLowerCase().includes(acQuery.toLowerCase()) || v.key.toLowerCase().includes(acQuery.toLowerCase())) : pickable
+
+  function handleChange(newVal: string) {
+    onChange(newVal)
+    const el = ref.current
+    const pos = el?.selectionStart ?? newVal.length
+    const before = newVal.slice(0, pos)
+    const match = before.match(/\{\{(\w*)$/)
+    if (match && pickable.length > 0) {
+      setAcQuery(match[1])
+      setAcStart(before.lastIndexOf('{{'))
+      setAcOpen(true)
+    } else {
+      setAcOpen(false)
+    }
+  }
+
+  function handleAcSelect(key: string) {
+    const el = ref.current
+    const pos = el?.selectionStart ?? value.length
+    const next = value.slice(0, acStart) + `{{${key}}}` + value.slice(pos)
+    onChange(next)
+    setAcOpen(false)
+    const newPos = acStart + key.length + 4
+    requestAnimationFrame(() => { el?.setSelectionRange(newPos, newPos); el?.focus() })
+  }
+
   const cls = className ?? `w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white${multiline ? ' resize-none' : ''}${fontMono ? ' font-mono text-xs' : ''}`
   return (
-    <div>
+    <div className="relative">
       <div className="flex items-center justify-between mb-1">
         <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
           {label}{required && <span className="text-red-500 ml-1">*</span>}
@@ -531,9 +563,21 @@ function VarTextField({
         <VarPickerButton vars={availableVars} onInsert={insert} />
       </div>
       {multiline
-        ? <textarea ref={ref} rows={rows ?? 3} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cls} />
-        : <input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cls} />
+        ? <textarea ref={ref} rows={rows ?? 3} value={value} onChange={(e) => handleChange(e.target.value)} onBlur={() => setTimeout(() => setAcOpen(false), 150)} placeholder={placeholder} className={cls} />
+        : <input ref={ref} value={value} onChange={(e) => handleChange(e.target.value)} onBlur={() => setTimeout(() => setAcOpen(false), 150)} placeholder={placeholder} className={cls} />
       }
+      {acOpen && acFiltered.length > 0 && (
+        <div className="absolute left-0 top-full mt-0.5 z-50 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-h-40 overflow-y-auto">
+          {acFiltered.slice(0, 8).map((v) => (
+            <button key={v.key} type="button" onMouseDown={() => handleAcSelect(v.key)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${v.certainty === 'certain' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className="text-xs font-medium text-gray-800 dark:text-gray-200 flex-1 truncate">{v.label}</span>
+              <code className="text-[9px] text-gray-400 font-mono flex-shrink-0">{'{{' + v.key + '}}'}</code>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -625,14 +669,6 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Type</label>
-        <select value={draft.type} onChange={(e) => up({ type: e.target.value as StepDef['type'] })}
-          className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
-          {NODE_TYPES_DEF.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
-        </select>
-      </div>
-
-      <div>
         <VarTextField label="Titre" required value={draft.title} onChange={(v) => up({ title: v })}
           availableVars={availableVars}
           className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.title ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white`} />
@@ -673,7 +709,7 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
         </div>
       )}
 
-      {draft.type === 'email' && (
+      {(draft.type === 'email' || draft.type === 'notification') && (
         <>
           <div>
             <VarTextField label="Destinataire" required value={draft.to ?? ''} onChange={(v) => up({ to: v || undefined })}
@@ -681,10 +717,34 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
               className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.to ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white`} />
             {err('to')}
           </div>
-          <VarTextField label="Objet" value={draft.subject ?? ''} onChange={(v) => up({ subject: v || undefined })}
+          <VarTextField label="Titre / Objet" value={draft.subject ?? ''} onChange={(v) => up({ subject: v || undefined })}
             availableVars={availableVars} />
-          <VarTextField label="Corps" value={draft.body ?? ''} onChange={(v) => up({ body: v || undefined })}
+          <VarTextField label="Message" value={draft.body ?? ''} onChange={(v) => up({ body: v || undefined })}
             availableVars={availableVars} multiline rows={3} />
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Canaux</label>
+            <div className="flex flex-col gap-1">
+              {([['inApp', 'In-app'], ['email', 'Email']] as const).map(([ch, lbl]) => (
+                <label key={ch} className="flex items-center gap-2 text-xs dark:text-white cursor-pointer">
+                  <input type="checkbox" checked={draft.notifyChannels?.[ch] ?? ch === 'inApp'}
+                    onChange={(e) => up({ notifyChannels: { ...draft.notifyChannels, [ch]: e.target.checked } })}
+                    className="rounded" />
+                  {lbl}
+                </label>
+              ))}
+              <label className="flex items-center gap-2 text-xs dark:text-white cursor-pointer">
+                <input type="checkbox" checked={!!draft.notifyChannels?.teamsWebhookUrl}
+                  onChange={(e) => up({ notifyChannels: { ...draft.notifyChannels, teamsWebhookUrl: e.target.checked ? '' : undefined } })}
+                  className="rounded" />
+                Teams
+              </label>
+              {draft.notifyChannels?.teamsWebhookUrl !== undefined && (
+                <input value={draft.notifyChannels.teamsWebhookUrl} onChange={(e) => up({ notifyChannels: { ...draft.notifyChannels, teamsWebhookUrl: e.target.value } })}
+                  placeholder="https://xxx.webhook.office.com/…"
+                  className="w-full px-2 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono" />
+              )}
+            </div>
+          </div>
         </>
       )}
 
@@ -707,9 +767,19 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
             availableVars={availableVars} multiline rows={3} fontMono />
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Clé de sortie</label>
-            <input value={draft.httpOutputKey ?? ''} onChange={(e) => up({ httpOutputKey: e.target.value || undefined })} placeholder="ex: status"
+            <input value={draft.httpOutputKey ?? ''} onChange={(e) => up({ httpOutputKey: e.target.value || undefined })} placeholder="ex: resultat"
               className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <p className="text-[10px] text-gray-400 mt-0.5">Stocké dans <code>{'{{resultat}}'}</code> pour les étapes suivantes</p>
           </div>
+          {!draft.httpUrl && (
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 p-2">
+              <p className="text-[10px] text-gray-400 mb-1.5 font-medium">Exemple — API JSON publique :</p>
+              <button type="button" onClick={() => up({ httpMethod: 'GET', httpUrl: 'https://jsonplaceholder.typicode.com/todos/1', httpOutputKey: 'todo' })}
+                className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 hover:underline text-left">
+                GET jsonplaceholder.typicode.com/todos/1
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -783,21 +853,6 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
           </div>
         </>
       )}
-
-      {/* skipIf */}
-      <details className="group">
-        <summary className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide cursor-pointer select-none">
-          Condition de saut automatique (skipIf)
-        </summary>
-        <div className="mt-2 pl-2 border-l-2 border-gray-100 dark:border-gray-700">
-          <ConditionEditor
-            condition={draft.skipIf}
-            onChange={(c) => up({ skipIf: c })}
-            onClear={() => up({ skipIf: undefined })}
-            fieldPlaceholder="Champ (ex: statut)"
-          />
-        </div>
-      </details>
 
       <div className="flex gap-2 pt-1">
         <button onClick={handleSave}

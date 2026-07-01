@@ -696,18 +696,22 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
           ? new Date(now.getTime() + nextStepDef.slaDays * 24 * 60 * 60 * 1000)
           : null
 
-        // Étapes auto-exécutées : HTTP et AI prompt
-        const isAutoStep = nextStepDef?.type === 'http' || nextStepDef?.type === 'ai-prompt'
+        // Étapes auto-exécutées : HTTP, AI prompt et Module
+        const isAutoStep = nextStepDef?.type === 'http' || nextStepDef?.type === 'ai-prompt' || nextStepDef?.type === 'module'
         if (isAutoStep) {
           let autoData: Record<string, unknown>
           if (nextStepDef?.type === 'http') {
             const { outputKey, output } = await executeHttpStep(nextStepDef, instanceData).catch(() => ({ outputKey: null, output: null }))
             autoData = { _httpOutput: output }
             if (outputKey) autoData[outputKey] = output
-          } else {
+          } else if (nextStepDef?.type === 'ai-prompt') {
             const { outputKey, output } = await executeAiStep(nextStepDef, instanceData, process.env.ANTHROPIC_API_KEY).catch(() => ({ outputKey: null, output: null }))
             autoData = { _aiOutput: output }
             if (outputKey) autoData[outputKey] = output
+          } else {
+            // module step
+            const modData = await triggerModuleAction(nextStepDef as ModuleStepDef, instance.ownerId, instance.title).catch(() => null)
+            autoData = modData ?? {}
           }
           await prisma.parcourStepInstance.update({
             where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },

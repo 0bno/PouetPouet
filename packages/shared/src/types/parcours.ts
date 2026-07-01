@@ -12,7 +12,7 @@ export type FlowEdge = {
   label?: string
 }
 
-export type TriggerType = 'manual' | 'form_response' | 'webhook' | 'schedule'
+export type TriggerType = 'manual' | 'form_response' | 'webhook' | 'schedule' | 'poll'
 export type ParcourStatus = 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED'
 export type StepStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'SKIPPED'
 export type ModuleRole = 'OWNER' | 'EDITOR' | 'VIEWER'
@@ -42,7 +42,7 @@ export type ValidationNotifyConfig = {
 }
 
 export type StepDef = {
-  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module' | 'http' | 'approval-chain' | 'ai-prompt' | 'validation'
+  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'notification' | 'module' | 'http' | 'approval-chain' | 'ai-prompt' | 'validation'
   title: string
   assignedTo?: string
   assignedLabel?: string
@@ -59,9 +59,10 @@ export type StepDef = {
   maxClass?: ParcourDocClass
   instructions?: string
   requireDocument?: boolean
-  // email
+  // email (legacy) / notification
   to?: string
   subject?: string
+  notifyChannels?: { inApp?: boolean; email?: boolean; teamsWebhookUrl?: string }
   // module
   moduleId?: string
   moduleHref?: string
