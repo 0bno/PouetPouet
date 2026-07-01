@@ -1,6 +1,8 @@
 export type SkipIfDef = { field: string; operator: 'eq' | 'neq' | 'contains'; value: string }
 export type FlowEdgeDef = { id: string; source: string; target: string; condition?: SkipIfDef; label?: string }
 
+export type GroupMember = { id: string; label?: string }
+
 export type ModuleStepDef = {
   type?: string
   assignedTo?: string
@@ -19,6 +21,21 @@ export type ModuleStepDef = {
   aiSystemPrompt?: string
   aiModel?: string
   aiOutputKey?: string
+  assignmentMode?: 'user' | 'group' | 'chain' | 'nominated'
+  groupLabel?: string
+  groupMembers?: GroupMember[]
+  nominatedFromGroup?: GroupMember[]
+  validationNotify?: {
+    email?: boolean
+    teamsWebhookUrl?: string
+    jiraHost?: string
+    jiraProject?: string
+    jiraIssueType?: string
+    jiraSummary?: string
+    openprojectHost?: string
+    openprojectProjectId?: string
+    openprojectSubject?: string
+  }
 }
 
 export function evalCondition(cond: SkipIfDef, data: Record<string, unknown>): boolean {
@@ -51,6 +68,66 @@ export async function executeHttpStep(
   let output: unknown = null
   try { output = await res.json() } catch { output = await res.text().catch(() => null) }
   return { outputKey: step.httpOutputKey ?? null, output }
+}
+
+export async function executeValidationNotifications(
+  step: ModuleStepDef,
+  context: { instanceTitle: string; stepTitle: string; assignedTo: string | null; instanceId: string },
+): Promise<void> {
+  const n = step.validationNotify
+  if (!n) return
+
+  const subject = interpolate(
+    context.stepTitle || 'Validation requise',
+    { title: context.instanceTitle, assignedTo: context.assignedTo ?? '' },
+  )
+  const body = `Étape "${subject}" dans le parcours "${context.instanceTitle}" nécessite votre action.`
+
+  const errors: string[] = []
+
+  if (n.teamsWebhookUrl) {
+    await fetch(n.teamsWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: body }),
+    }).catch((e) => errors.push(`Teams: ${e.message}`))
+  }
+
+  if (n.jiraHost && n.jiraProject) {
+    const auth = process.env.JIRA_AUTH
+    if (auth) {
+      const summary = n.jiraSummary
+        ? interpolate(n.jiraSummary, { title: context.instanceTitle, step: context.stepTitle })
+        : subject
+      await fetch(`${n.jiraHost.replace(/\/$/, '')}/rest/api/3/issue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
+        body: JSON.stringify({
+          fields: {
+            project: { key: n.jiraProject },
+            summary,
+            issuetype: { name: n.jiraIssueType ?? 'Task' },
+          },
+        }),
+      }).catch((e) => errors.push(`Jira: ${e.message}`))
+    }
+  }
+
+  if (n.openprojectHost && n.openprojectProjectId) {
+    const token = process.env.OPENPROJECT_TOKEN
+    if (token) {
+      const subjectText = n.openprojectSubject
+        ? interpolate(n.openprojectSubject, { title: context.instanceTitle, step: context.stepTitle })
+        : subject
+      await fetch(`${n.openprojectHost.replace(/\/$/, '')}/api/v3/projects/${n.openprojectProjectId}/work_packages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ subject: subjectText, _links: { type: { href: '/api/v3/types/1' } } }),
+      }).catch((e) => errors.push(`OpenProject: ${e.message}`))
+    }
+  }
+
+  if (errors.length) console.warn('[validation-notify] errors:', errors)
 }
 
 export async function executeAiStep(

@@ -319,6 +319,7 @@ export function StepDetailPanel({
           <>
             <StepRenderer
               step={step}
+              nextStep={steps[selectedStep + 1] ?? null}
               stepIndex={selectedStep}
               stepData={si?.data}
               existingDocCount={stepDocs.length}

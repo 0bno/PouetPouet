@@ -18,27 +18,33 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Zap, Globe, CheckSquare, Mail, FileText, Info, Users, Link2, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Zap, Globe, CheckSquare, Mail, FileText, Info, Users, Link2, Sparkles, ShieldCheck, Bell } from 'lucide-react'
+import type { GroupMember, ValidationNotifyConfig } from '@pouetpouet/shared'
 import { api } from '@/lib/api'
 import type { StepDef, FlowEdge, TriggerType } from '@pouetpouet/shared'
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 const NODE_TYPES_DEF = [
-  { type: 'info',           label: 'Info',           icon: Info,        color: 'bg-sky-500',    shape: 'rect',    beta: false },
-  { type: 'form',           label: 'Formulaire',     icon: FileText,    color: 'bg-violet-500', shape: 'rect',    beta: false },
-  { type: 'document',       label: 'Document',       icon: FileText,    color: 'bg-amber-500',  shape: 'rect',    beta: false },
-  { type: 'approval',       label: 'Validation',     icon: CheckSquare, color: 'bg-emerald-500',shape: 'diamond', beta: false },
-  { type: 'approval-chain', label: 'Chaîne appro.',  icon: Users,       color: 'bg-emerald-600',shape: 'diamond', beta: false },
-  { type: 'email',          label: 'Email',          icon: Mail,        color: 'bg-pink-500',   shape: 'rect',    beta: false },
-  { type: 'http',           label: 'HTTP',           icon: Globe,       color: 'bg-orange-500', shape: 'hexagon', beta: false },
-  { type: 'module',         label: 'Module Pivot',   icon: Link2,       color: 'bg-indigo-500', shape: 'rect',    beta: false },
-  { type: 'ai-prompt',      label: 'Prompt IA',      icon: Sparkles,    color: 'bg-purple-600', shape: 'hexagon', beta: true  },
+  { type: 'info',        label: 'Info',          icon: Info,        color: 'bg-sky-500',    shape: 'rect',    beta: false },
+  { type: 'form',        label: 'Formulaire',    icon: FileText,    color: 'bg-violet-500', shape: 'rect',    beta: false },
+  { type: 'document',   label: 'Document',       icon: FileText,    color: 'bg-amber-500',  shape: 'rect',    beta: false },
+  { type: 'validation', label: 'Validation',     icon: ShieldCheck, color: 'bg-emerald-500',shape: 'diamond', beta: false },
+  { type: 'email',      label: 'Email',          icon: Mail,        color: 'bg-pink-500',   shape: 'rect',    beta: false },
+  { type: 'http',       label: 'HTTP',           icon: Globe,       color: 'bg-orange-500', shape: 'hexagon', beta: false },
+  { type: 'module',     label: 'Module Pivot',   icon: Link2,       color: 'bg-indigo-500', shape: 'rect',    beta: false },
+  { type: 'ai-prompt',  label: 'Prompt IA',      icon: Sparkles,    color: 'bg-purple-600', shape: 'hexagon', beta: true  },
 ] as const
 
 type StepType = (typeof NODE_TYPES_DEF)[number]['type']
 
+const LEGACY_NODE_DEFS = {
+  'approval': { type: 'approval', label: 'Validation (legacy)', icon: CheckSquare, color: 'bg-emerald-500', shape: 'diamond', beta: false },
+  'approval-chain': { type: 'approval-chain', label: 'Chaîne appro. (legacy)', icon: Users, color: 'bg-emerald-600', shape: 'diamond', beta: false },
+} as const
+
 function getNodeDef(type: string) {
+  if (type in LEGACY_NODE_DEFS) return LEGACY_NODE_DEFS[type as keyof typeof LEGACY_NODE_DEFS]
   return NODE_TYPES_DEF.find((n) => n.type === type) ?? NODE_TYPES_DEF[0]
 }
 
@@ -270,6 +276,130 @@ function FormPicker({ value, onChange }: { value?: string; onChange: (id: string
   )
 }
 
+// ─── Éditeur validation unifié ────────────────────────────────────────────────
+
+function membersToText(members: GroupMember[]): string {
+  return members.map((m) => m.label ? `${m.id}:${m.label}` : m.id).join('\n')
+}
+
+function textToMembers(text: string): GroupMember[] {
+  return text.split('\n').map((line) => {
+    const [id, ...rest] = line.trim().split(':')
+    const label = rest.join(':').trim() || undefined
+    return { id: id.trim(), ...(label ? { label } : {}) }
+  }).filter((m) => m.id)
+}
+
+function ValidationEditor({ draft, up }: { draft: StepDef; up: (p: Partial<StepDef>) => void }) {
+  const mode = draft.assignmentMode ?? 'user'
+  const notify = draft.validationNotify ?? {}
+  const upNotify = (patch: Partial<ValidationNotifyConfig>) => up({ validationNotify: { ...notify, ...patch } })
+
+  return (
+    <>
+      <div>
+        <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Mode d'assignation</label>
+        <select value={mode} onChange={(e) => up({ assignmentMode: e.target.value as StepDef['assignmentMode'] })}
+          className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
+          <option value="user">Personne nommée</option>
+          <option value="group">Groupe (premier disponible)</option>
+          <option value="chain">Chaîne (séquence obligatoire)</option>
+          <option value="nominated">Nommée par la validation précédente</option>
+        </select>
+      </div>
+
+      {mode === 'user' && (
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Assigné à (userId)</label>
+          <input value={draft.assignedTo ?? ''} onChange={(e) => up({ assignedTo: e.target.value || undefined })}
+            placeholder="ex: clxabc123…"
+            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+        </div>
+      )}
+
+      {(mode === 'group' || mode === 'chain') && (
+        <>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Nom du groupe</label>
+            <input value={draft.groupLabel ?? ''} onChange={(e) => up({ groupLabel: e.target.value || undefined })}
+              placeholder="ex: Équipe Finance"
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">
+              Membres <span className="text-red-500">*</span>
+              {mode === 'chain' && <span className="ml-1 font-normal normal-case">(dans l'ordre)</span>}
+            </label>
+            <p className="text-[10px] text-gray-400 mb-1">Une ligne par membre : <code>userId</code> ou <code>userId:Prénom Nom</code></p>
+            <textarea rows={4} value={membersToText(draft.groupMembers ?? [])}
+              onChange={(e) => up({ groupMembers: textToMembers(e.target.value) })}
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white resize-none font-mono text-xs" />
+          </div>
+        </>
+      )}
+
+      {mode === 'nominated' && (
+        <>
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Groupe de candidats</label>
+            <p className="text-[10px] text-gray-400 mb-1">La validation précédente choisira parmi ces membres</p>
+            <textarea rows={4} value={membersToText(draft.nominatedFromGroup ?? [])}
+              onChange={(e) => up({ nominatedFromGroup: textToMembers(e.target.value) })}
+              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white resize-none font-mono text-xs" />
+          </div>
+          <p className="text-[10px] text-amber-500 dark:text-amber-400">
+            Le validateur de l'étape précédente devra nommer un candidat de ce groupe lors de sa complétion.
+          </p>
+        </>
+      )}
+
+      {/* Notifications */}
+      <details className="group">
+        <summary className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide cursor-pointer select-none">
+          <Bell size={11} /> Notifications à l'activation
+        </summary>
+        <div className="mt-2 flex flex-col gap-3 pl-2 border-l-2 border-gray-100 dark:border-gray-700">
+          <label className="flex items-center gap-2 text-xs dark:text-white cursor-pointer">
+            <input type="checkbox" checked={notify.email ?? true} onChange={(e) => upNotify({ email: e.target.checked })} className="rounded" />
+            Email & notif in-app à l'assigné
+          </label>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-400 mb-1 uppercase tracking-wide">Teams webhook URL</label>
+            <input value={notify.teamsWebhookUrl ?? ''} onChange={(e) => upNotify({ teamsWebhookUrl: e.target.value || undefined })}
+              placeholder="https://xxx.webhook.office.com/…"
+              className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Jira</label>
+            <input value={notify.jiraHost ?? ''} onChange={(e) => upNotify({ jiraHost: e.target.value || undefined })}
+              placeholder="https://xxx.atlassian.net" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <input value={notify.jiraProject ?? ''} onChange={(e) => upNotify({ jiraProject: e.target.value || undefined })}
+              placeholder="Clé projet (ex: DEV)" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <input value={notify.jiraIssueType ?? ''} onChange={(e) => upNotify({ jiraIssueType: e.target.value || undefined })}
+              placeholder="Type (ex: Task)" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <input value={notify.jiraSummary ?? ''} onChange={(e) => upNotify({ jiraSummary: e.target.value || undefined })}
+              placeholder="Titre du ticket (supporte {{variable}})" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <p className="text-[10px] text-gray-400">Nécessite <code>JIRA_AUTH=user:token</code> en base64 côté API</p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">OpenProject</label>
+            <input value={notify.openprojectHost ?? ''} onChange={(e) => upNotify({ openprojectHost: e.target.value || undefined })}
+              placeholder="https://xxx.openproject.com" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <input value={notify.openprojectProjectId ?? ''} onChange={(e) => upNotify({ openprojectProjectId: e.target.value || undefined })}
+              placeholder="ID ou identifiant du projet" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <input value={notify.openprojectSubject ?? ''} onChange={(e) => upNotify({ openprojectSubject: e.target.value || undefined })}
+              placeholder="Sujet (supporte {{variable}})" className="w-full px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <p className="text-[10px] text-gray-400">Nécessite <code>OPENPROJECT_TOKEN=token</code> côté API</p>
+          </div>
+        </div>
+      </details>
+    </>
+  )
+}
+
 function StepEditor({ step, onSave, onDelete }: { step: StepDef; onSave: (s: StepDef) => void; onDelete: () => void }) {
   const [draft, setDraft] = useState<StepDef>(step)
   const up = (patch: Partial<StepDef>) => setDraft((d) => ({ ...d, ...patch }))
@@ -396,6 +526,10 @@ function StepEditor({ step, onSave, onDelete }: { step: StepDef; onSave: (s: Ste
             <label htmlFor="requireAll" className="text-xs dark:text-white">Tous doivent approuver</label>
           </div>
         </>
+      )}
+
+      {draft.type === 'validation' && (
+        <ValidationEditor draft={draft} up={up} />
       )}
 
       {draft.type === 'module' && (

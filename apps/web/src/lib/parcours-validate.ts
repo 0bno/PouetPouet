@@ -49,6 +49,17 @@ export async function validateForPublish(state: FlowBuilderState): Promise<Valid
           issues.push({ stepIdx: i, message: `${label} : aucun approbateur défini`, blocking: true })
         }
         break
+      case 'validation': {
+        const mode = s.assignmentMode ?? 'user'
+        if (mode === 'user' && !s.assignedTo?.trim()) {
+          issues.push({ stepIdx: i, message: `${label} : aucun valideur assigné`, blocking: false })
+        } else if ((mode === 'group' || mode === 'chain') && !s.groupMembers?.length) {
+          issues.push({ stepIdx: i, message: `${label} : aucun membre de groupe défini`, blocking: true })
+        } else if (mode === 'nominated' && !s.nominatedFromGroup?.length) {
+          issues.push({ stepIdx: i, message: `${label} : liste de candidats vide (mode nommé)`, blocking: true })
+        }
+        break
+      }
       case 'email':
         if (!s.to?.trim()) {
           issues.push({ stepIdx: i, message: `${label} : destinataire email obligatoire`, blocking: true })

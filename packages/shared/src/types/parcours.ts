@@ -21,8 +21,24 @@ export type FormField = {
   options?: string[]
 }
 
+export type ValidationAssignmentMode = 'user' | 'group' | 'chain' | 'nominated'
+
+export type GroupMember = { id: string; label?: string }
+
+export type ValidationNotifyConfig = {
+  email?: boolean
+  teamsWebhookUrl?: string
+  jiraHost?: string
+  jiraProject?: string
+  jiraIssueType?: string
+  jiraSummary?: string
+  openprojectHost?: string
+  openprojectProjectId?: string
+  openprojectSubject?: string
+}
+
 export type StepDef = {
-  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module' | 'http' | 'approval-chain' | 'ai-prompt'
+  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module' | 'http' | 'approval-chain' | 'ai-prompt' | 'validation'
   title: string
   assignedTo?: string
   assignedLabel?: string
@@ -53,7 +69,7 @@ export type StepDef = {
   httpHeaders?: Record<string, string>
   httpBody?: string // JSON template avec {{variable}}
   httpOutputKey?: string // clé dans instance.data où stocker la réponse
-  // approval-chain — séquence d'approbateurs auto-avancée
+  // approval-chain — séquence d'approbateurs auto-avancée (legacy, préférer validation+chain)
   approvers?: string[] // userId[] dans l'ordre
   requireAll?: boolean // true = tous doivent approuver (défaut), false = premier suffit
   // ai-prompt — appel IA auto (beta)
@@ -61,6 +77,12 @@ export type StepDef = {
   aiSystemPrompt?: string  // system prompt optionnel
   aiModel?: string         // ex: claude-haiku-4-5-20251001
   aiOutputKey?: string     // clé dans instance.data
+  // validation — type unifié (remplace approval + approval-chain)
+  assignmentMode?: ValidationAssignmentMode
+  groupLabel?: string        // nom du groupe (mode group/nominated)
+  groupMembers?: GroupMember[] // membres du groupe { id: userId, label?: nom }
+  nominatedFromGroup?: GroupMember[] // groupe dans lequel le validateur précédent nomme (mode nominated)
+  validationNotify?: ValidationNotifyConfig
 }
 
 export interface ParcourTemplateSummary {

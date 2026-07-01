@@ -179,6 +179,7 @@ interface CreatedResource {
 
 interface Props {
   step: StepDef
+  nextStep?: StepDef | null
   stepIndex: number
   stepData?: Record<string, unknown> | null
   /** Nombre de documents déjà enregistrés pour cette étape (persistés en base). */
@@ -192,7 +193,7 @@ interface Props {
   }) => Promise<void>
 }
 
-export function StepRenderer({ step, stepIndex, stepData, existingDocCount = 0, onComplete, onDirtyChange, getUploadUrl, registerDocument }: Props) {
+export function StepRenderer({ step, nextStep, stepIndex, stepData, existingDocCount = 0, onComplete, onDirtyChange, getUploadUrl, registerDocument }: Props) {
   const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -453,6 +454,25 @@ export function StepRenderer({ step, stepIndex, stepData, existingDocCount = 0, 
               : <><Upload className="w-4 h-4" /> Joindre un document</>
             }
           </button>
+        </div>
+      )}
+
+      {/* Nomination du prochain validateur (mode nominated) */}
+      {nextStep?.type === 'validation' && nextStep.assignmentMode === 'nominated' && nextStep.nominatedFromGroup && nextStep.nominatedFromGroup.length > 0 && (
+        <div>
+          <label className="block text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">
+            Nommer le prochain validateur <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={(formData.nomineeId as string) ?? ''}
+            onChange={(e) => updateFormData('nomineeId', e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          >
+            <option value="">— choisir dans {nextStep.groupLabel ?? 'le groupe'} —</option>
+            {nextStep.nominatedFromGroup.map((m) => (
+              <option key={m.id} value={m.id}>{m.label ?? m.id}</option>
+            ))}
+          </select>
         </div>
       )}
 

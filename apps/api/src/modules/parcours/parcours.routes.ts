@@ -8,7 +8,7 @@ import { sendParcoursStepAssignedEmail } from '../../lib/mailer.js'
 import { getUploadSignedUrl, getDownloadSignedUrl, deleteStorageFile, LOCAL_UPLOAD_DIR } from '../../lib/storage.js'
 import { bus } from '../../lib/bus.js'
 import { initApprovalChain, currentApprover, canDecide, recordDecision } from '../../lib/approval-chain.js'
-import { type SkipIfDef, type FlowEdgeDef, type ModuleStepDef, evalCondition, interpolate, executeHttpStep, executeAiStep, resolveNextStep } from '../../lib/parcours-engine.js'
+import { type SkipIfDef, type FlowEdgeDef, type ModuleStepDef, evalCondition, interpolate, executeHttpStep, executeAiStep, executeValidationNotifications, resolveNextStep } from '../../lib/parcours-engine.js'
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
 import crypto from 'node:crypto'
@@ -534,6 +534,40 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
       body.action = outcome === 'approved' ? 'complete' : 'reject'
     }
 
+    // Validation — mode group : tout membre du groupe peut compléter
+    if (currentStepDef?.type === 'validation' && currentStepDef.assignmentMode === 'group' && body.action === 'complete') {
+      const currentSiData = (instance.steps.find((s) => s.stepIndex === stepIndex)?.data ?? {}) as Record<string, unknown>
+      const group = (currentSiData._group ?? currentStepDef.groupMembers ?? []) as { id: string }[]
+      const isMember = group.some((m) => m.id === userId)
+      if (!isMember) return reply.status(403).send({ error: 'Vous n\'êtes pas membre de ce groupe' })
+    }
+
+    // Validation — mode chain : séquence via groupMembers
+    if (currentStepDef?.type === 'validation' && currentStepDef.assignmentMode === 'chain' && body.action === 'complete') {
+      const currentSiData = (instance.steps.find((s) => s.stepIndex === stepIndex)?.data ?? {}) as Record<string, unknown>
+      const members = ((currentStepDef.groupMembers ?? []) as { id: string }[]).map((m) => m.id)
+      const chainData = (currentSiData._chain ?? initApprovalChain()) as Parameters<typeof recordDecision>[1]
+      if (!canDecide(userId, members, chainData)) {
+        return reply.status(403).send({ error: 'Ce n\'est pas votre tour d\'approuver' })
+      }
+      const { next, resolved, outcome } = recordDecision(members, chainData, {
+        userId, decision: 'approved', comment: body.comment, at: now.toISOString(),
+      }, true)
+      if (!resolved) {
+        const nextApprover = currentApprover(members, next)
+        await prisma.parcourStepInstance.update({
+          where: { instanceId_stepIndex: { instanceId: id, stepIndex } },
+          data: { data: { ...currentSiData, _chain: next } as Prisma.InputJsonValue, assignedTo: nextApprover },
+        })
+        if (nextApprover) {
+          await notify({ userId: nextApprover, type: 'PARCOURS_STEP_ASSIGNED', title: `Approbation requise dans "${instance.title}"`, link: `/parcours/run/${id}` })
+        }
+        return reply.send({ ok: true, nextStep: stepIndex, instanceStatus: instance.status, chainPending: true })
+      }
+      // chaîne résolue
+      ;(body as Record<string, unknown>).action = outcome === 'approved' ? 'complete' : 'reject'
+    }
+
     // Gérer le rejet d'une étape approval-chain par un approbateur
     if (currentStepDef?.type === 'approval-chain' && body.action === 'reject') {
       const approvers = currentStepDef.approvers ?? []
@@ -658,15 +692,43 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
             await notify({ userId: instance.ownerId, type: 'PARCOURS_INSTANCE_COMPLETED', title: `Parcours terminé : "${instance.title}"`, link: `/parcours/run/${id}` })
           }
         } else {
-          // Étapes normales : initialiser l'assigné, approval-chain, module
+          // Étapes normales : initialiser l'assigné selon le type
           let stepInitData: Record<string, unknown> | null = null
-          let assignedTo = nextStepDef?.assignedTo ?? null
+          let assignedTo: string | null = null
+          const stepTitle = (steps[nextStep] as { title?: string })?.title ?? `Étape ${nextStep + 1}`
 
-          if (nextStepDef?.type === 'approval-chain') {
+          const nextType = nextStepDef?.type
+          const assignMode = nextStepDef?.assignmentMode ?? 'user'
+
+          if (nextType === 'validation') {
+            if (assignMode === 'chain') {
+              const chain = initApprovalChain()
+              assignedTo = nextStepDef?.groupMembers?.[0]?.id ?? null
+              stepInitData = { _chain: chain, _group: nextStepDef?.groupMembers ?? [] }
+            } else if (assignMode === 'group') {
+              // Tout membre du groupe peut compléter — on stocke le groupe dans le data
+              assignedTo = null
+              stepInitData = { _group: nextStepDef?.groupMembers ?? [] }
+              // Notifier tous les membres du groupe
+              for (const member of (nextStepDef?.groupMembers ?? [])) {
+                await notify({ userId: member.id, type: 'PARCOURS_STEP_ASSIGNED', title: `Étape à compléter dans "${instance.title}"`, body: stepTitle, link: `/parcours/run/${id}` })
+              }
+            } else if (assignMode === 'nominated') {
+              // Le step précédent a fourni nomineeId dans ses données
+              const prevData = request.body as { data?: Record<string, unknown> }
+              const nomineeId = (prevData?.data?.nomineeId as string | undefined) ?? null
+              assignedTo = nomineeId
+              stepInitData = { _nominatedFrom: nextStepDef?.nominatedFromGroup ?? [] }
+            } else {
+              // user mode
+              assignedTo = nextStepDef?.assignedTo ?? null
+            }
+          } else if (nextType === 'approval-chain') {
             const chain = initApprovalChain()
-            assignedTo = nextStepDef.approvers?.[0] ?? null
+            assignedTo = nextStepDef?.approvers?.[0] ?? null
             stepInitData = { _chain: chain }
           } else {
+            assignedTo = nextStepDef?.assignedTo ?? null
             const actionData = await triggerModuleAction(nextStepDef, instance.ownerId, instance.title)
             if (actionData) stepInitData = actionData
           }
@@ -681,18 +743,24 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
           })
 
           if (assignedTo) {
-            await notify({
-              userId: assignedTo,
-              type: 'PARCOURS_STEP_ASSIGNED',
-              title: `Étape à compléter dans "${instance.title}"`,
-              body: `Étape ${nextStep + 1}`,
-              link: `/parcours/run/${id}`,
-            })
-            void sendParcoursStepAssignedEmail(
-              assignedTo, instance.title,
-              (steps[nextStep] as { title?: string })?.title ?? `Étape ${nextStep + 1}`, nextStep + 1,
-              instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
-            ).catch(() => {})
+            // Notification in-app + email pour le mode user/nominated/chain
+            if (assignMode !== 'group') {
+              await notify({ userId: assignedTo, type: 'PARCOURS_STEP_ASSIGNED', title: `Étape à compléter dans "${instance.title}"`, body: `Étape ${nextStep + 1}`, link: `/parcours/run/${id}` })
+              void sendParcoursStepAssignedEmail(
+                assignedTo, instance.title, stepTitle, nextStep + 1,
+                instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
+              ).catch(() => {})
+            }
+          }
+
+          // Notifications externes (Teams, Jira, OpenProject) pour le type validation
+          if (nextType === 'validation' && nextStepDef?.validationNotify) {
+            void executeValidationNotifications(nextStepDef, {
+              instanceTitle: instance.title,
+              stepTitle,
+              assignedTo,
+              instanceId: id,
+            }).catch(() => {})
           }
         }
       }
