@@ -1,4 +1,14 @@
 export type ParcourDocClass = 'C0' | 'C1' | 'C2' | 'C3'
+
+export type FlowEdge = {
+  id: string
+  source: string // stepIndex as string
+  target: string // stepIndex as string
+  condition?: { field: string; operator: 'eq' | 'neq' | 'contains'; value: string }
+  label?: string
+}
+
+export type TriggerType = 'manual' | 'form_response'
 export type ParcourStatus = 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED'
 export type StepStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'SKIPPED'
 export type ModuleRole = 'OWNER' | 'EDITOR' | 'VIEWER'
@@ -12,7 +22,7 @@ export type FormField = {
 }
 
 export type StepDef = {
-  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module'
+  type: 'info' | 'form' | 'document' | 'approval' | 'email' | 'module' | 'http' | 'approval-chain'
   title: string
   assignedTo?: string
   assignedLabel?: string
@@ -28,7 +38,7 @@ export type StepDef = {
   // document / mixed
   maxClass?: ParcourDocClass
   instructions?: string
-  requireDocument?: boolean   // true = ce step exige aussi un document joint (valable sur form/info)
+  requireDocument?: boolean
   // email
   to?: string
   subject?: string
@@ -37,6 +47,15 @@ export type StepDef = {
   moduleHref?: string
   moduleAction?: 'create_board' | 'create_meeting' | 'create_daily' | 'create_scrum'
   moduleParams?: { title?: string }
+  // http — appel HTTP sortant automatique
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  httpUrl?: string // supporte {{variable}} depuis instance.data
+  httpHeaders?: Record<string, string>
+  httpBody?: string // JSON template avec {{variable}}
+  httpOutputKey?: string // clé dans instance.data où stocker la réponse
+  // approval-chain — séquence d'approbateurs auto-avancée
+  approvers?: string[] // userId[] dans l'ordre
+  requireAll?: boolean // true = tous doivent approuver (défaut), false = premier suffit
 }
 
 export interface ParcourTemplateSummary {
@@ -56,6 +75,9 @@ export interface ParcourTemplateSummary {
 
 export interface ParcourTemplateDetail extends ParcourTemplateSummary {
   steps: StepDef[]
+  flowEdges: FlowEdge[]
+  triggerType: TriggerType
+  triggerConfig: { formId?: string }
   defaultObservers: string[]
 }
 

@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useParcourTemplates } from '@/hooks/useParcours'
 import { useFlagGuard } from '@/hooks/useFlagGuard'
-import { StepBuilder } from '@/components/parcours/StepBuilder'
-import type { StepDef } from '@pouetpouet/shared'
+import { FlowBuilder } from '@/components/parcours/FlowBuilder'
+import type { StepDef, FlowEdge, TriggerType } from '@pouetpouet/shared'
 
 const CATEGORIES = ['cyber', 'archi', 'onboarding', 'qualite', 'rh', 'it', 'autre']
 
@@ -20,8 +20,18 @@ export default function NewTemplatePage() {
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState('')
   const [steps, setSteps] = useState<StepDef[]>([])
+  const [flowEdges, setFlowEdges] = useState<FlowEdge[]>([])
+  const [triggerType, setTriggerType] = useState<TriggerType>('manual')
+  const [triggerConfig, setTriggerConfig] = useState<{ formId?: string }>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  function handleFlowChange(s: StepDef[], e: FlowEdge[], tt: TriggerType, tc: { formId?: string }) {
+    setSteps(s)
+    setFlowEdges(e)
+    setTriggerType(tt)
+    setTriggerConfig(tc)
+  }
 
   async function handleSave() {
     if (!name.trim()) { setError('Le nom est obligatoire.'); return }
@@ -37,6 +47,9 @@ export default function NewTemplatePage() {
         category: category || undefined,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         steps,
+        flowEdges,
+        triggerType,
+        triggerConfig,
       })
       router.push(`/parcours/templates/${t.id}`)
     } catch (e: unknown) {
@@ -46,7 +59,7 @@ export default function NewTemplatePage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
       <div>
         <Link href="/parcours/templates" className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 mb-1 inline-block">
           ← Templates
@@ -54,7 +67,7 @@ export default function NewTemplatePage() {
         <h1 className="text-3xl font-bold dark:text-white">Nouveau template</h1>
       </div>
 
-      <div className="flex flex-col gap-5 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+      <div className="flex flex-col gap-5 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-w-2xl">
         <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Informations</h2>
 
         <div>
@@ -104,16 +117,22 @@ export default function NewTemplatePage() {
 
       <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
         <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          Étapes <span className="text-gray-400 font-normal normal-case ml-1">({steps.length})</span>
+          Flux d'étapes <span className="text-gray-400 font-normal normal-case ml-1">({steps.length} étape{steps.length > 1 ? 's' : ''})</span>
         </h2>
-        <StepBuilder steps={steps} onChange={setSteps} />
+        <FlowBuilder
+          steps={steps}
+          flowEdges={flowEdges}
+          triggerType={triggerType}
+          triggerConfig={triggerConfig}
+          onChange={handleFlowChange}
+        />
       </div>
 
       {error && (
-        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl">{error}</p>
+        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl max-w-2xl">{error}</p>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 max-w-2xl">
         <Link href="/parcours/templates" className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
           Annuler
         </Link>

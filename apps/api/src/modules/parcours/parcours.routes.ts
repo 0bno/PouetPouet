@@ -6,6 +6,8 @@ import { resolveRole, sharedResourceIds, deleteResourceShares } from '../../lib/
 import { notify } from '../../lib/notify.js'
 import { sendParcoursStepAssignedEmail } from '../../lib/mailer.js'
 import { getUploadSignedUrl, getDownloadSignedUrl, deleteStorageFile, LOCAL_UPLOAD_DIR } from '../../lib/storage.js'
+import { bus } from '../../lib/bus.js'
+import { initApprovalChain, currentApprover, canDecide, recordDecision } from '../../lib/approval-chain.js'
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
 import crypto from 'node:crypto'
@@ -18,12 +20,29 @@ import path from 'node:path'
 // 'parcourInstance'). OWNER/EDITOR éditent, VIEWER lit, seul le propriétaire
 // supprime. Pas de temps réel — tout passe par REST.
 
+const flowEdgeSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  target: z.string(),
+  condition: z.object({
+    field: z.string(),
+    operator: z.enum(['eq', 'neq', 'contains']),
+    value: z.string(),
+  }).optional(),
+  label: z.string().optional(),
+})
+
+const triggerConfigSchema = z.object({ formId: z.string().optional() }).optional()
+
 const templateCreateSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional(),
   category: z.string().max(50).optional(),
   tags: z.array(z.string().max(30)).max(10).optional(),
   steps: z.array(z.record(z.unknown())).min(1).max(50),
+  flowEdges: z.array(flowEdgeSchema).max(200).optional(),
+  triggerType: z.enum(['manual', 'form_response']).optional(),
+  triggerConfig: triggerConfigSchema,
   defaultObservers: z.array(z.string()).optional(),
 })
 
@@ -51,11 +70,83 @@ const documentRegisterSchema = z.object({
   stepIndex: z.number().int().min(0).optional(),
 })
 
+type SkipIfDef = { field: string; operator: 'eq' | 'neq' | 'contains'; value: string }
+type FlowEdgeDef = { id: string; source: string; target: string; condition?: SkipIfDef; label?: string }
+
 type ModuleStepDef = {
   type?: string
   assignedTo?: string
+  slaDays?: number
+  skipIf?: SkipIfDef
   moduleAction?: 'create_board' | 'create_meeting' | 'create_daily' | 'create_scrum'
   moduleParams?: { title?: string }
+  httpMethod?: string
+  httpUrl?: string
+  httpHeaders?: Record<string, string>
+  httpBody?: string
+  httpOutputKey?: string
+  approvers?: string[]
+  requireAll?: boolean
+}
+
+function evalCondition(cond: SkipIfDef, data: Record<string, unknown>): boolean {
+  const val = String(data[cond.field] ?? '')
+  switch (cond.operator) {
+    case 'eq': return val === cond.value
+    case 'neq': return val !== cond.value
+    case 'contains': return val.includes(cond.value)
+  }
+}
+
+function interpolate(template: string, data: Record<string, unknown>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => String(data[k] ?? ''))
+}
+
+async function executeHttpStep(
+  step: ModuleStepDef,
+  instanceData: Record<string, unknown>,
+): Promise<{ outputKey: string | null; output: unknown }> {
+  const url = interpolate(step.httpUrl ?? '', instanceData)
+  if (!url) return { outputKey: null, output: null }
+  const method = step.httpMethod ?? 'GET'
+  const body = step.httpBody ? interpolate(step.httpBody, instanceData) : undefined
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(step.httpHeaders ?? {}) }
+  const res = await fetch(url, {
+    method,
+    headers,
+    ...(body ? { body } : {}),
+  })
+  let output: unknown = null
+  try { output = await res.json() } catch { output = await res.text().catch(() => null) }
+  return { outputKey: step.httpOutputKey ?? null, output }
+}
+
+// Résolution de la prochaine étape en tenant compte des arêtes et des conditions.
+// Si flowEdges est vide, comportement linéaire original.
+function resolveNextStep(
+  currentIdx: number,
+  steps: ModuleStepDef[],
+  flowEdges: FlowEdgeDef[],
+  statuses: Map<number, string>,
+  instanceData: Record<string, unknown>,
+): number {
+  const edgesFromCurrent = flowEdges.filter((e) => e.source === String(currentIdx))
+  if (edgesFromCurrent.length === 0) {
+    // Comportement linéaire : prochaine étape PENDING
+    for (let i = currentIdx + 1; i < steps.length; i++) {
+      const st = statuses.get(i)
+      if (st !== 'COMPLETED' && st !== 'SKIPPED') return i
+    }
+    return steps.length // terminé
+  }
+  // Évaluer les arêtes conditionnelles en priorité, puis les arêtes sans condition
+  const condEdges = edgesFromCurrent.filter((e) => e.condition)
+  const uncondEdges = edgesFromCurrent.filter((e) => !e.condition)
+  for (const edge of condEdges) {
+    if (edge.condition && evalCondition(edge.condition, instanceData)) return parseInt(edge.target, 10)
+  }
+  if (uncondEdges.length > 0) return parseInt(uncondEdges[0].target, 10)
+  return steps.length // pas d'arête valide → terminé
 }
 
 // Crée la ressource dans le module cible et retourne les métadonnées à stocker dans stepInstance.data.
@@ -150,18 +241,6 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
     return { role, ownerId: i.ownerId }
   }
 
-  async function generateRefNumber(category: string | null): Promise<string> {
-    const cat = (category ?? 'PAR').toUpperCase().slice(0, 10)
-    const year = new Date().getFullYear()
-    const seq = await prisma.parcourSeq.upsert({
-      where: { category: cat },
-      update: { lastSeq: { increment: 1 } },
-      create: { category: cat, lastSeq: 1 },
-      select: { lastSeq: true },
-    })
-    return `${cat}-${year}-${String(seq.lastSeq).padStart(3, '0')}`
-  }
-
   // ── Templates ──────────────────────────────────────────────────────────────────
 
   // Liste : templates possédés + partagés, annotés du rôle + nb d'étapes.
@@ -216,6 +295,9 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
         category: body.category?.trim() ?? null,
         tags: body.tags ?? [],
         steps: body.steps as Prisma.InputJsonValue,
+        flowEdges: (body.flowEdges ?? []) as Prisma.InputJsonValue,
+        triggerType: body.triggerType ?? 'manual',
+        triggerConfig: (body.triggerConfig ?? {}) as Prisma.InputJsonValue,
         defaultObservers: body.defaultObservers ?? [],
       },
     })
@@ -237,6 +319,9 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
         ...(body.category !== undefined && { category: body.category?.trim() ?? null }),
         ...(body.tags !== undefined && { tags: body.tags }),
         ...(body.steps !== undefined && { steps: body.steps as Prisma.InputJsonValue }),
+        ...(body.flowEdges !== undefined && { flowEdges: body.flowEdges as Prisma.InputJsonValue }),
+        ...(body.triggerType !== undefined && { triggerType: body.triggerType }),
+        ...(body.triggerConfig !== undefined && { triggerConfig: body.triggerConfig as Prisma.InputJsonValue }),
         ...(body.defaultObservers !== undefined && { defaultObservers: body.defaultObservers }),
       },
     })
@@ -259,6 +344,9 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
         category: source.category,
         tags: source.tags,
         steps: source.steps as Prisma.InputJsonValue,
+        flowEdges: source.flowEdges as Prisma.InputJsonValue,
+        triggerType: source.triggerType,
+        triggerConfig: source.triggerConfig as Prisma.InputJsonValue,
         defaultObservers: [],
       },
     })
@@ -469,7 +557,10 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
     const instance = await prisma.parcourInstance.findUnique({
       where: { id },
-      include: { template: { select: { steps: true } }, steps: { select: { stepIndex: true, status: true } } },
+      include: {
+        template: { select: { steps: true, flowEdges: true } },
+        steps: { select: { stepIndex: true, status: true, data: true } },
+      },
     })
     if (!instance) return reply.status(404).send({ error: 'Instance introuvable' })
 
@@ -478,12 +569,66 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
     if (instance.status !== 'IN_PROGRESS') return reply.status(400).send({ error: 'Instance non active' })
     if (stepIndex !== instance.currentStep) return reply.status(400).send({ error: 'Ce n\'est pas l\'étape courante' })
 
-    const steps = Array.isArray(instance.template.steps) ? instance.template.steps as { assignedTo?: string }[] : []
+    const steps = Array.isArray(instance.template.steps) ? instance.template.steps as ModuleStepDef[] : []
+    const flowEdges = Array.isArray(instance.template.flowEdges) ? instance.template.flowEdges as FlowEdgeDef[] : []
+    const currentStepDef = steps[stepIndex] as ModuleStepDef | undefined
     const newStatus = body.action === 'complete' ? 'COMPLETED' : 'REJECTED'
     const now = new Date()
 
-    // Persister le commentaire dans les données de l'étape, pour qu'il reste visible
-    // sur l'étape (le cockpit lit si.data.comment) en plus de l'historique.
+    // Gérer les étapes approval-chain : enregistrer la décision sans marquer l'étape terminée
+    // tant que la chaîne n'est pas résolue.
+    if (currentStepDef?.type === 'approval-chain' && body.action === 'complete') {
+      const approvers = currentStepDef.approvers ?? []
+      const currentSiData = (instance.steps.find((s) => s.stepIndex === stepIndex)?.data ?? {}) as Record<string, unknown>
+      const chainData = (currentSiData._chain ?? initApprovalChain()) as Parameters<typeof recordDecision>[1]
+      if (!canDecide(userId, approvers, chainData)) {
+        return reply.status(403).send({ error: 'Ce n\'est pas votre tour d\'approuver' })
+      }
+      const { next, resolved, outcome } = recordDecision(approvers, chainData, {
+        userId,
+        decision: 'approved',
+        comment: body.comment,
+        at: now.toISOString(),
+      }, currentStepDef.requireAll ?? true)
+
+      if (!resolved) {
+        // Chaîne pas encore résolue — on met à jour les données de l'étape et on notifie le suivant
+        const nextApprover = currentApprover(approvers, next)
+        await prisma.parcourStepInstance.update({
+          where: { instanceId_stepIndex: { instanceId: id, stepIndex } },
+          data: {
+            data: { ...currentSiData, _chain: next } as Prisma.InputJsonValue,
+            assignedTo: nextApprover,
+          },
+        })
+        if (nextApprover) {
+          await notify({ userId: nextApprover, type: 'PARCOURS_STEP_ASSIGNED', title: `Approbation requise dans "${instance.title}"`, link: `/parcours/run/${id}` })
+        }
+        return reply.send({ ok: true, nextStep: stepIndex, instanceStatus: instance.status, chainPending: true })
+      }
+
+      // Chaîne résolue : on complète ou rejette l'étape normalement
+      body.action = outcome === 'approved' ? 'complete' : 'reject'
+    }
+
+    // Gérer le rejet d'une étape approval-chain par un approbateur
+    if (currentStepDef?.type === 'approval-chain' && body.action === 'reject') {
+      const approvers = currentStepDef.approvers ?? []
+      const currentSiData = (instance.steps.find((s) => s.stepIndex === stepIndex)?.data ?? {}) as Record<string, unknown>
+      const chainData = (currentSiData._chain ?? initApprovalChain()) as Parameters<typeof recordDecision>[1]
+      if (!canDecide(userId, approvers, chainData)) {
+        return reply.status(403).send({ error: 'Ce n\'est pas votre tour de décider' })
+      }
+      const { next } = recordDecision(approvers, chainData, {
+        userId, decision: 'rejected', comment: body.comment, at: now.toISOString(),
+      }, currentStepDef.requireAll ?? true)
+      await prisma.parcourStepInstance.update({
+        where: { instanceId_stepIndex: { instanceId: id, stepIndex } },
+        data: { data: { ...currentSiData, _chain: next } as Prisma.InputJsonValue },
+      })
+    }
+
+    // Persister le commentaire dans les données de l'étape
     const stepData = (body.data || body.comment)
       ? { ...(body.data ?? {}), ...(body.comment ? { comment: body.comment } : {}) }
       : null
@@ -507,65 +652,118 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
     let instanceStatus = instance.status as string
 
-    // Calcul robuste de la prochaine étape courante : on saute les étapes déjà
-    // terminées (COMPLETED/SKIPPED, ex. validées dans le désordre via force-complete),
-    // pour ne jamais laisser currentStep pointer sur une étape déjà traitée.
+    // Construire la map des statuts à jour pour la résolution de la prochaine étape.
     const statuses = new Map<number, string>(instance.steps.map((s) => [s.stepIndex, s.status]))
     statuses.set(stepIndex, newStatus)
-    let nextStep = steps.length // sentinelle : tout est terminé
-    for (let i = 0; i < steps.length; i++) {
-      const st = statuses.get(i)
-      if (st !== 'COMPLETED' && st !== 'SKIPPED') { nextStep = i; break }
+
+    // Instance.data : agréger toutes les données de steps pour skipIf/conditions
+    const instanceData: Record<string, unknown> = {}
+    for (const si of instance.steps) {
+      if (si.data && typeof si.data === 'object') Object.assign(instanceData, si.data)
     }
+    if (body.data) Object.assign(instanceData, body.data)
+
+    let nextStep: number
 
     if (body.action === 'reject') {
-      // Rejet d'étape : l'instance reste IN_PROGRESS, l'étape est bloquée
-      // L'utilisateur doit réinitialiser l'étape pour reprendre le flux
       nextStep = stepIndex
-    } else if (nextStep >= steps.length) {
-      // Plus aucune étape en attente → parcours terminé
-      nextStep = steps.length - 1
-      instanceStatus = 'COMPLETED'
-      await prisma.parcourHistory.create({
-        data: { instanceId: id, userId, action: 'completed' },
-      })
-      await notify({
-        userId: instance.ownerId,
-        type: 'PARCOURS_INSTANCE_COMPLETED',
-        title: `Parcours terminé : "${instance.title}"`,
-        link: `/parcours/run/${id}`,
-      })
-    } else if (statuses.get(nextStep) === 'PENDING') {
-      // Activer la nouvelle étape courante
-      const nextStepDef = steps[nextStep] as ModuleStepDef
-      const nextStepDefFull = (Array.isArray(instance.template.steps) ? instance.template.steps as { slaDays?: number }[] : [])[nextStep]
-      const actionData = await triggerModuleAction(nextStepDef, instance.ownerId, instance.title)
-      // Calculer la dueAt de la prochaine étape depuis slaDays
-      const nextDueAt = nextStepDefFull?.slaDays
-        ? new Date(now.getTime() + nextStepDefFull.slaDays * 24 * 60 * 60 * 1000)
-        : null
-      await prisma.parcourStepInstance.update({
-        where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },
-        data: {
-          assignedTo: nextStepDef?.assignedTo ?? null,
-          dueAt: nextDueAt,
-          ...(actionData ? { data: actionData as Prisma.InputJsonValue } : {}),
-        },
-      })
-      // Notifier l'assigné de l'étape suivante
-      if (nextStepDef?.assignedTo) {
+    } else {
+      // Résolution via arêtes (ou linéaire si pas d'arêtes)
+      nextStep = resolveNextStep(stepIndex, steps, flowEdges, statuses, instanceData)
+
+      // Appliquer skipIf sur la cible résolue
+      while (nextStep < steps.length) {
+        const targetDef = steps[nextStep] as ModuleStepDef | undefined
+        if (targetDef?.skipIf && evalCondition(targetDef.skipIf, instanceData)) {
+          statuses.set(nextStep, 'SKIPPED')
+          await prisma.parcourStepInstance.update({
+            where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },
+            data: { status: 'SKIPPED', completedAt: now },
+          })
+          await prisma.parcourHistory.create({
+            data: { instanceId: id, stepIndex: nextStep, userId, action: 'step_skipped' },
+          })
+          nextStep = resolveNextStep(nextStep, steps, flowEdges, statuses, instanceData)
+        } else {
+          break
+        }
+      }
+
+      if (nextStep >= steps.length) {
+        nextStep = steps.length - 1
+        instanceStatus = 'COMPLETED'
+        await prisma.parcourHistory.create({ data: { instanceId: id, userId, action: 'completed' } })
         await notify({
-          userId: nextStepDef.assignedTo,
-          type: 'PARCOURS_STEP_ASSIGNED',
-          title: `Étape à compléter dans "${instance.title}"`,
-          body: `Étape ${nextStep + 1}`,
+          userId: instance.ownerId,
+          type: 'PARCOURS_INSTANCE_COMPLETED',
+          title: `Parcours terminé : "${instance.title}"`,
           link: `/parcours/run/${id}`,
         })
-        void sendParcoursStepAssignedEmail(
-          nextStepDef.assignedTo, instance.title,
-          (steps[nextStep] as { title?: string })?.title ?? `Étape ${nextStep + 1}`, nextStep + 1,
-          instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
-        ).catch(() => {})
+      } else if (statuses.get(nextStep) === 'PENDING') {
+        const nextStepDef = steps[nextStep] as ModuleStepDef
+        const nextDueAt = nextStepDef?.slaDays
+          ? new Date(now.getTime() + nextStepDef.slaDays * 24 * 60 * 60 * 1000)
+          : null
+
+        // Étape HTTP : exécution automatique puis avancement sans interaction humaine
+        if (nextStepDef?.type === 'http') {
+          const { outputKey, output } = await executeHttpStep(nextStepDef, instanceData).catch(() => ({ outputKey: null, output: null }))
+          const httpData: Record<string, unknown> = { _httpOutput: output }
+          if (outputKey) httpData[outputKey] = output
+          await prisma.parcourStepInstance.update({
+            where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },
+            data: { status: 'COMPLETED', completedAt: now, data: httpData as Prisma.InputJsonValue },
+          })
+          await prisma.parcourHistory.create({
+            data: { instanceId: id, stepIndex: nextStep, userId: instance.ownerId, action: 'step_completed' },
+          })
+          statuses.set(nextStep, 'COMPLETED')
+          Object.assign(instanceData, httpData)
+          const afterHttp = resolveNextStep(nextStep, steps, flowEdges, statuses, instanceData)
+          nextStep = afterHttp >= steps.length ? steps.length - 1 : afterHttp
+          if (afterHttp >= steps.length) {
+            instanceStatus = 'COMPLETED'
+            await prisma.parcourHistory.create({ data: { instanceId: id, userId, action: 'completed' } })
+            await notify({ userId: instance.ownerId, type: 'PARCOURS_INSTANCE_COMPLETED', title: `Parcours terminé : "${instance.title}"`, link: `/parcours/run/${id}` })
+          }
+        } else {
+          // Étapes normales : initialiser l'assigné, approval-chain, module
+          let stepInitData: Record<string, unknown> | null = null
+          let assignedTo = nextStepDef?.assignedTo ?? null
+
+          if (nextStepDef?.type === 'approval-chain') {
+            const chain = initApprovalChain()
+            assignedTo = nextStepDef.approvers?.[0] ?? null
+            stepInitData = { _chain: chain }
+          } else {
+            const actionData = await triggerModuleAction(nextStepDef, instance.ownerId, instance.title)
+            if (actionData) stepInitData = actionData
+          }
+
+          await prisma.parcourStepInstance.update({
+            where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },
+            data: {
+              assignedTo,
+              dueAt: nextDueAt,
+              ...(stepInitData ? { data: stepInitData as Prisma.InputJsonValue } : {}),
+            },
+          })
+
+          if (assignedTo) {
+            await notify({
+              userId: assignedTo,
+              type: 'PARCOURS_STEP_ASSIGNED',
+              title: `Étape à compléter dans "${instance.title}"`,
+              body: `Étape ${nextStep + 1}`,
+              link: `/parcours/run/${id}`,
+            })
+            void sendParcoursStepAssignedEmail(
+              assignedTo, instance.title,
+              (steps[nextStep] as { title?: string })?.title ?? `Étape ${nextStep + 1}`, nextStep + 1,
+              instance.refNumber, `${FRONTEND_URL}/parcours/run/${id}`,
+            ).catch(() => {})
+          }
+        }
       }
     }
 
@@ -1062,4 +1260,54 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
 
   }) // fin du sous-plugin authentifié
 
+  // ── Déclencheur bus : lancer automatiquement les templates dont triggerType = 'form_response'
+  // quand une réponse à un formulaire lié est soumise.
+  bus.subscribe<{ formId: string; responseId: string; data: Record<string, unknown> }>(
+    'form.response.created',
+    async (event) => {
+      const { formId, data } = event.payload
+      const templates = await prisma.parcourTemplate.findMany({
+        where: { triggerType: 'form_response' },
+      })
+      for (const tmpl of templates) {
+        const config = tmpl.triggerConfig as { formId?: string } | null
+        if (config?.formId !== formId) continue
+        const steps = Array.isArray(tmpl.steps) ? tmpl.steps as { assignedTo?: string; slaDays?: number }[] : []
+        const refNumber = await generateRefNumber(tmpl.category)
+        const now = new Date()
+        const firstDueAt = steps[0]?.slaDays ? new Date(now.getTime() + steps[0].slaDays * 24 * 60 * 60 * 1000) : null
+        await prisma.parcourInstance.create({
+          data: {
+            templateId: tmpl.id,
+            ownerId: tmpl.ownerId,
+            title: `Réponse formulaire — ${new Date().toLocaleDateString('fr-FR')}`,
+            refNumber,
+            priority: 'normal',
+            data: data as Prisma.InputJsonValue,
+            steps: {
+              create: steps.map((s, idx) => ({
+                stepIndex: idx,
+                status: 'PENDING',
+                assignedTo: idx === 0 ? (s.assignedTo ?? null) : null,
+                dueAt: idx === 0 ? firstDueAt : null,
+              })),
+            },
+            history: { create: { userId: tmpl.ownerId, action: 'started' } },
+          },
+        })
+      }
+    },
+  )
+}
+
+async function generateRefNumber(category: string | null): Promise<string> {
+  const cat = (category ?? 'PAR').toUpperCase().slice(0, 10)
+  const year = new Date().getFullYear()
+  const seq = await prisma.parcourSeq.upsert({
+    where: { category: cat },
+    update: { lastSeq: { increment: 1 } },
+    create: { category: cat, lastSeq: 1 },
+    select: { lastSeq: true },
+  })
+  return `${cat}-${year}-${String(seq.lastSeq).padStart(3, '0')}`
 }

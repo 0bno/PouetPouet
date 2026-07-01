@@ -1046,6 +1046,9 @@ model ParcourTemplate {
   isPublic         Boolean  @default(false)
   starCount        Int      @default(0)
   steps            Json     // StepDef[]
+  flowEdges        Json     @default("[]") // FlowEdge[]
+  triggerType      String   @default("manual") // manual | form_response
+  triggerConfig    Json     @default("{}") // { formId? }
   defaultObservers String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

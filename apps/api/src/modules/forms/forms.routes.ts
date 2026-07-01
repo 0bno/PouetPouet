@@ -7,6 +7,7 @@ import { prisma } from '../../lib/prisma.js'
 import { resolveRole, deleteResourceShares } from '../../lib/module-share.js'
 import { sendFormResponseEmail } from '../../lib/mailer.js'
 import { saveFile, readFile, deleteStorageFile } from '../../lib/storage.js'
+import { bus } from '../../lib/bus.js'
 import type { FormFieldDef, FormFileValue } from '@pouetpouet/shared'
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
@@ -184,6 +185,8 @@ export const formsRoutes: FastifyPluginAsync = async (app) => {
     const response = await prisma.formResponse.create({
       data: { formId: form.id, respondentId: null, data: data as Prisma.InputJsonValue },
     })
+
+    bus.publish({ type: 'form.response.created', module: 'forms', payload: { formId: form.id, responseId: response.id, data } })
 
     // Notification email au propriétaire (best-effort, ne bloque pas la réponse)
     if (form.notifyOnResponse && form.owner?.email) {
