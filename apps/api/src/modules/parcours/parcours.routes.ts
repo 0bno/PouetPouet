@@ -9,6 +9,7 @@ import { getUploadSignedUrl, getDownloadSignedUrl, deleteStorageFile, LOCAL_UPLO
 import { bus } from '../../lib/bus.js'
 import { initApprovalChain, currentApprover, canDecide, recordDecision } from '../../lib/approval-chain.js'
 import { type SkipIfDef, type FlowEdgeDef, type ModuleStepDef, evalCondition, interpolate, executeHttpStep, executeAiStep, executeValidationNotifications, resolveNextStep } from '../../lib/parcours-engine.js'
+import type { StepDef } from '@pouetpouet/shared'
 import { scheduleTemplate, unscheduleTemplate } from '../../lib/parcours-scheduler.js'
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
@@ -696,10 +697,15 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
           ? new Date(now.getTime() + nextStepDef.slaDays * 24 * 60 * 60 * 1000)
           : null
 
-        // Étapes auto-exécutées : HTTP, AI prompt et Module
-        const isAutoStep = nextStepDef?.type === 'http' || nextStepDef?.type === 'ai-prompt' || nextStepDef?.type === 'module'
+        // Étapes auto-exécutées : pas d'action humaine requise
+        const isAutoStep = nextStepDef?.type === 'http'
+          || nextStepDef?.type === 'ai-prompt'
+          || nextStepDef?.type === 'module'
+          || nextStepDef?.type === 'info'
+          || nextStepDef?.type === 'notification'
+          || nextStepDef?.type === 'email'
         if (isAutoStep) {
-          let autoData: Record<string, unknown>
+          let autoData: Record<string, unknown> = {}
           if (nextStepDef?.type === 'http') {
             const { outputKey, output } = await executeHttpStep(nextStepDef, instanceData).catch(() => ({ outputKey: null, output: null }))
             autoData = { _httpOutput: output }
@@ -708,11 +714,24 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
             const { outputKey, output } = await executeAiStep(nextStepDef, instanceData, process.env.ANTHROPIC_API_KEY).catch(() => ({ outputKey: null, output: null }))
             autoData = { _aiOutput: output }
             if (outputKey) autoData[outputKey] = output
-          } else {
-            // module step
+          } else if (nextStepDef?.type === 'module') {
             const modData = await triggerModuleAction(nextStepDef as ModuleStepDef, instance.ownerId, instance.title).catch(() => null)
             autoData = modData ?? {}
+          } else if (nextStepDef?.type === 'notification' || nextStepDef?.type === 'email') {
+            // Envoi de la notification aux destinataires configurés
+            const notifStep = nextStepDef as unknown as StepDef
+            const to = interpolate(notifStep.to ?? instance.ownerId, instanceData)
+            const subject = interpolate(notifStep.subject ?? notifStep.title ?? 'Notification', instanceData)
+            const body = interpolate(notifStep.body ?? '', instanceData)
+            const channels = notifStep.notifyChannels ?? { inApp: true }
+            if (channels.inApp !== false) {
+              await notify({ userId: to, type: 'PARCOURS_NOTIFICATION', title: subject, body, link: `/parcours/run/${id}` }).catch(() => null)
+            }
+            if (channels.email) {
+              await sendParcoursStepAssignedEmail(to, subject, body, nextStep + 1, instance.refNumber, `${process.env.FRONTEND_URL ?? ''}/parcours/run/${id}`).catch(() => null)
+            }
           }
+          // info : rien à faire, on complete directement
           await prisma.parcourStepInstance.update({
             where: { instanceId_stepIndex: { instanceId: id, stepIndex: nextStep } },
             data: { status: 'COMPLETED', completedAt: now, data: autoData as Prisma.InputJsonValue },

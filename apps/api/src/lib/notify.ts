@@ -14,6 +14,7 @@ export type NotificationType =
   | 'PARCOURS_STEP_ASSIGNED'
   | 'PARCOURS_STEP_COMPLETED'
   | 'PARCOURS_INSTANCE_COMPLETED'
+  | 'PARCOURS_NOTIFICATION'
 
 interface NotifyInput {
   userId: string
