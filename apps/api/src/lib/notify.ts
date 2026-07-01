@@ -14,6 +14,7 @@ export type NotificationType =
   | 'SIGN_REQUESTED'
   | 'SIGN_COMPLETED'
   | 'SIGN_DECLINED'
+  | 'SIGN_EXPIRED'
 
 interface NotifyInput {
   userId: string

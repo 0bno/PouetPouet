@@ -72,14 +72,16 @@ export default function SignPage({ params }: { params: Promise<{ token: string }
   }, [token, values])
 
   async function decline() {
-    setSubmitting(true)
+    setSubmitting(true); setError(null)
     try {
-      await fetch(`${API_URL}/api/sign/${token}/decline`, {
+      const res = await fetch(`${API_URL}/api/sign/${token}/decline`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: declineReason.trim() || undefined }),
       })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? 'Erreur') }
       setDone('declined')
-    } finally { setSubmitting(false); setDeclining(false) }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Erreur') }
+    finally { setSubmitting(false); setDeclining(false) }
   }
 
   if (loading) return <Centered><Loader2 className="animate-spin text-teal-600" size={32} /></Centered>

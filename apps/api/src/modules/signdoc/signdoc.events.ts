@@ -56,34 +56,45 @@ interface RecordOpts {
 }
 
 export async function recordEvent(envelopeId: string, type: string, opts: RecordOpts) {
-  const last = await prisma.signEvent.findFirst({
-    where: { envelopeId },
-    orderBy: { createdAt: 'desc' },
-    select: { hash: true },
-  })
-  const prevHash = last?.hash ?? null
-  const createdAt = new Date()
   const ip = opts.request?.ip ?? null
   const userAgent = (opts.request?.headers['user-agent'] as string | undefined)?.slice(0, 255) ?? null
   const recipientId = opts.recipientId ?? null
   const payload = opts.payload ?? null
-  const hash = sha256(
-    (prevHash ?? '') +
-      canonicalJSON(eventBody({ envelopeId, type, recipientId, actorLabel: opts.actorLabel, ip, userAgent, payload, createdAt, prevHash })),
-  )
-  return prisma.signEvent.create({
-    data: {
-      envelopeId,
-      type,
-      recipientId,
-      actorLabel: opts.actorLabel,
-      ip,
-      userAgent,
-      payload: payload === null ? Prisma.JsonNull : (payload as Prisma.InputJsonValue),
-      prevHash,
-      hash,
-      createdAt,
-    },
+  // Sérialisation par enveloppe (verrou consultatif Postgres) : deux écritures
+  // concurrentes liraient sinon le même prevHash → chaîne fourchue que
+  // verifyChain déclarerait invalide alors que les données sont légitimes.
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${envelopeId}))`
+    const last = await tx.signEvent.findFirst({
+      where: { envelopeId },
+      orderBy: { createdAt: 'desc' },
+      select: { hash: true, createdAt: true },
+    })
+    const prevHash = last?.hash ?? null
+    // createdAt strictement croissant par enveloppe : verifyChain trie dessus,
+    // deux événements dans la même milliseconde rendraient l'ordre ambigu.
+    let createdAt = new Date()
+    if (last && createdAt.getTime() <= last.createdAt.getTime()) {
+      createdAt = new Date(last.createdAt.getTime() + 1)
+    }
+    const hash = sha256(
+      (prevHash ?? '') +
+        canonicalJSON(eventBody({ envelopeId, type, recipientId, actorLabel: opts.actorLabel, ip, userAgent, payload, createdAt, prevHash })),
+    )
+    return tx.signEvent.create({
+      data: {
+        envelopeId,
+        type,
+        recipientId,
+        actorLabel: opts.actorLabel,
+        ip,
+        userAgent,
+        payload: payload === null ? Prisma.JsonNull : (payload as Prisma.InputJsonValue),
+        prevHash,
+        hash,
+        createdAt,
+      },
+    })
   })
 }
 

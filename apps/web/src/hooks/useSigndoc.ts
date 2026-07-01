@@ -224,6 +224,10 @@ export async function downloadSealed(id: string, name: string): Promise<void> {
   const a = document.createElement('a')
   a.href = url
   a.download = `${name}-signe.pdf`
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  // Révocation différée : Safari peut annuler le téléchargement si l'URL blob
+  // est révoquée dans la même microtask que le click.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

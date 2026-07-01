@@ -33,7 +33,7 @@ export async function runSigndocMaintenance(now = new Date()): Promise<Maintenan
     await prisma.signEnvelope.update({ where: { id: env.id }, data: { status: 'EXPIRED' } })
     await prisma.signRecipient.updateMany({ where: { envelopeId: env.id, status: { in: ['PENDING', 'SENT', 'VIEWED'] } }, data: { accessTokenHash: null, tokenExpires: null } })
     await recordEvent(env.id, 'expired', { actorLabel: 'system' })
-    await notify({ userId: env.ownerId, type: 'SIGN_DECLINED', title: 'Demande de signature expirée', body: `« ${env.name} » a dépassé sa date limite.`, link: `/signdoc/${env.id}` })
+    await notify({ userId: env.ownerId, type: 'SIGN_EXPIRED', title: 'Demande de signature expirée', body: `« ${env.name} » a dépassé sa date limite.`, link: `/signdoc/${env.id}` })
     expired++
   }
 
@@ -67,10 +67,14 @@ export async function runSigndocMaintenance(now = new Date()): Promise<Maintenan
 export function scheduleSigndocMaintenance(log: { info: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void }) {
   async function tick() {
     try {
-      if (redis.status === 'ready') {
-        const acquired = await redis.set('signdoc:maintenance:lock', '1', 'EX', 3600, 'NX')
-        if (!acquired) return
+      // Sans verrou pas d'exécution : en multi-instance, tourner sans Redis
+      // enverrait relances et expirations en double. Le tick suivant réessaiera.
+      if (redis.status !== 'ready') {
+        log.warn({}, 'signdoc maintenance skipped: redis unavailable')
+        return
       }
+      const acquired = await redis.set('signdoc:maintenance:lock', '1', 'EX', 3600, 'NX')
+      if (!acquired) return
       const result = await runSigndocMaintenance()
       if (result.expired || result.reminded) log.info({ signdoc: result }, 'signdoc maintenance done')
     } catch (err) {

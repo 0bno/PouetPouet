@@ -43,8 +43,8 @@ export async function renderFinalPdf(
 
   // 2) Page certificat de réalisation.
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const page = pdf.addPage()
-  const { width: W, height: H } = page.getSize()
+  let page = pdf.addPage()
+  const { height: H } = page.getSize()
   let y = H - 60
   const line = (text: string, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) => {
     page.drawText(text, { x: 50, y, size: opts.size ?? 10, font: opts.bold ? bold : font, color: rgb(...(opts.color ?? [0.1, 0.1, 0.12])) })
@@ -67,7 +67,7 @@ export async function renderFinalPdf(
   for (const r of recipients) {
     line(`• ${r.name} <${r.email}>${r.userId ? '' : ' (externe)'}`, { size: 10, bold: true })
     line(`   Statut : ${r.status}   Signé le : ${fmt(r.signedAt)}   IP : ${r.ip ?? '—'}`, { size: 8, color: [0.4, 0.4, 0.45] })
-    if (y < 80) { y = H - 60; pdf.addPage() }
+    if (y < 80) { page = pdf.addPage(); y = page.getSize().height - 60 } // rebind : line() dessine sur la page courante
   }
   y -= 10
   line('Ce certificat atteste du parcours de signature. Toute modification ultérieure du', { size: 8, color: [0.5, 0.5, 0.55] })

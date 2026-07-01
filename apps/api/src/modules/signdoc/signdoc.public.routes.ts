@@ -85,12 +85,11 @@ export const signdocPublicRoutes: FastifyPluginAsync = async (app) => {
     const missing = myFields.filter((f) => f.required && !valueById.get(f.id)?.trim())
     if (missing.length > 0) return reply.status(400).send({ error: 'Tous les champs requis doivent être remplis.' })
 
-    await prisma.$transaction([
-      ...myFields
-        .filter((f) => valueById.has(f.id))
-        .map((f) => prisma.signField.update({ where: { id: f.id }, data: { value: valueById.get(f.id) } })),
-      prisma.signRecipient.update({
-        where: { id: r.id },
+    // Consommation atomique du jeton : le UPDATE conditionnel garantit qu'une
+    // seule requête gagne (double-clic / retry réseau → 409 pour la seconde).
+    const won = await prisma.$transaction(async (tx) => {
+      const consumed = await tx.signRecipient.updateMany({
+        where: { id: r.id, accessTokenHash: hashToken(token), status: { in: ['SENT', 'VIEWED'] } },
         data: {
           status: 'SIGNED',
           signedAt: new Date(),
@@ -98,16 +97,31 @@ export const signdocPublicRoutes: FastifyPluginAsync = async (app) => {
           userAgent: (request.headers['user-agent'] as string | undefined)?.slice(0, 255) ?? null,
           accessTokenHash: null, // jeton à usage unique : consommé
         },
-      }),
-    ])
+      })
+      if (consumed.count === 0) return false
+      for (const f of myFields.filter((x) => valueById.has(x.id))) {
+        await tx.signField.update({ where: { id: f.id }, data: { value: valueById.get(f.id) } })
+      }
+      return true
+    })
+    if (!won) return reply.status(409).send({ error: "Ce n'est pas (ou plus) votre tour de signer." })
     await recordEvent(r.envelopeId, 'signed', { actorLabel: r.name, recipientId: r.id, request })
 
     // État du workflow après cette signature.
     const after = await prisma.signRecipient.findMany({ where: { envelopeId: r.envelopeId } })
     const remaining = after.filter((x) => isActingRecipient(x) && x.status !== 'SIGNED' && x.status !== 'DECLINED')
 
+    let completed = false
     if (remaining.length === 0) {
-      await prisma.signEnvelope.update({ where: { id: r.envelopeId }, data: { status: 'COMPLETED', completedAt: new Date() } })
+      // Transition conditionnelle : un refus concurrent (enveloppe déjà DECLINED)
+      // ne doit pas être écrasé par COMPLETED, et une seule requête finalise.
+      const upd = await prisma.signEnvelope.updateMany({
+        where: { id: r.envelopeId, status: { in: ['SENT', 'IN_PROGRESS'] } },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      })
+      completed = upd.count === 1
+    }
+    if (completed) {
       await recordEvent(r.envelopeId, 'completed', { actorLabel: 'system' })
       // Compose + scelle le PDF final (best-effort : n'échoue jamais la signature).
       try { await finalizeEnvelope(r.envelopeId) } catch (err) { console.error('finalizeEnvelope failed', err) }
@@ -116,12 +130,12 @@ export const signdocPublicRoutes: FastifyPluginAsync = async (app) => {
         await notify({ userId: owner.id, type: 'SIGN_COMPLETED', title: 'Document signé', body: `« ${r.envelope.name} » est entièrement signé.`, link: `/signdoc/${r.envelopeId}` })
         await sendSignatureCompletedEmail(owner.email, owner.name, r.envelope.name, `${FRONTEND_URL}/signdoc/${r.envelopeId}`)
       }
-    } else {
-      if (r.envelope.status === 'SENT') await prisma.signEnvelope.update({ where: { id: r.envelopeId }, data: { status: 'IN_PROGRESS' } })
+    } else if (remaining.length > 0) {
+      if (r.envelope.status === 'SENT') await prisma.signEnvelope.updateMany({ where: { id: r.envelopeId, status: 'SENT' }, data: { status: 'IN_PROGRESS' } })
       if (activeOrder(after) !== null) await dispatchActiveStep(r.envelopeId) // notifie l'étape suivante (séquentiel)
     }
 
-    return { ok: true, completed: remaining.length === 0 }
+    return { ok: true, completed }
   })
 
   // Refus de signer : marque DECLINED, l'enveloppe passe DECLINED, prévient le propriétaire.
@@ -132,8 +146,14 @@ export const signdocPublicRoutes: FastifyPluginAsync = async (app) => {
     if (!ENVELOPE_ACTIVE.has(r.envelope.status)) return reply.status(409).send({ error: 'Cette demande n’est plus active.' })
     const { reason } = z.object({ reason: z.string().max(500).optional() }).parse(request.body ?? {})
 
-    await prisma.signRecipient.update({ where: { id: r.id }, data: { status: 'DECLINED', declinedAt: new Date(), declineReason: reason ?? null, accessTokenHash: null } })
-    await prisma.signEnvelope.update({ where: { id: r.envelopeId }, data: { status: 'DECLINED' } })
+    // Même consommation atomique du jeton que /sign : une signature concurrente
+    // qui a déjà consommé le jeton rend le refus caduc (409).
+    const consumed = await prisma.signRecipient.updateMany({
+      where: { id: r.id, accessTokenHash: hashToken(token), status: { in: ['SENT', 'VIEWED'] } },
+      data: { status: 'DECLINED', declinedAt: new Date(), declineReason: reason ?? null, accessTokenHash: null },
+    })
+    if (consumed.count === 0) return reply.status(409).send({ error: 'Cette demande n’est plus active.' })
+    await prisma.signEnvelope.updateMany({ where: { id: r.envelopeId, status: { in: ['SENT', 'IN_PROGRESS'] } }, data: { status: 'DECLINED' } })
     await recordEvent(r.envelopeId, 'declined', { actorLabel: r.name, recipientId: r.id, request, payload: reason ? { reason } : undefined })
 
     const owner = await prisma.user.findUnique({ where: { id: r.envelope.ownerId }, select: { id: true } })
