@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Play, Save, Rocket, AlertCircle, CheckCircle2, Download, Webhook, Copy, Trash2, RefreshCw } from 'lucide-react'
@@ -10,7 +10,7 @@ import { FlowBuilder, type FlowBuilderState } from '@/components/parcours/FlowBu
 import { StartInstanceModal } from '@/components/parcours/StartInstanceModal'
 import { validateForPublish, type ValidationIssue } from '@/lib/parcours-validate'
 
-const CATEGORIES = ['cyber', 'archi', 'onboarding', 'qualite', 'rh', 'it', 'autre']
+const CATEGORY_SUGGESTIONS = ['cyber', 'archi', 'onboarding', 'qualite', 'rh', 'it', 'juridique', 'finance', 'ops', 'autre']
 
 export default function TemplateDetailPage() {
   useFlagGuard('module.parcours')
@@ -31,6 +31,8 @@ export default function TemplateDetailPage() {
 
   const [flowReady, setFlowReady] = useState(false)
   const [saving, setSaving] = useState(false)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hasLoaded = useRef(false)
   const [validating, setValidating] = useState(false)
   const [error, setError] = useState('')
   const [issues, setIssues] = useState<ValidationIssue[] | null>(null)
@@ -52,7 +54,28 @@ export default function TemplateDetailPage() {
       triggerConfig: template.triggerConfig,
     })
     setFlowReady(true)
+    hasLoaded.current = true
   }, [template])
+
+  // ── Auto-save ──
+  useEffect(() => {
+    if (!hasLoaded.current || !name.trim() || template?.role === 'VIEWER') return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(() => {
+      void updateTemplate({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        category: category || undefined,
+        tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        steps: flowState.steps,
+        flowEdges: flowState.flowEdges,
+        triggerType: flowState.triggerType,
+        triggerConfig: flowState.triggerConfig,
+      }).catch(() => {})
+    }, 1500)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowState, name, description, category, tags])
 
   function buildPayload() {
     return {
@@ -156,7 +179,7 @@ export default function TemplateDetailPage() {
       </div>
 
       {/* Métadonnées */}
-      <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-w-2xl">
+      <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
         <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Informations</h2>
 
         <div>
@@ -173,12 +196,15 @@ export default function TemplateDetailPage() {
 
         <div className="flex gap-4">
           <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Catégorie</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={isViewer}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60">
-              <option value="">Sans catégorie</option>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Catégorie / domaine</label>
+            <>
+              <input value={category} onChange={(e) => setCategory(e.target.value)} disabled={isViewer}
+                list="category-suggestions" placeholder="Ex: rh, audit, finance…"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60" />
+              <datalist id="category-suggestions">
+                {CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </>
           </div>
           <div className="flex-1">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Tags (séparés par des virgules)</label>

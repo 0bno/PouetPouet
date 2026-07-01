@@ -6,6 +6,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -18,7 +19,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Zap, Globe, CheckSquare, Mail, FileText, Info, Users, Link2, Sparkles, ShieldCheck, Bell } from 'lucide-react'
+import { Plus, Trash2, Zap, Globe, CheckSquare, Mail, FileText, Info, Users, Link2, Sparkles, ShieldCheck, Bell, Undo2, Redo2 } from 'lucide-react'
 import type { GroupMember, ValidationNotifyConfig } from '@pouetpouet/shared'
 import { api } from '@/lib/api'
 import type { StepDef, FlowEdge, TriggerType, ConditionOperator, FlowCondition } from '@pouetpouet/shared'
@@ -125,13 +126,28 @@ function HexagonNode({ data, selected }: NodeProps<Node<{ step: StepDef }>>) {
   )
 }
 
-function TriggerNode({ data, selected }: NodeProps<Node<{ triggerType: TriggerType }>>) {
+const TRIGGER_LABELS: Record<string, string> = {
+  manual: 'Manuel',
+  form_response: 'Réponse formulaire',
+  webhook: 'Webhook entrant',
+  schedule: 'Planifié (cron)',
+}
+
+function TriggerNode({ data, selected }: NodeProps<Node<{ triggerType: TriggerType; triggerConfig: { formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string } }>>) {
+  const subtitle = data.triggerType === 'schedule' && data.triggerConfig?.cronExpression
+    ? data.triggerConfig.cronExpression
+    : data.triggerType === 'webhook' && data.triggerConfig?.webhookTitle
+    ? data.triggerConfig.webhookTitle
+    : data.triggerType === 'form_response' && data.triggerConfig?.formId
+    ? `form: ${data.triggerConfig.formId.slice(0, 8)}…`
+    : null
   return (
     <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full border-2 bg-white dark:bg-gray-900 shadow-md transition-all ${selected ? 'border-cyan-500' : 'border-yellow-300 dark:border-yellow-600'}`}>
       <Zap size={16} className="text-yellow-500 flex-shrink-0" />
       <div>
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Déclencheur</p>
-        <p className="text-sm font-semibold dark:text-white">{data.triggerType === 'form_response' ? 'Réponse formulaire' : 'Manuel'}</p>
+        <p className="text-sm font-semibold dark:text-white">{TRIGGER_LABELS[data.triggerType] ?? data.triggerType}</p>
+        {subtitle && <p className="text-[10px] text-gray-400 font-mono truncate max-w-[160px]">{subtitle}</p>}
       </div>
       <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-yellow-400" />
     </div>
@@ -154,9 +170,9 @@ const CUSTOM_NODE_TYPES = { trigger: TriggerNode, rect: RectNode, diamond: Diamo
 const CANVAS_CX = 220
 const STEP_GAP_Y = 150
 
-function buildNodes(steps: StepDef[], triggerType: TriggerType): Node[] {
+function buildNodes(steps: StepDef[], triggerType: TriggerType, triggerConfig: { formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }): Node[] {
   const nodes: Node[] = [
-    { id: 'trigger', type: 'trigger', position: { x: CANVAS_CX - 60, y: 20 }, data: { triggerType }, draggable: true },
+    { id: 'trigger', type: 'trigger', position: { x: CANVAS_CX - 60, y: 20 }, data: { triggerType, triggerConfig }, draggable: true },
   ]
   steps.forEach((step, idx) => {
     const shape = getNodeDef(step.type).shape
@@ -203,7 +219,7 @@ function flowEdgesToRfEdges(flowEdges: FlowEdge[]): Edge[] {
 function rfEdgesToFlowEdges(rfEdges: Edge[], existingFlowEdges: FlowEdge[]): FlowEdge[] {
   const existingById = new Map(existingFlowEdges.map((e) => [e.id, e]))
   return rfEdges
-    .filter((e) => !['trigger-end', 'trigger-0'].includes(e.id) && !/^\d+-\d+$/.test(e.id) && !e.id.endsWith('-end'))
+    .filter((e) => !['trigger-end', 'trigger-0'].includes(e.id) && !/^\d+-\d+$/.test(e.id) && !/^\d+-end$/.test(e.id))
     .map((e) => {
       const prev = existingById.get(e.id)
       return { id: e.id, source: e.source, target: e.target, label: typeof e.label === 'string' ? e.label : undefined, condition: prev?.condition }
@@ -478,7 +494,7 @@ function VarPickerButton({ vars, onInsert }: { vars: WorkflowVariable[]; onInser
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl p-1.5 w-72 max-h-64 overflow-y-auto">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl p-1.5 w-80 max-h-64 overflow-y-auto">
             <p className="text-[10px] text-gray-400 px-2 py-1 border-b border-gray-100 dark:border-gray-700 mb-1">Insérer au curseur</p>
             {pickable.map((v) => (
               <button key={`${v.sourceStepIndex}:${v.key}`} type="button"
@@ -486,12 +502,9 @@ function VarPickerButton({ vars, onInsert }: { vars: WorkflowVariable[]; onInser
                 className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${v.certainty === 'certain' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{v.label}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{v.sourceStepTitle} · {v.hint}</p>
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-tight">{v.label}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{v.sourceStepTitle}</p>
                 </div>
-                <code className="text-[9px] font-mono text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 px-1 py-0.5 rounded flex-shrink-0">
-                  {'{{' + v.key + '}}'}
-                </code>
               </button>
             ))}
           </div>
@@ -521,6 +534,64 @@ function VarTextField({
         ? <textarea ref={ref} rows={rows ?? 3} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cls} />
         : <input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cls} />
       }
+    </div>
+  )
+}
+
+// ─── Éditeur de déclencheur ──────────────────────────────────────────────────
+
+function TriggerEditor({
+  triggerType, triggerConfig, onChangeType, onChangeConfig,
+}: {
+  triggerType: TriggerType
+  triggerConfig: { formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }
+  onChangeType: (t: TriggerType) => void
+  onChangeConfig: (c: { formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }) => void
+  availableVars: WorkflowVariable[]
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <select value={triggerType} onChange={(e) => onChangeType(e.target.value as TriggerType)}
+        className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
+        <option value="manual">Manuel</option>
+        <option value="form_response">Réponse formulaire</option>
+        <option value="webhook">Webhook entrant</option>
+        <option value="schedule">Planifié (cron)</option>
+      </select>
+
+      {triggerType === 'manual' && (
+        <p className="text-[10px] text-gray-400 dark:text-gray-500">Déclenchement manuel — l'opérateur lance l'instance depuis l'interface.</p>
+      )}
+
+      {triggerType === 'form_response' && (
+        <FormPicker value={triggerConfig.formId} onChange={(id) => onChangeConfig({ formId: id || undefined })} />
+      )}
+
+      {triggerType === 'webhook' && (
+        <div className="flex flex-col gap-1.5">
+          <input value={triggerConfig.webhookTitle ?? ''} onChange={(e) => onChangeConfig({ ...triggerConfig, webhookTitle: e.target.value || undefined })}
+            placeholder="Titre par défaut de l'instance créée…"
+            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">Le token webhook se configure sur la page d'édition du template.</p>
+        </div>
+      )}
+
+      {triggerType === 'schedule' && (
+        <div className="flex flex-col gap-1.5">
+          <input value={triggerConfig.cronExpression ?? ''} onChange={(e) => onChangeConfig({ ...triggerConfig, cronExpression: e.target.value || undefined })}
+            placeholder="Expression cron, ex : 0 9 * * 1"
+            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono text-xs" />
+          <input value={triggerConfig.cronTitle ?? ''} onChange={(e) => onChangeConfig({ ...triggerConfig, cronTitle: e.target.value || undefined })}
+            placeholder="Libellé (ex : Revue hebdo équipe)"
+            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white text-xs" />
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 grid grid-cols-2 gap-x-2">
+            <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => onChangeConfig({ ...triggerConfig, cronExpression: '0 9 * * 1' })}>0 9 * * 1 — chaque lundi 9h</button>
+            <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => onChangeConfig({ ...triggerConfig, cronExpression: '0 9 * * 1-5' })}>0 9 * * 1-5 — chaque jour ouvré 9h</button>
+            <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => onChangeConfig({ ...triggerConfig, cronExpression: '0 9 1 * *' })}>0 9 1 * * — 1er du mois 9h</button>
+            <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => onChangeConfig({ ...triggerConfig, cronExpression: '0 9 * * *' })}>0 9 * * * — chaque jour 9h</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -763,6 +834,10 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
   const [triggerConfig, setTriggerConfig] = useState<{ formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }>(initTC)
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [selectedTrigger, setSelectedTrigger] = useState(false)
+  const [past, setPast] = useState<FlowBuilderState[]>([])
+  const [future, setFuture] = useState<FlowBuilderState[]>([])
+  const [stepPickerOpen, setStepPickerOpen] = useState(false)
   const [formFieldsCache, setFormFieldsCache] = useState<Map<string, import('@/lib/workflow-variables').FormFieldInfo[]>>(new Map())
 
   // ── Charge les champs des formulaires référencés dans le workflow ──
@@ -794,7 +869,7 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
   }, [steps, flowEdges, triggerType, triggerConfig])
 
   // ── Nodes React Flow — reconstruits depuis steps ──
-  const derivedNodes = useMemo(() => buildNodes(steps, triggerType), [steps, triggerType])
+  const derivedNodes = useMemo(() => buildNodes(steps, triggerType, triggerConfig), [steps, triggerType, triggerConfig])
   const derivedEdges = useMemo(() => buildDefaultEdges(steps, flowEdges), [steps, flowEdges])
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(derivedNodes)
@@ -820,17 +895,21 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
 
   // ── Connexions manuelles → flowEdges custom ──
   const onConnect = useCallback((params: Connection) => {
+    pushHistory()
     setRfEdges((es) => {
       const next = addEdge({ ...params, style: { stroke: '#6b7280' } }, es)
       setFlowEdges((prev) => rfEdgesToFlowEdges(next, prev))
       return next
     })
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steps, flowEdges, triggerType, triggerConfig, past])
 
   // ── Clic sur un nœud → sélection dans éditeur ──
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedEdgeId(null)
-    if (node.type === 'trigger' || node.type === 'end') { setSelectedIdx(null); return }
+    if (node.type === 'trigger') { setSelectedTrigger(true); setSelectedIdx(null); setSelectedEdgeId(null); return }
+    if (node.type === 'end') { setSelectedIdx(null); return }
+    setSelectedTrigger(false)
     const idx = parseInt(node.id, 10)
     if (!isNaN(idx)) setSelectedIdx(idx)
   }, [])
@@ -838,7 +917,7 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
   // ── Clic sur une arête → éditeur de condition ──
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     // Ne pas ouvrir l'éditeur pour les arêtes auto-générées (trigger-0, 0-1, etc.)
-    const isDefault = ['trigger-end', 'trigger-0'].includes(edge.id) || /^\d+-\d+$/.test(edge.id) || edge.id.endsWith('-end')
+    const isDefault = ['trigger-end', 'trigger-0'].includes(edge.id) || /^\d+-\d+$/.test(edge.id) || /^\d+-end$/.test(edge.id)
     if (isDefault) return
     setSelectedIdx(null)
     setSelectedEdgeId(edge.id)
@@ -846,6 +925,7 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
 
   // ── Mise à jour condition d'une arête ──
   function updateEdgeCondition(edgeId: string, condition: FlowCondition | undefined) {
+    pushHistory()
     setFlowEdges((prev) => prev.map((e) => e.id === edgeId ? { ...e, condition } : e))
     setRfEdges((prev) => prev.map((e) => {
       if (e.id !== edgeId) return e
@@ -860,15 +940,44 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
 
   // ── Suppression d'une arête custom ──
   function deleteEdge(edgeId: string) {
+    pushHistory()
     setFlowEdges((prev) => prev.filter((e) => e.id !== edgeId))
     setRfEdges((prev) => prev.filter((e) => e.id !== edgeId))
     setSelectedEdgeId(null)
   }
 
-  const onPaneClick = useCallback(() => { setSelectedIdx(null); setSelectedEdgeId(null) }, [])
+  const onPaneClick = useCallback(() => { setSelectedIdx(null); setSelectedEdgeId(null); setSelectedTrigger(false) }, [])
+
+  // ── Undo / Redo ──
+  function pushHistory() {
+    const snap = { steps, flowEdges, triggerType, triggerConfig }
+    setPast((p) => [...p.slice(-49), snap])
+    setFuture([])
+  }
+
+  function undo() {
+    if (!past.length) return
+    const prev = past[past.length - 1]
+    setFuture((f) => [{ steps, flowEdges, triggerType, triggerConfig }, ...f.slice(0, 49)])
+    setPast((p) => p.slice(0, -1))
+    setSteps(prev.steps); setFlowEdges(prev.flowEdges)
+    setTriggerType(prev.triggerType); setTriggerConfig(prev.triggerConfig)
+    setSelectedIdx(null); setSelectedEdgeId(null); setSelectedTrigger(false)
+  }
+
+  function redo() {
+    if (!future.length) return
+    const next = future[0]
+    setPast((p) => [...p.slice(-49), { steps, flowEdges, triggerType, triggerConfig }])
+    setFuture((f) => f.slice(1))
+    setSteps(next.steps); setFlowEdges(next.flowEdges)
+    setTriggerType(next.triggerType); setTriggerConfig(next.triggerConfig)
+    setSelectedIdx(null); setSelectedEdgeId(null); setSelectedTrigger(false)
+  }
 
   // ── Opérations sur steps ──
   function addStep(type: StepType) {
+    pushHistory()
     const newStep: StepDef = { type, title: '' }
     setSteps((prev) => {
       const next = [...prev, newStep]
@@ -878,14 +987,27 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
   }
 
   function updateStep(idx: number, s: StepDef) {
+    pushHistory()
     setSteps((prev) => { const next = [...prev]; next[idx] = s; return next })
   }
 
   function deleteStep(idx: number) {
+    pushHistory()
     setSteps((prev) => prev.filter((_, i) => i !== idx))
     setFlowEdges((prev) => prev.filter((e) => e.source !== String(idx) && e.target !== String(idx)))
     setSelectedIdx(null)
   }
+
+  // ── Keyboard undo/redo ──
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [past, future, steps, flowEdges, triggerType, triggerConfig])
 
   const selectedStep = selectedIdx !== null ? steps[selectedIdx] : null
 
@@ -910,71 +1032,55 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
           <Background gap={20} size={1} className="opacity-20" />
           <Controls className="!bg-white dark:!bg-gray-900 !border-gray-200 dark:!border-gray-700 !rounded-xl !shadow" />
           <MiniMap nodeColor={(n) => n.selected ? '#06b6d4' : '#d1d5db'} className="!bg-white dark:!bg-gray-900 !border-gray-200 dark:!border-gray-700 !rounded-xl" />
+          <Panel position="bottom-center">
+            <div className="relative mb-4">
+              <button
+                onClick={() => setStepPickerOpen((v) => !v)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg hover:border-cyan-400 hover:text-cyan-500 transition-colors text-sm font-medium dark:text-white"
+              >
+                <Plus size={15} /> Ajouter une étape
+              </button>
+              {stepPickerOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setStepPickerOpen(false)} />
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl p-2 w-52">
+                    {NODE_TYPES_DEF.map((t) => {
+                      const Icon = t.icon
+                      return (
+                        <button key={t.type} onClick={() => { addStep(t.type as StepType); setStepPickerOpen(false) }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors">
+                          <span className={`w-7 h-7 rounded-lg ${t.color} flex items-center justify-center flex-shrink-0`}>
+                            <Icon size={13} className="text-white" />
+                          </span>
+                          <span className="text-sm dark:text-white">{t.label}</span>
+                          {t.beta && <span className="text-[9px] px-1 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-semibold ml-auto">BETA</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </Panel>
         </ReactFlow>
       </div>
 
       {/* Panneau latéral */}
       <div className="w-64 flex flex-col gap-3 overflow-y-auto shrink-0">
-        {/* Déclencheur */}
+        {/* Historique undo/redo */}
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
-          <h3 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Déclencheur</h3>
-          <select value={triggerType} onChange={(e) => { setTriggerType(e.target.value as TriggerType); setTriggerConfig({}) }}
-            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white mb-2">
-            <option value="manual">Manuel</option>
-            <option value="form_response">Réponse formulaire</option>
-            <option value="webhook">Webhook entrant</option>
-            <option value="schedule">Planifié (cron)</option>
-          </select>
-          {triggerType === 'form_response' && (
-            <input value={triggerConfig.formId ?? ''} onChange={(e) => setTriggerConfig({ formId: e.target.value || undefined })}
-              placeholder="ID du formulaire…"
-              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono text-xs" />
-          )}
-          {triggerType === 'webhook' && (
-            <div className="flex flex-col gap-1.5">
-              <input value={triggerConfig.webhookTitle ?? ''} onChange={(e) => setTriggerConfig({ webhookTitle: e.target.value || undefined })}
-                placeholder="Titre par défaut de l'instance créée…"
-                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
-              <p className="text-[10px] text-gray-400 dark:text-gray-500">Le token webhook se configure sur la page d'édition du template.</p>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-gray-400">Historique</span>
+            <div className="flex gap-1">
+              <button onClick={undo} disabled={!past.length} title="Annuler (Ctrl+Z)"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors">
+                <Undo2 size={13} className="text-gray-500" />
+              </button>
+              <button onClick={redo} disabled={!future.length} title="Rétablir (Ctrl+Y)"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors">
+                <Redo2 size={13} className="text-gray-500" />
+              </button>
             </div>
-          )}
-          {triggerType === 'schedule' && (
-            <div className="flex flex-col gap-1.5">
-              <input value={triggerConfig.cronExpression ?? ''} onChange={(e) => setTriggerConfig({ ...triggerConfig, cronExpression: e.target.value || undefined })}
-                placeholder="Expression cron, ex : 0 9 * * 1"
-                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono text-xs" />
-              <input value={triggerConfig.cronTitle ?? ''} onChange={(e) => setTriggerConfig({ ...triggerConfig, cronTitle: e.target.value || undefined })}
-                placeholder="Libellé (ex : Revue hebdo équipe)"
-                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white text-xs" />
-              <div className="text-[10px] text-gray-400 dark:text-gray-500 grid grid-cols-2 gap-x-2">
-                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 * * 1' })}>0 9 * * 1 — chaque lundi 9h</button>
-                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 * * 1-5' })}>0 9 * * 1-5 — chaque jour ouvré 9h</button>
-                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 1 * *' })}>0 9 1 * * — 1er du mois 9h</button>
-                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 * * *' })}>0 9 * * * — chaque jour 9h</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Palette d'ajout */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
-          <h3 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
-            <Plus size={11} /> Ajouter une étape
-          </h3>
-          <div className="flex flex-col gap-1">
-            {NODE_TYPES_DEF.map((t) => {
-              const Icon = t.icon
-              return (
-                <button key={t.type} onClick={() => addStep(t.type as StepType)}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors">
-                  <span className={`w-6 h-6 rounded-md ${t.color} flex items-center justify-center flex-shrink-0`}>
-                    <Icon size={12} className="text-white" />
-                  </span>
-                  <span className="text-sm dark:text-white flex-1">{t.label}</span>
-                  {t.beta && <span className="text-[9px] px-1 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-semibold tracking-wide">BETA</span>}
-                </button>
-              )
-            })}
           </div>
         </div>
 
@@ -1070,7 +1176,23 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
           )
         })()}
 
-        {selectedIdx === null && selectedEdgeId === null && (
+        {/* Éditeur de déclencheur */}
+        {selectedTrigger && !selectedIdx && !selectedEdgeId && (
+          <div className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-white dark:bg-gray-900 p-3">
+            <h3 className="text-[10px] font-semibold text-yellow-600 dark:text-yellow-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <Zap size={11} /> Déclencheur
+            </h3>
+            <TriggerEditor
+              triggerType={triggerType}
+              triggerConfig={triggerConfig}
+              onChangeType={(t) => { setTriggerType(t); setTriggerConfig({}) }}
+              onChangeConfig={setTriggerConfig}
+              availableVars={[]}
+            />
+          </div>
+        )}
+
+        {selectedIdx === null && selectedEdgeId === null && !selectedTrigger && (
           <p className="text-xs text-gray-400 dark:text-gray-500 text-center px-2">
             Cliquez sur une étape ou une arête pour la configurer
           </p>
