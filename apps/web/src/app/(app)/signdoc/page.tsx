@@ -112,17 +112,15 @@ export default function SigndocPage() {
   const [creating, setCreating] = useState(false)
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between">
+    <div className="flex flex-col gap-6">
+      <div className="flex items-end justify-between mb-5">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2">
-            <PenLine className="text-teal-600" size={28} /> SignDoc
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2"><PenLine size={28} style={{ color: '#0d9488' }} />SignDoc</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
             {envelopes.length} demande{envelopes.length !== 1 ? 's' : ''} de signature
           </p>
         </div>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">
+        <button onClick={() => setCreating(true)} className="flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 active:scale-95 transition-all shadow-sm">
           <Plus size={16} /> Nouvelle demande
         </button>
       </div>
