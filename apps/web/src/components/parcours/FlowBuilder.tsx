@@ -478,15 +478,20 @@ function VarPickerButton({ vars, onInsert }: { vars: WorkflowVariable[]; onInser
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl p-1.5 w-64 max-h-52 overflow-y-auto">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl p-1.5 w-72 max-h-64 overflow-y-auto">
             <p className="text-[10px] text-gray-400 px-2 py-1 border-b border-gray-100 dark:border-gray-700 mb-1">Insérer au curseur</p>
             {pickable.map((v) => (
               <button key={`${v.sourceStepIndex}:${v.key}`} type="button"
                 onClick={() => { onInsert(v.key); setOpen(false) }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-left text-xs transition-colors group">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${v.certainty === 'certain' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <code className="font-mono text-gray-700 dark:text-gray-300 flex-1">{v.key}</code>
-                <span className="text-[10px] text-gray-400 truncate max-w-[80px] hidden group-hover:block">{v.hint}</span>
+                className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${v.certainty === 'certain' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{v.label}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{v.sourceStepTitle} · {v.hint}</p>
+                </div>
+                <code className="text-[9px] font-mono text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 px-1 py-0.5 rounded flex-shrink-0">
+                  {'{{' + v.key + '}}'}
+                </code>
               </button>
             ))}
           </div>
@@ -497,13 +502,13 @@ function VarPickerButton({ vars, onInsert }: { vars: WorkflowVariable[]; onInser
 }
 
 function VarTextField({
-  label, required, value, onChange, availableVars, multiline, rows, placeholder, fontMono,
+  label, required, value, onChange, availableVars, multiline, rows, placeholder, fontMono, className,
 }: {
   label: string; required?: boolean; value: string; onChange: (v: string) => void
-  availableVars: WorkflowVariable[]; multiline?: boolean; rows?: number; placeholder?: string; fontMono?: boolean
+  availableVars: WorkflowVariable[]; multiline?: boolean; rows?: number; placeholder?: string; fontMono?: boolean; className?: string
 }) {
   const { ref, insert } = useFieldInsert(value, onChange)
-  const cls = `w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white${multiline ? ' resize-none' : ''}${fontMono ? ' font-mono text-xs' : ''}`
+  const cls = className ?? `w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white${multiline ? ' resize-none' : ''}${fontMono ? ' font-mono text-xs' : ''}`
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
@@ -524,7 +529,27 @@ function VarTextField({
 
 function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; onSave: (s: StepDef) => void; onDelete: () => void; availableVars: WorkflowVariable[] }) {
   const [draft, setDraft] = useState<StepDef>(step)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const up = (patch: Partial<StepDef>) => setDraft((d) => ({ ...d, ...patch }))
+
+  function validate(): boolean {
+    const e: Record<string, string> = {}
+    if (!draft.title.trim()) e.title = 'Le titre est requis'
+    if (draft.type === 'http' && !draft.httpUrl?.trim()) e.httpUrl = 'L\'URL est requise'
+    if (draft.type === 'email' && !draft.to?.trim()) e.to = 'Le destinataire est requis'
+    if (draft.type === 'ai-prompt' && !draft.aiPrompt?.trim()) e.aiPrompt = 'Le prompt est requis'
+    if (draft.type === 'module' && !draft.moduleAction) e.moduleAction = 'L\'action est requise'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  function handleSave() {
+    if (validate()) onSave(draft)
+  }
+
+  const err = (field: string) => errors[field]
+    ? <p className="text-[10px] text-red-500 mt-0.5">{errors[field]}</p>
+    : null
 
   return (
     <div className="flex flex-col gap-3">
@@ -537,21 +562,16 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
       </div>
 
       <div>
-        <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">
-          Titre <span className="text-red-500">*</span>
-        </label>
-        <input value={draft.title} onChange={(e) => up({ title: e.target.value })}
-          className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+        <VarTextField label="Titre" required value={draft.title} onChange={(v) => up({ title: v })}
+          availableVars={availableVars}
+          className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.title ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white`} />
+        {err('title')}
       </div>
 
       {/* Assigné à — tous sauf http */}
       {draft.type !== 'http' && draft.type !== 'approval-chain' && (
-        <div>
-          <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Assigné à (userId)</label>
-          <input value={draft.assignedTo ?? ''} onChange={(e) => up({ assignedTo: e.target.value || undefined })}
-            placeholder="ex: clxabc123…"
-            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
-        </div>
+        <VarTextField label="Assigné à" value={draft.assignedTo ?? ''} onChange={(v) => up({ assignedTo: v || undefined })}
+          availableVars={availableVars} placeholder="userId ou {{variable}}" />
       )}
 
       {/* SLA */}
@@ -563,11 +583,8 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
 
       {/* Champs spécifiques par type */}
       {(draft.type === 'info') && (
-        <div>
-          <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Corps</label>
-          <textarea rows={3} value={draft.body ?? ''} onChange={(e) => up({ body: e.target.value || undefined })}
-            className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white resize-none" />
-        </div>
+        <VarTextField label="Corps" value={draft.body ?? ''} onChange={(v) => up({ body: v || undefined })}
+          availableVars={availableVars} multiline rows={3} />
       )}
 
       {draft.type === 'form' && (
@@ -588,9 +605,10 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
       {draft.type === 'email' && (
         <>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Destinataire <span className="text-red-500">*</span></label>
-            <input value={draft.to ?? ''} onChange={(e) => up({ to: e.target.value || undefined })} placeholder="email ou userId"
-              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+            <VarTextField label="Destinataire" required value={draft.to ?? ''} onChange={(v) => up({ to: v || undefined })}
+              availableVars={availableVars} placeholder="email, userId ou {{variable}}"
+              className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.to ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white`} />
+            {err('to')}
           </div>
           <VarTextField label="Objet" value={draft.subject ?? ''} onChange={(v) => up({ subject: v || undefined })}
             availableVars={availableVars} />
@@ -608,8 +626,12 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
               {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => <option key={m}>{m}</option>)}
             </select>
           </div>
-          <VarTextField label="URL" required value={draft.httpUrl ?? ''} onChange={(v) => up({ httpUrl: v || undefined })}
-            availableVars={availableVars} placeholder="https://…" />
+          <div>
+            <VarTextField label="URL" required value={draft.httpUrl ?? ''} onChange={(v) => up({ httpUrl: v || undefined })}
+              availableVars={availableVars} placeholder="https://…"
+              className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.httpUrl ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white`} />
+            {err('httpUrl')}
+          </div>
           <VarTextField label="Corps (JSON template)" value={draft.httpBody ?? ''} onChange={(v) => up({ httpBody: v || undefined })}
             availableVars={availableVars} multiline rows={3} fontMono />
           <div>
@@ -646,13 +668,14 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Action <span className="text-red-500">*</span></label>
             <select value={draft.moduleAction ?? ''} onChange={(e) => up({ moduleAction: e.target.value as StepDef['moduleAction'] })}
-              className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white">
+              className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.moduleAction ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white`}>
               <option value="">— choisir —</option>
               <option value="create_board">Créer un tableau (PouetPouet)</option>
               <option value="create_meeting">Créer une réunion (MeetOps)</option>
               <option value="create_daily">Créer un Daily</option>
               <option value="create_scrum">Créer un Scrum Poker</option>
             </select>
+            {err('moduleAction')}
           </div>
           <VarTextField label="Titre du module créé" value={draft.moduleParams?.title ?? ''}
             onChange={(v) => up({ moduleParams: { ...draft.moduleParams, title: v || undefined } })}
@@ -665,9 +688,13 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
           <VarTextField label="System prompt (optionnel)" value={draft.aiSystemPrompt ?? ''} onChange={(v) => up({ aiSystemPrompt: v || undefined })}
             availableVars={availableVars} multiline rows={2}
             placeholder="Ex : Tu es un expert en sécurité qui analyse des documents…" />
-          <VarTextField label="Prompt" required value={draft.aiPrompt ?? ''} onChange={(v) => up({ aiPrompt: v || undefined })}
-            availableVars={availableVars} multiline rows={4}
-            placeholder="Ex : Analyse le document {{document}} selon les critères d'exigences éthiques et donne une note sur 10…" />
+          <div>
+            <VarTextField label="Prompt" required value={draft.aiPrompt ?? ''} onChange={(v) => up({ aiPrompt: v || undefined })}
+              availableVars={availableVars} multiline rows={4}
+              placeholder="Ex : Analyse le document {{document}} selon les critères d'exigences éthiques et donne une note sur 10…"
+              className={`w-full px-2 py-1.5 text-sm rounded-lg border ${errors.aiPrompt ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 dark:text-white resize-none`} />
+            {err('aiPrompt')}
+          </div>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Modèle</label>
             <select value={draft.aiModel ?? 'claude-haiku-4-5-20251001'} onChange={(e) => up({ aiModel: e.target.value })}
@@ -702,7 +729,7 @@ function StepEditor({ step, onSave, onDelete, availableVars }: { step: StepDef; 
       </details>
 
       <div className="flex gap-2 pt-1">
-        <button onClick={() => onSave(draft)}
+        <button onClick={handleSave}
           className="flex-1 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-medium transition-colors">
           Appliquer
         </button>

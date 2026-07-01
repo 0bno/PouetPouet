@@ -3,7 +3,8 @@ import type { StepDef, FlowEdge, TriggerType } from '@pouetpouet/shared'
 export type VariableCertainty = 'certain' | 'maybe'
 
 export type WorkflowVariable = {
-  key: string
+  key: string            // clé technique → insérée comme {{key}}
+  label: string          // nom lisible affiché dans le picker
   sourceStepIndex: number  // -1 = trigger
   sourceStepTitle: string
   certainty: VariableCertainty
@@ -16,7 +17,6 @@ export type FormFieldInfo = { id: string; label: string; type: string }
 function computeStepCertainty(stepIdx: number, step: StepDef, flowEdges: FlowEdge[]): VariableCertainty {
   if (step.skipIf) return 'maybe'
   const incoming = flowEdges.filter((e) => e.target === String(stepIdx))
-  // Si toutes les arêtes entrantes ont une condition → n'est atteignable que conditionnellement
   if (incoming.length > 0 && incoming.every((e) => e.condition)) return 'maybe'
   return 'certain'
 }
@@ -27,38 +27,36 @@ export function getVariablesProducedBy(
   flowEdges: FlowEdge[],
   formFieldsCache?: Map<string, FormFieldInfo[]>,
 ): WorkflowVariable[] {
-  const label = `Étape ${stepIdx + 1} — ${step.title || '(sans titre)'}`
+  const sourceStepTitle = `Étape ${stepIdx + 1} — ${step.title || '(sans titre)'}`
   const certainty = computeStepCertainty(stepIdx, step, flowEdges)
   const vars: WorkflowVariable[] = []
 
   if (step.type === 'http' && step.httpOutputKey) {
-    vars.push({ key: step.httpOutputKey, sourceStepIndex: stepIdx, sourceStepTitle: label, certainty, hint: 'sortie HTTP (JSON)' })
+    vars.push({ key: step.httpOutputKey, label: step.httpOutputKey, sourceStepIndex: stepIdx, sourceStepTitle, certainty, hint: 'sortie HTTP (JSON)' })
   }
   if (step.type === 'ai-prompt' && step.aiOutputKey) {
-    vars.push({ key: step.aiOutputKey, sourceStepIndex: stepIdx, sourceStepTitle: label, certainty, hint: 'sortie IA (texte)' })
+    vars.push({ key: step.aiOutputKey, label: step.aiOutputKey, sourceStepIndex: stepIdx, sourceStepTitle, certainty, hint: 'sortie IA (texte)' })
   }
   if (step.type === 'form') {
-    // Inline fields (définis dans le step)
     if (step.fields?.length) {
       for (const f of step.fields) {
-        vars.push({ key: f.id, sourceStepIndex: stepIdx, sourceStepTitle: label, certainty, hint: `champ : ${f.label}` })
+        vars.push({ key: f.id, label: f.label || f.id, sourceStepIndex: stepIdx, sourceStepTitle, certainty, hint: `champ formulaire` })
       }
     }
-    // Formulaire lié — champs récupérés depuis le cache API
     if (!step.fields?.length && step.formId) {
       const fetched = formFieldsCache?.get(step.formId)
       if (fetched?.length) {
         for (const f of fetched) {
           if (f.type === 'section') continue
-          vars.push({ key: f.id, sourceStepIndex: stepIdx, sourceStepTitle: label, certainty, hint: `champ formulaire : ${f.label}` })
+          vars.push({ key: f.id, label: f.label || f.id, sourceStepIndex: stepIdx, sourceStepTitle, certainty, hint: `champ formulaire` })
         }
       } else {
-        vars.push({ key: '(champs du formulaire lié)', sourceStepIndex: stepIdx, sourceStepTitle: label, certainty, hint: `formulaire id: ${step.formId} — clés connues à l'exécution` })
+        vars.push({ key: '(champs du formulaire lié)', label: '(champs du formulaire lié)', sourceStepIndex: stepIdx, sourceStepTitle, certainty, hint: `clés connues à l'exécution` })
       }
     }
   }
   if (step.type === 'validation' && step.assignmentMode === 'nominated') {
-    vars.push({ key: 'nomineeId', sourceStepIndex: stepIdx, sourceStepTitle: label, certainty, hint: 'validateur nommé par cet étape' })
+    vars.push({ key: 'nomineeId', label: 'ID du validateur nommé', sourceStepIndex: stepIdx, sourceStepTitle, certainty, hint: 'validateur nommé par cette étape' })
   }
 
   return vars
@@ -74,10 +72,10 @@ export function getVariablesAvailableAt(
 ): WorkflowVariable[] {
   const vars: WorkflowVariable[] = []
 
-  // Variables issues du déclencheur
   if (triggerType === 'webhook') {
     vars.push({
       key: '(clés du payload)',
+      label: '(payload webhook)',
       sourceStepIndex: -1,
       sourceStepTitle: 'Déclencheur — Webhook',
       certainty: 'certain',
@@ -90,24 +88,25 @@ export function getVariablesAvailableAt(
         if (f.type === 'section') continue
         vars.push({
           key: f.id,
+          label: f.label || f.id,
           sourceStepIndex: -1,
           sourceStepTitle: 'Déclencheur — Formulaire',
           certainty: 'certain',
-          hint: `champ formulaire déclencheur : ${f.label}`,
+          hint: 'champ du formulaire déclencheur',
         })
       }
     } else {
       vars.push({
         key: `(champs formulaire${triggerConfig.formId ? ` id:${triggerConfig.formId}` : ''})`,
+        label: '(champs du formulaire déclencheur)',
         sourceStepIndex: -1,
         sourceStepTitle: 'Déclencheur — Formulaire',
         certainty: 'certain',
-        hint: 'champs du formulaire déclencheur (clés = id des champs)',
+        hint: 'clés connues à l\'exécution',
       })
     }
   }
 
-  // Variables des étapes précédentes
   for (let i = 0; i < stepIndex; i++) {
     const step = steps[i]
     if (!step) continue
@@ -117,11 +116,10 @@ export function getVariablesAvailableAt(
   return vars
 }
 
-// Regroupe les variables par étape source pour l'affichage
 export type VariableGroup = {
   sourceStepIndex: number
   sourceStepTitle: string
-  certainty: VariableCertainty  // worst-case du groupe
+  certainty: VariableCertainty
   variables: WorkflowVariable[]
 }
 
