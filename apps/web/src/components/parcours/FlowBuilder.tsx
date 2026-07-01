@@ -668,7 +668,7 @@ export interface FlowBuilderState {
   steps: StepDef[]
   flowEdges: FlowEdge[]
   triggerType: TriggerType
-  triggerConfig: { formId?: string }
+  triggerConfig: { formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }
 }
 
 interface Props extends FlowBuilderState {
@@ -680,7 +680,7 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
   const [steps, setSteps] = useState<StepDef[]>(initSteps)
   const [flowEdges, setFlowEdges] = useState<FlowEdge[]>(initEdges)
   const [triggerType, setTriggerType] = useState<TriggerType>(initTT)
-  const [triggerConfig, setTriggerConfig] = useState<{ formId?: string }>(initTC)
+  const [triggerConfig, setTriggerConfig] = useState<{ formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }>(initTC)
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
 
@@ -815,15 +815,41 @@ export function FlowBuilder({ steps: initSteps, flowEdges: initEdges, triggerTyp
         {/* Déclencheur */}
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
           <h3 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Déclencheur</h3>
-          <select value={triggerType} onChange={(e) => setTriggerType(e.target.value as TriggerType)}
+          <select value={triggerType} onChange={(e) => { setTriggerType(e.target.value as TriggerType); setTriggerConfig({}) }}
             className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white mb-2">
             <option value="manual">Manuel</option>
             <option value="form_response">Réponse formulaire</option>
+            <option value="webhook">Webhook entrant</option>
+            <option value="schedule">Planifié (cron)</option>
           </select>
           {triggerType === 'form_response' && (
             <input value={triggerConfig.formId ?? ''} onChange={(e) => setTriggerConfig({ formId: e.target.value || undefined })}
               placeholder="ID du formulaire…"
               className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono text-xs" />
+          )}
+          {triggerType === 'webhook' && (
+            <div className="flex flex-col gap-1.5">
+              <input value={triggerConfig.webhookTitle ?? ''} onChange={(e) => setTriggerConfig({ webhookTitle: e.target.value || undefined })}
+                placeholder="Titre par défaut de l'instance créée…"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white" />
+              <p className="text-[10px] text-gray-400 dark:text-gray-500">Le token webhook se configure sur la page d'édition du template.</p>
+            </div>
+          )}
+          {triggerType === 'schedule' && (
+            <div className="flex flex-col gap-1.5">
+              <input value={triggerConfig.cronExpression ?? ''} onChange={(e) => setTriggerConfig({ ...triggerConfig, cronExpression: e.target.value || undefined })}
+                placeholder="Expression cron, ex : 0 9 * * 1"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white font-mono text-xs" />
+              <input value={triggerConfig.cronTitle ?? ''} onChange={(e) => setTriggerConfig({ ...triggerConfig, cronTitle: e.target.value || undefined })}
+                placeholder="Libellé (ex : Revue hebdo équipe)"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white text-xs" />
+              <div className="text-[10px] text-gray-400 dark:text-gray-500 grid grid-cols-2 gap-x-2">
+                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 * * 1' })}>0 9 * * 1 — chaque lundi 9h</button>
+                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 * * 1-5' })}>0 9 * * 1-5 — chaque jour ouvré 9h</button>
+                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 1 * *' })}>0 9 1 * * — 1er du mois 9h</button>
+                <button className="text-left hover:text-cyan-500 transition-colors" onClick={() => setTriggerConfig({ ...triggerConfig, cronExpression: '0 9 * * *' })}>0 9 * * * — chaque jour 9h</button>
+              </div>
+            </div>
           )}
         </div>
 

@@ -12,7 +12,7 @@ export type FlowEdge = {
   label?: string
 }
 
-export type TriggerType = 'manual' | 'form_response'
+export type TriggerType = 'manual' | 'form_response' | 'webhook' | 'schedule'
 export type ParcourStatus = 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED'
 export type StepStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'SKIPPED'
 export type ModuleRole = 'OWNER' | 'EDITOR' | 'VIEWER'
@@ -108,7 +108,13 @@ export interface ParcourTemplateDetail extends ParcourTemplateSummary {
   steps: StepDef[]
   flowEdges: FlowEdge[]
   triggerType: TriggerType
-  triggerConfig: { formId?: string }
+  triggerConfig: {
+    formId?: string
+    cronExpression?: string
+    cronTitle?: string
+    webhookTitle?: string
+  }
+  webhookToken?: string | null
   defaultObservers: string[]
 }
 

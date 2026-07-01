@@ -31,6 +31,7 @@ import { prisma } from './lib/prisma.js'
 import { redis } from './lib/redis.js'
 import { scheduleRetention } from './lib/retention.js'
 import { scheduleParcoursSla } from './lib/parcoursSla.js'
+import { startScheduler } from './lib/parcours-scheduler.js'
 
 const PORT = Number(process.env.PORT ?? 4000)
 
@@ -324,5 +325,7 @@ registerSocketHandlers(io)
 scheduleRetention(app.log)
 // Rappels SLA Parcours toutes les heures
 scheduleParcoursSla(app.log)
+// Déclencheurs cron des templates Parcours (triggerType='schedule')
+startScheduler()
 
 await app.listen({ port: PORT, host: '0.0.0.0' })

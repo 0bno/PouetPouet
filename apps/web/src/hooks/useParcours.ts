@@ -95,7 +95,7 @@ export function useParcourTemplate(id: string) {
     steps: StepDef[]
     flowEdges: import('@pouetpouet/shared').FlowEdge[]
     triggerType: import('@pouetpouet/shared').TriggerType
-    triggerConfig: { formId?: string }
+    triggerConfig: { formId?: string; cronExpression?: string; cronTitle?: string; webhookTitle?: string }
     defaultObservers: string[]
   }>) => {
     const updated = await api.patch<ParcourTemplateDetail>(`/api/parcours/templates/${id}`, patch)
@@ -103,7 +103,18 @@ export function useParcourTemplate(id: string) {
     return updated
   }, [id])
 
-  return { template, isLoading, accessDenied, updateTemplate }
+  const generateWebhook = useCallback(async () => {
+    const res = await api.post<{ webhookToken: string }>(`/api/parcours/templates/${id}/webhook/generate`, {})
+    setTemplate((prev) => prev ? { ...prev, webhookToken: res.webhookToken } : prev)
+    return res.webhookToken
+  }, [id])
+
+  const deleteWebhook = useCallback(async () => {
+    await api.delete(`/api/parcours/templates/${id}/webhook`)
+    setTemplate((prev) => prev ? { ...prev, webhookToken: null } : prev)
+  }, [id])
+
+  return { template, isLoading, accessDenied, updateTemplate, generateWebhook, deleteWebhook }
 }
 
 // ── Instances ────────────────────────────────────────────────────────────────────

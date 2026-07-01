@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Play, Save, Rocket, AlertCircle, CheckCircle2, Download } from 'lucide-react'
+import { Play, Save, Rocket, AlertCircle, CheckCircle2, Download, Webhook, Copy, Trash2, RefreshCw } from 'lucide-react'
 import { useParcourTemplate } from '@/hooks/useParcours'
 import { useFlagGuard } from '@/hooks/useFlagGuard'
 import { FlowBuilder, type FlowBuilderState } from '@/components/parcours/FlowBuilder'
@@ -15,7 +15,7 @@ const CATEGORIES = ['cyber', 'archi', 'onboarding', 'qualite', 'rh', 'it', 'autr
 export default function TemplateDetailPage() {
   useFlagGuard('module.parcours')
   const { id } = useParams<{ id: string }>()
-  const { template, isLoading, accessDenied, updateTemplate } = useParcourTemplate(id)
+  const { template, isLoading, accessDenied, updateTemplate, generateWebhook, deleteWebhook } = useParcourTemplate(id)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -35,6 +35,7 @@ export default function TemplateDetailPage() {
   const [error, setError] = useState('')
   const [issues, setIssues] = useState<ValidationIssue[] | null>(null)
   const [starting, setStarting] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Initialise les champs quand le template est chargé — flowReady retarde le montage
   // du FlowBuilder jusqu'à ce que flowState soit correct (évite useState(initSteps=[]))
@@ -205,6 +206,79 @@ export default function TemplateDetailPage() {
           />
         )}
       </div>
+
+      {/* Panneau déclencheur automatique */}
+      {template && (template.triggerType === 'webhook' || template.triggerType === 'schedule') && (
+        <div className="flex flex-col gap-3 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-w-2xl">
+          <h2 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-2">
+            <Webhook size={14} />
+            {template.triggerType === 'webhook' ? 'Webhook entrant' : 'Planification cron'}
+          </h2>
+
+          {template.triggerType === 'webhook' && (
+            <div className="flex flex-col gap-3">
+              {template.webhookToken ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">URL à appeler (POST, sans authentification) :</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs font-mono dark:text-white border border-gray-200 dark:border-gray-700 truncate">
+                        {typeof window !== 'undefined' ? `${window.location.origin}/api/parcours/webhooks/${template.webhookToken}` : `/api/parcours/webhooks/${template.webhookToken}`}
+                      </code>
+                      <button onClick={() => {
+                        void navigator.clipboard.writeText(`${window.location.origin}/api/parcours/webhooks/${template.webhookToken}`)
+                        setCopied(true); setTimeout(() => setCopied(false), 2000)
+                      }} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex-shrink-0" title="Copier l'URL">
+                        {copied ? <CheckCircle2 size={14} className="text-emerald-500" /> : <Copy size={14} className="text-gray-500" />}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Body JSON optionnel : <code className="font-mono">{`{ "title": "...", "data": { "montant": 50000 } }`}</code>
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => void generateWebhook()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                      <RefreshCw size={12} /> Régénérer le token
+                    </button>
+                    <button onClick={() => { if (confirm('Désactiver le webhook ?')) void deleteWebhook() }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      <Trash2 size={12} /> Désactiver
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Aucun token actif. Générez-en un pour activer le webhook.</p>
+                  <button onClick={() => void generateWebhook()}
+                    className="self-start flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-medium transition-colors">
+                    <Webhook size={14} /> Générer le token webhook
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {template.triggerType === 'schedule' && (
+            <div className="flex flex-col gap-1.5">
+              {template.triggerConfig.cronExpression ? (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-sm">
+                    <CheckCircle2 size={14} className="shrink-0" />
+                    Actif : <code className="font-mono text-xs">{template.triggerConfig.cronExpression}</code>
+                    {template.triggerConfig.cronTitle && <span className="text-gray-500 dark:text-gray-400">— {template.triggerConfig.cronTitle}</span>}
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Le planificateur crée automatiquement une instance selon cette expression. Modifiez le déclencheur dans l'éditeur de flux pour changer la fréquence.</p>
+                </>
+              ) : (
+                <p className="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <AlertCircle size={14} /> Expression cron manquante — configurez-la dans l'éditeur de flux.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Résultats de validation */}
       {issues && issues.length > 0 && (

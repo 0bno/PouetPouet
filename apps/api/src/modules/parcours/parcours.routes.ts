@@ -9,6 +9,7 @@ import { getUploadSignedUrl, getDownloadSignedUrl, deleteStorageFile, LOCAL_UPLO
 import { bus } from '../../lib/bus.js'
 import { initApprovalChain, currentApprover, canDecide, recordDecision } from '../../lib/approval-chain.js'
 import { type SkipIfDef, type FlowEdgeDef, type ModuleStepDef, evalCondition, interpolate, executeHttpStep, executeAiStep, executeValidationNotifications, resolveNextStep } from '../../lib/parcours-engine.js'
+import { scheduleTemplate, unscheduleTemplate } from '../../lib/parcours-scheduler.js'
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
 import crypto from 'node:crypto'
@@ -42,7 +43,7 @@ const templateCreateSchema = z.object({
   tags: z.array(z.string().max(30)).max(10).optional(),
   steps: z.array(z.record(z.unknown())).min(0).max(50),
   flowEdges: z.array(flowEdgeSchema).max(200).optional(),
-  triggerType: z.enum(['manual', 'form_response']).optional(),
+  triggerType: z.enum(['manual', 'form_response', 'webhook', 'schedule']).optional(),
   triggerConfig: triggerConfigSchema,
   defaultObservers: z.array(z.string()).optional(),
 })
@@ -203,6 +204,7 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
       ...t,
       stepCount: Array.isArray(t.steps) ? (t.steps as unknown[]).length : 0,
       role,
+      webhookToken: t.ownerId === userId ? t.webhookToken : null,
     }
   })
 
@@ -248,6 +250,16 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
         ...(body.defaultObservers !== undefined && { defaultObservers: body.defaultObservers }),
       },
     })
+
+    // Synchroniser le scheduler si le trigger cron a changé
+    const newTriggerType = body.triggerType ?? updated.triggerType
+    const newConfig = ((body.triggerConfig ?? updated.triggerConfig) as { cronExpression?: string })
+    if (newTriggerType === 'schedule' && newConfig.cronExpression) {
+      scheduleTemplate(id, updated.name, newConfig.cronExpression)
+    } else if (newTriggerType !== 'schedule') {
+      unscheduleTemplate(id)
+    }
+
     return { ...updated, stepCount: Array.isArray(updated.steps) ? (updated.steps as unknown[]).length : 0, role }
   })
 
@@ -283,8 +295,30 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string }
     const t = await prisma.parcourTemplate.findFirst({ where: { id, ownerId } })
     if (!t) return reply.status(404).send({ error: 'Template introuvable' })
+    unscheduleTemplate(id)
     await prisma.parcourTemplate.delete({ where: { id } })
     await deleteResourceShares('parcourTemplate', id)
+    return reply.status(204).send()
+  })
+
+  // Génère (ou régénère) le token webhook — OWNER uniquement.
+  auth.post('/templates/:id/webhook/generate', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const t = await prisma.parcourTemplate.findFirst({ where: { id, ownerId: userId } })
+    if (!t) return reply.status(404).send({ error: 'Template introuvable ou accès refusé' })
+    const token = crypto.randomBytes(32).toString('hex')
+    await prisma.parcourTemplate.update({ where: { id }, data: { webhookToken: token } })
+    return { webhookToken: token }
+  })
+
+  // Supprime le token webhook — OWNER uniquement.
+  auth.delete('/templates/:id/webhook', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const t = await prisma.parcourTemplate.findFirst({ where: { id, ownerId: userId } })
+    if (!t) return reply.status(404).send({ error: 'Template introuvable ou accès refusé' })
+    await prisma.parcourTemplate.update({ where: { id }, data: { webhookToken: null } })
     return reply.status(204).send()
   })
 
@@ -1258,6 +1292,49 @@ export const parcoursRoutes: FastifyPluginAsync = async (app) => {
   })
 
   }) // fin du sous-plugin authentifié
+
+  // ── Webhook entrant — route publique (pas d'auth) ──────────────────────────────
+  // POST /webhooks/:token  { title?, data? }
+  // Tout système externe peut déclencher un parcours en POSTant sur cette URL.
+  app.post('/webhooks/:token', async (request, reply) => {
+    const { token } = request.params as { token: string }
+    const body = (request.body ?? {}) as { title?: string; data?: Record<string, unknown> }
+
+    const tmpl = await prisma.parcourTemplate.findUnique({
+      where: { webhookToken: token },
+    })
+    if (!tmpl) return reply.status(404).send({ error: 'Webhook introuvable' })
+    if (tmpl.triggerType !== 'webhook') return reply.status(400).send({ error: 'Ce template n\'utilise pas le déclencheur webhook' })
+
+    const steps = Array.isArray(tmpl.steps) ? tmpl.steps as { assignedTo?: string; slaDays?: number }[] : []
+    const refNumber = await generateRefNumber(tmpl.category)
+    const now = new Date()
+    const firstDueAt = steps[0]?.slaDays ? new Date(now.getTime() + steps[0].slaDays * 24 * 60 * 60 * 1000) : null
+    const config = (tmpl.triggerConfig ?? {}) as { webhookTitle?: string }
+    const title = body.title?.trim() || config.webhookTitle || `Webhook — ${now.toLocaleDateString('fr-FR')}`
+
+    const instance = await prisma.parcourInstance.create({
+      data: {
+        templateId: tmpl.id,
+        ownerId: tmpl.ownerId,
+        title,
+        refNumber,
+        priority: 'normal',
+        data: (body.data ?? {}) as Prisma.InputJsonValue,
+        steps: {
+          create: steps.map((s, idx) => ({
+            stepIndex: idx,
+            status: 'PENDING',
+            assignedTo: idx === 0 ? (s.assignedTo ?? null) : null,
+            dueAt: idx === 0 ? firstDueAt : null,
+          })),
+        },
+        history: { create: { userId: tmpl.ownerId, action: 'started' } },
+      },
+    })
+
+    return reply.status(201).send({ ok: true, instanceId: instance.id })
+  })
 
   // ── Déclencheur bus : lancer automatiquement les templates dont triggerType = 'form_response'
   // quand une réponse à un formulaire lié est soumise.
