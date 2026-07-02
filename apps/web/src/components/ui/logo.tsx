@@ -33,8 +33,9 @@ export function Logo({ size = 28, showText = true, className = '' }: LogoProps) 
             <stop offset="1" stopColor="#7c5cff" stopOpacity="0.05" />
           </linearGradient>
         </defs>
-        <rect width="64" height="64" rx="15" fill="#15151d" />
-        <rect width="64" height="64" rx="15" fill="none" stroke="#ffffff14" />
+        {/* Tuile adaptative : claire en light, sombre en dark */}
+        <rect width="64" height="64" rx="15" className="fill-[#f1f0f7] dark:fill-[#15151d]" />
+        <rect width="64" height="64" rx="15" fill="none" className="stroke-black/5 dark:stroke-white/10" />
         {/* Ghost P (position d'origine, verticale) */}
         <g fill="url(#pivotGhost)">
           <rect x="22" y="14" width="7" height="36" rx="3.5" />
